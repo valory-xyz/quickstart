@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A quickstart for the OLAS agents"
 authors = ["David Vilela <dvilelaf@gmail.com>", "Viraj Patel <vptl185@gmail.com>", "Ojuswi Rastogi <ojuswimail@gmail.com>"]
 readme = "README.md"
+package-mode = false
 packages = []
 include = []
 
