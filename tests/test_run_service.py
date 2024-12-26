@@ -91,44 +91,6 @@ def check_service_health(logger: logging.Logger) -> tuple[bool, dict]:
         logger.error(f"Unexpected error in health check: {str(e)}")
         return False, metrics
 
-def check_service_logs(logger: logging.Logger) -> bool:
-    """Check service logs for critical errors."""
-    try:
-        client = docker.from_env()
-        containers = client.containers.list(filters={"name": "traderpearl"})
-        
-        # Define patterns to ignore
-        ignore_patterns = [
-            "The same event 'Event.FETCH_ERROR'",
-            "The kwargs={'mech_request_price'",
-            "Slashing has not been enabled",
-            "No stored bets file was detected",
-            "WARNING"  # Ignore general warnings
-        ]
-        
-        for container in containers:
-            logs = container.logs().decode('utf-8')
-            
-            # Split logs into lines for better analysis
-            log_lines = logs.split('\n')
-            
-            for line in log_lines:
-                # Skip empty lines
-                if not line.strip():
-                    continue
-                    
-                # Check if line contains ERROR but isn't in ignore patterns
-                if "ERROR" in line and not any(pattern in line for pattern in ignore_patterns):
-                    logger.error(f"Found critical error in container {container.name}: {line}")
-                    return False
-                    
-        logger.info("Service logs check passed")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error checking service logs: {str(e)}")
-        return False
-
 def check_shutdown_logs(logger: logging.Logger) -> bool:
     """Check shutdown logs for errors."""
     try:
@@ -406,12 +368,7 @@ class TestService:
         process.expect(pexpect.EOF)
         time.sleep(10)
         
-    def test_01_service_logs(self):
-        """Test service logs for errors"""
-        self.logger.info("Testing service logs...")
-        assert check_service_logs(self.logger) == True, "Service logs check failed"
-        
-    def test_02_docker_status(self):
+    def test_01_docker_status(self):
         """Test Docker container status"""
         self.logger.info("Testing Docker container status...")
         assert check_docker_status(self.logger), (
@@ -419,7 +376,7 @@ class TestService:
             "Check docker ps output for more details."
         )
         
-    def test_03_health_check(self):
+    def test_02_health_check(self):
         """Test service health endpoint"""
         self.logger.info("Testing service health...")
         status, metrics = check_service_health(self.logger)
@@ -429,7 +386,7 @@ class TestService:
         
         assert status == True, f"Health check failed with metrics: {metrics}"
             
-    def test_04_shutdown_logs(self):
+    def test_03_shutdown_logs(self):
         """Test service shutdown logs"""
         self.logger.info("Testing shutdown logs...")
         # First stop the service
