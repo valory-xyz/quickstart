@@ -60,54 +60,26 @@ jobs:
         CURRENT_USER=$(id -u)
         CURRENT_GROUP=$(id -g)
         
-        # Configure Docker daemon with user namespace remapping
-        sudo mkdir -p /etc/docker
-        echo '{
-          "userns-remap": "'$CURRENT_USER':'$CURRENT_GROUP'"
-        }' | sudo tee /etc/docker/daemon.json
-        
         # Start Docker service
         sudo systemctl start docker
         
-        # Wait for Docker to be ready
-        echo "Waiting for Docker to be ready..."
-        timeout 30 bash -c 'until docker info; do sleep 1; done'
+        # Setup logs directories both in root and workspace
+        sudo mkdir -p /logs
+        sudo chmod 777 /logs
+        sudo chown root:root /logs
         
-        # Setup logs directory
         mkdir -p logs
-        sudo chmod -R 777 logs
-        sudo chown -R $CURRENT_USER:$CURRENT_GROUP logs
+        sudo chmod 777 logs
         
-        # Debug permissions
-        echo "Logs directory permissions:"
-        ls -la logs/
-        
-        # Add user to docker group and apply changes
+        # Add user to docker group
         sudo usermod -aG docker $USER
         newgrp docker
         
-        # Create docker-compose override for volume mounts
-        cat << EOF > docker-compose.override.yml
-        version: '3'
-        services:
-          traderpearl_tm_0:
-            user: "$CURRENT_USER:$CURRENT_GROUP"
-            volumes:
-              - ./logs:/logs
-          traderpearl_abci_0:
-            user: "$CURRENT_USER:$CURRENT_GROUP"
-            volumes:
-              - ./logs:/logs
-        EOF
-        
-        # Show created files
-        echo "Docker Compose override:"
-        cat docker-compose.override.yml
-        
-        # Verify Docker setup
-        docker --version
-        docker info
-        docker ps
+        # Debug permissions
+        echo "Root logs directory permissions:"
+        ls -la /logs/
+        echo "Workspace logs directory permissions:"
+        ls -la logs/
         
     - name: Install system dependencies
       run: |
@@ -148,30 +120,22 @@ jobs:
         
     - name: Run tests
       run: |
-        # Debug Docker container info
-        echo "Docker container details:"
-        docker ps -a
-        for container in $(docker ps -q); do
-          echo "==== Container Info: $container ===="
-          docker inspect $container
-          echo "==== Container Logs: $container ===="
-          docker logs $container
-        done
-
-        # Debug volume mounts
-        echo "Volume mount details:"
-        docker volume ls
-        
         # Show final directory structure
         echo "Directory structure before tests:"
         ls -la
         ls -la logs/
+        ls -la /logs/
         
-        # Create test file to verify permissions
-        echo "Testing write permissions to logs directory..."
+        # Create test files to verify permissions
+        echo "Testing write permissions to logs directories..."
         touch logs/test.txt
-        ls -la logs/
+        sudo touch /logs/test.txt
         
+        echo "Permissions after test files:"
+        ls -la logs/
+        ls -la /logs/
+        
+        # Run the tests
         poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
 
     - name: Debug container failure
@@ -190,7 +154,7 @@ jobs:
         done
         
         echo "==== Directory permissions ===="
-        ls -la logs/
+        ls -la /logs/
         ls -la ${GITHUB_WORKSPACE}/logs/
 
     - name: Upload test logs
@@ -200,5 +164,5 @@ jobs:
         name: test-logs
         path: |
           logs/
-          docker-compose.override.yml
+          /logs/
           .env

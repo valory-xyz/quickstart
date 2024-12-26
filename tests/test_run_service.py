@@ -40,17 +40,18 @@ def check_docker_status(logger: logging.Logger) -> bool:
     retry_delay = 20
     
     for attempt in range(max_retries):
+        logger.info(f"Checking Docker status (attempt {attempt + 1}/{max_retries})")
         try:
             client = docker.from_env()
             containers = client.containers.list(filters={"name": "traderpearl"})
             
             if not containers:
                 logger.error(f"No trader containers found (attempt {attempt + 1}/{max_retries})")
-                if attempt < max_retries - 1:
-                    logger.info(f"Waiting {retry_delay} seconds before retry...")
-                    time.sleep(retry_delay)
-                    continue
-                return False
+                if attempt == max_retries - 1:
+                    return False
+                logger.info(f"Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+                continue
             
             # Log all container statuses
             all_running = True
@@ -73,19 +74,21 @@ def check_docker_status(logger: logging.Logger) -> bool:
             if all_running:
                 logger.info("All trader containers are running")
                 return True
+            
+            # If we get here, not all containers are running
+            if attempt == max_retries - 1:
+                return False
                 
-            if attempt < max_retries - 1:
-                logger.info(f"Some containers not running, waiting {retry_delay} seconds before retry...")
-                time.sleep(retry_delay)
+            logger.info(f"Some containers not running, waiting {retry_delay} seconds before retry...")
+            time.sleep(retry_delay)
             
         except Exception as e:
             logger.error(f"Error checking Docker status: {str(e)}")
-            if attempt < max_retries - 1:
-                logger.info(f"Waiting {retry_delay} seconds before retry...")
-                time.sleep(retry_delay)
-                continue
-            return False
-            
+            if attempt == max_retries - 1:
+                return False
+            logger.info(f"Waiting {retry_delay} seconds before retry...")
+            time.sleep(retry_delay)
+    
     return False
 
 def check_service_health(logger: logging.Logger) -> tuple[bool, dict]:
