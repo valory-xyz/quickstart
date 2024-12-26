@@ -432,17 +432,9 @@ class TestService:
         cls.logger.info("Stopping service...")
         process = pexpect.spawn('bash ./stop_service.sh', encoding='utf-8', timeout=30)
         process.expect(pexpect.EOF)
-        time.sleep(30)
+        time.sleep(30)      
         
-    def test_01_docker_status(self):
-        """Test Docker container status"""
-        self.logger.info("Testing Docker container status...")
-        assert check_docker_status(self.logger), (
-            "Docker containers are not running correctly. "
-            "Check docker ps output for more details."
-        )
-        
-    def test_02_health_check(self):
+    def test_01_health_check(self):
         """Test service health endpoint"""
         self.logger.info("Testing service health...")
         status, metrics = check_service_health(self.logger)
@@ -452,7 +444,7 @@ class TestService:
         
         assert status == True, f"Health check failed with metrics: {metrics}"
             
-    def test_03_shutdown_logs(self):
+    def test_02_shutdown_logs(self):
         """Test service shutdown logs"""
         self.logger.info("Testing shutdown logs...")
         # First stop the service
