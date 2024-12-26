@@ -110,38 +110,51 @@ def check_docker_status(logger: logging.Logger) -> bool:
     return False
 
 def check_service_health(logger: logging.Logger) -> tuple[bool, dict]:
-    """Enhanced service health check with metrics."""
+    """Enhanced service health check with metrics, monitoring for 2 minutes."""
     metrics = {
         'response_time': None,
         'status_code': None,
-        'error': None
+        'error': None,
+        'check_count': 24,  # Total number of checks (2 minutes / 5 seconds)
+        'successful_checks': 0
     }
     
-    try:
-        start_time = time.time()
-        response = requests.get(HEALTH_CHECK_URL, timeout=10)
-        metrics['response_time'] = time.time() - start_time
-        metrics['status_code'] = response.status_code
-        
-        if response.status_code == 200:
-            logger.info(f"Health check passed (response time: {metrics['response_time']:.2f}s)")
-            return True, metrics
-        else:
-            logger.error(f"Health check failed - Status: {response.status_code}")
+    start_monitoring = time.time()
+    while time.time() - start_monitoring < 120:  # Run for 2 minutes
+        try:
+            start_time = time.time()
+            response = requests.get(HEALTH_CHECK_URL, timeout=10)
+            metrics['response_time'] = time.time() - start_time
+            metrics['status_code'] = response.status_code
+            
+            if response.status_code == 200:
+                metrics['successful_checks'] += 1
+                logger.info(f"Health check passed (response time: {metrics['response_time']:.2f}s)")
+            else:
+                logger.error(f"Health check failed - Status: {response.status_code}")
+                return False, metrics
+                
+        except requests.exceptions.Timeout:
+            metrics['error'] = 'timeout'
+            logger.error("Health check timeout")
+            return False, metrics
+        except requests.exceptions.ConnectionError as e:
+            metrics['error'] = 'connection_error'
+            logger.error(f"Connection error: {str(e)}")
+            return False, metrics
+        except Exception as e:
+            metrics['error'] = str(e)
+            logger.error(f"Unexpected error in health check: {str(e)}")
             return False, metrics
             
-    except requests.exceptions.Timeout:
-        metrics['error'] = 'timeout'
-        logger.error("Health check timeout")
-        return False, metrics
-    except requests.exceptions.ConnectionError as e:
-        metrics['error'] = 'connection_error'
-        logger.error(f"Connection error: {str(e)}")
-        return False, metrics
-    except Exception as e:
-        metrics['error'] = str(e)
-        logger.error(f"Unexpected error in health check: {str(e)}")
-        return False, metrics
+        # Wait for remaining time in 5-second interval
+        elapsed = time.time() - start_time
+        if elapsed < 5:
+            time.sleep(5 - elapsed)
+    
+    # Return True only if all checks were successful
+    is_healthy = metrics['successful_checks'] == metrics['check_count']
+    return is_healthy, metrics
 
 def check_shutdown_logs(logger: logging.Logger) -> bool:
     """Check shutdown logs for errors."""
