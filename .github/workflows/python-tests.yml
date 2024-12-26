@@ -63,24 +63,6 @@ jobs:
         # Start Docker service
         sudo systemctl start docker
         
-        # Setup logs directories both in root and workspace
-        sudo mkdir -p /logs
-        sudo chmod 777 /logs
-        sudo chown root:root /logs
-        
-        mkdir -p logs
-        sudo chmod 777 logs
-        
-        # Add user to docker group
-        sudo usermod -aG docker $USER
-        newgrp docker
-        
-        # Debug permissions
-        echo "Root logs directory permissions:"
-        ls -la /logs/
-        echo "Workspace logs directory permissions:"
-        ls -la logs/
-        
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -120,22 +102,7 @@ jobs:
         
 
     - name: Run tests
-      run: |
-        # Setup logs directory with correct structure
-        echo "Setting up logs directory structure..."
-        sudo mkdir -p /logs
-        sudo touch /logs/node_0.txt  # Create the specific file
-        sudo chmod -R 777 /logs  # Set permissions recursively
-        sudo chown -R nobody:nogroup /logs  # Use nobody user (common in containers)
-        
-        # Debug directory structure
-        echo "Directory structure:"
-        ls -la /logs/
-        ls -la /logs/node_0.txt
-        
-        # Ensure file is writable by anyone
-        sudo chmod 666 /logs/node_0.txt
-        
+      run: |  
         # Run the tests with debug logging
         poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
 
