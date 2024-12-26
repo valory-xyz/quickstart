@@ -43,9 +43,12 @@ def check_docker_status(logger: logging.Logger) -> bool:
         logger.info(f"Checking Docker status (attempt {attempt + 1}/{max_retries})")
         try:
             client = docker.from_env()
-            containers = client.containers.list(filters={"name": "traderpearl"})
             
-            if not containers:
+            # Check all containers, including stopped ones
+            all_containers = client.containers.list(all=True, filters={"name": "traderpearl"})
+            running_containers = client.containers.list(filters={"name": "traderpearl"})
+            
+            if not all_containers:
                 logger.error(f"No trader containers found (attempt {attempt + 1}/{max_retries})")
                 if attempt == max_retries - 1:
                     return False
@@ -53,33 +56,48 @@ def check_docker_status(logger: logging.Logger) -> bool:
                 time.sleep(retry_delay)
                 continue
             
-            # Log all container statuses
-            all_running = True
-            for container in containers:
+            # Log status of all containers
+            for container in all_containers:
                 logger.info(f"Container {container.name} status: {container.status}")
                 
-                # If container is restarting, get logs to help debug
-                if container.status == 'restarting':
-                    logger.error(f"Container {container.name} is restarting. Last logs:")
-                    try:
-                        logs = container.logs(tail=50).decode('utf-8')
-                        logger.error(f"Container logs:\n{logs}")
-                    except Exception as e:
-                        logger.error(f"Could not get logs for container: {str(e)}")
+                if container.status == "exited":
+                    # Get exit code
+                    inspect = client.api.inspect_container(container.id)
+                    exit_code = inspect['State']['ExitCode']
+                    logger.error(f"Container {container.name} exited with code {exit_code}")
+                    
+                    # Get last logs
+                    logs = container.logs(tail=50).decode('utf-8')
+                    logger.error(f"Container logs:\n{logs}")
+                    
+                    # Try to restart the container if it exited with 0
+                    if exit_code == 0:
+                        logger.info(f"Attempting to restart container {container.name}")
+                        container.start()
                 
-                if container.status != 'running':
-                    logger.error(f"Container {container.name} is not running (status: {container.status})")
-                    all_running = False
+                elif container.status == "restarting":
+                    logger.error(f"Container {container.name} is restarting. Last logs:")
+                    logs = container.logs(tail=50).decode('utf-8')
+                    logger.error(f"Container logs:\n{logs}")
             
+            # Check if all required containers are running
+            if not running_containers:
+                if attempt == max_retries - 1:
+                    return False
+                logger.info(f"Waiting {retry_delay} seconds for containers to start...")
+                time.sleep(retry_delay)
+                continue
+            
+            # Verify all running containers are actually running
+            all_running = all(c.status == "running" for c in running_containers)
             if all_running:
                 logger.info("All trader containers are running")
                 return True
             
-            # If we get here, not all containers are running
             if attempt == max_retries - 1:
                 return False
                 
-            logger.info(f"Some containers not running, waiting {retry_delay} seconds before retry...")
+            logger.info(f"Some containers not running, waiting {retry_delay} seconds...")
             time.sleep(retry_delay)
             
         except Exception as e:

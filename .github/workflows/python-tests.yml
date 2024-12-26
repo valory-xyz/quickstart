@@ -134,6 +134,20 @@ jobs:
         echo "Permissions after test files:"
         ls -la logs/
         ls -la /logs/
+
+        # Check Docker errors
+        echo "Docker daemon logs:"
+        sudo journalctl -u docker.service --no-pager | tail -n 50
+
+        # Inspect Docker permissions
+        echo "Docker socket permissions:"
+        ls -la /var/run/docker.sock
+
+        # Show Docker user info
+        echo "Docker user info:"
+        id -a
+        groups
+        docker info
         
         # Run the tests
         poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
