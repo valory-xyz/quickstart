@@ -120,37 +120,25 @@ jobs:
         
     - name: Run tests
       run: |
-        # Show final directory structure
-        echo "Directory structure before tests:"
-        ls -la
-        ls -la logs/
-        ls -la /logs/
+        # Setup logs directory with correct ownership and permissions
+        echo "Setting up logs directory..."
+        sudo rm -rf /logs/*  # Clean any existing files
+        sudo mkdir -p /logs
+        sudo chown -R 1001:1001 /logs  # Use runner's UID:GID
+        sudo chmod -R 777 /logs
         
-        # Create test files to verify permissions
-        echo "Testing write permissions to logs directories..."
-        touch logs/test.txt
-        sudo touch /logs/test.txt
+        # Create node-specific directory
+        sudo mkdir -p /logs/node0
+        sudo chown -R 1001:1001 /logs/node0
+        sudo chmod -R 777 /logs/node0
         
-        echo "Permissions after test files:"
-        ls -la logs/
+        # Show permissions
+        echo "Logs directory structure:"
         ls -la /logs/
-
-        # Check Docker errors
-        echo "Docker daemon logs:"
-        sudo journalctl -u docker.service --no-pager | tail -n 50
-
-        # Inspect Docker permissions
-        echo "Docker socket permissions:"
-        ls -la /var/run/docker.sock
-
-        # Show Docker user info
-        echo "Docker user info:"
-        id -a
-        groups
-        docker info
+        ls -la /logs/node0/
         
         # Run the tests
-        poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
+        DOCKER_LOGS=/logs poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
 
     - name: Debug container failure
       if: failure()
