@@ -58,13 +58,17 @@ jobs:
         # Start Docker service
         sudo systemctl start docker
         
+        # Create logs directory with proper permissions
+        sudo mkdir -p /logs
+        sudo chmod 777 /logs
+        
         # Add user to docker group
         sudo usermod -aG docker $USER
         newgrp docker
         
         # Verify installation
         docker --version
-        docker ps 
+        docker ps
         
     - name: Install system dependencies
       run: |
@@ -98,22 +102,22 @@ jobs:
         
     - name: Install project dependencies
       run: |
-        # Ensure we're using python 3.10
         python -m pip install --upgrade pip
         poetry env use python3.10
-        poetry install -vv --no-interaction
+        poetry install --no-interaction
         
-        # Verify operate module installation
-        poetry run python -c "import operate; print('operate module found')" || echo "operate module not found"
-        
-        # Show installed packages
-        poetry run pip list
-        
-        # Show PYTHONPATH
-        poetry run python -c "import sys; print('Python path:'); [print(p) for p in sys.path]"
+    - name: Setup log directories
+      run: |
+        # Create required directories with proper permissions
+        sudo mkdir -p /logs
+        sudo chmod 777 /logs
+        sudo chown -R $USER:$USER /logs
         
     - name: Run tests
       run: |
+        # Debug directory permissions
+        ls -la /logs
+        
         poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
 
     - name: Upload test logs
@@ -121,7 +125,4 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: test-logs
-        path: |
-          logs/
-          .pytest_cache/
-          *.log
+        path: logs/
