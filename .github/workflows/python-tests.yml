@@ -118,27 +118,26 @@ jobs:
         poetry env use python3.10
         poetry install --no-interaction
         
+
     - name: Run tests
       run: |
-        # Setup logs directory with correct ownership and permissions
-        echo "Setting up logs directory..."
-        sudo rm -rf /logs/*  # Clean any existing files
+        # Setup logs directory with correct structure
+        echo "Setting up logs directory structure..."
         sudo mkdir -p /logs
-        sudo chown -R 1001:1001 /logs  # Use runner's UID:GID
-        sudo chmod -R 777 /logs
+        sudo touch /logs/node_0.txt  # Create the specific file
+        sudo chmod -R 777 /logs  # Set permissions recursively
+        sudo chown -R nobody:nogroup /logs  # Use nobody user (common in containers)
         
-        # Create node-specific directory
-        sudo mkdir -p /logs/node0
-        sudo chown -R 1001:1001 /logs/node0
-        sudo chmod -R 777 /logs/node0
-        
-        # Show permissions
-        echo "Logs directory structure:"
+        # Debug directory structure
+        echo "Directory structure:"
         ls -la /logs/
-        ls -la /logs/node0/
+        ls -la /logs/node_0.txt
         
-        # Run the tests
-        DOCKER_LOGS=/logs poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
+        # Ensure file is writable by anyone
+        sudo chmod 666 /logs/node_0.txt
+        
+        # Run the tests with debug logging
+        poetry run pytest -v tests/test_run_service.py -s --log-cli-level=DEBUG
 
     - name: Debug container failure
       if: failure()
