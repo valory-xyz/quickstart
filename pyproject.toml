@@ -6,7 +6,6 @@ authors = ["David Vilela <dvilelaf@gmail.com>", "Viraj Patel <vptl185@gmail.com>
 readme = "README.md"
 package-mode = false
 packages = []
-include = []
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
@@ -14,6 +13,7 @@ olas-operate-middleware = { git = "https://github.com/valory-xyz/olas-operate-ap
 
 [tool.poetry.group.dev.dependencies]
 pexpect = "^4.9.0"
+pytest = "^7.2.1"
 
 [build-system]
 requires = ["poetry-core"]
