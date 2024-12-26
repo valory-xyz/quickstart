@@ -270,18 +270,33 @@ class TestService:
 
         venv_path = os.environ.get('VIRTUAL_ENV')
         
-        # Temporarily deactivate virtual environment
+        # Create a clean environment without virtualenv variables
+        cls.temp_env = os.environ.copy()
+        cls.temp_env.pop('VIRTUAL_ENV', None)
+        cls.temp_env.pop('POETRY_ACTIVE', None)
+        
         if venv_path:
-            cls.temp_env = os.environ.copy()
-            cls.temp_env.pop('VIRTUAL_ENV', None)
-            cls.temp_env.pop('POETRY_ACTIVE', None)
+            # Get site-packages path
+            if os.name == 'nt':  # Windows
+                site_packages = Path(venv_path) / 'Lib' / 'site-packages'
+            else:  # Unix-like
+                site_packages = list(Path(venv_path).glob('lib/python*/site-packages'))[0]
+                
+            # Add site-packages to PYTHONPATH
+            pythonpath = cls.temp_env.get('PYTHONPATH', '')
+            cls.temp_env['PYTHONPATH'] = f"{site_packages}:{pythonpath}" if pythonpath else str(site_packages)
             
-            # Update PATH to remove the virtual environment
+            # Remove virtualenv path from PATH
             paths = cls.temp_env['PATH'].split(os.pathsep)
-            paths = [p for p in paths if not p.startswith(venv_path)]
+            paths = [p for p in paths if not p.startswith(str(venv_path))]
             cls.temp_env['PATH'] = os.pathsep.join(paths)
+            
+            cls.logger.info(f"Original virtualenv: {venv_path}")
+            cls.logger.info(f"Using site-packages: {site_packages}")
+            cls.logger.info(f"Cleaned PATH: {cls.temp_env['PATH']}")
+            cls.logger.info(f"PYTHONPATH: {cls.temp_env['PYTHONPATH']}")
         else:
-            cls.temp_env = os.environ
+            cls.logger.warning("No virtualenv detected")
 
         cls.logger.info("Environment setup completed")
 
