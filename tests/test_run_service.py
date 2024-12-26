@@ -27,9 +27,9 @@ from operate.constants import HEALTH_CHECK_URL
 init()
 load_dotenv()
 
-STARTUP_WAIT = 5
-SERVICE_INIT_WAIT = 30
-CONTAINER_STOP_WAIT = 10
+STARTUP_WAIT = 10
+SERVICE_INIT_WAIT = 60
+CONTAINER_STOP_WAIT = 20
 
 # Handle the distutils warning
 os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'stdlib'
@@ -365,7 +365,7 @@ class TestService:
         cls.logger.info("Stopping service...")
         process = pexpect.spawn('bash ./stop_service.sh', encoding='utf-8', timeout=30)
         process.expect(pexpect.EOF)
-        time.sleep(10)
+        time.sleep(30)
         
     def test_01_docker_status(self):
         """Test Docker container status"""
@@ -391,7 +391,7 @@ class TestService:
         # First stop the service
         self.stop_service()
         # Wait for containers to stop
-        time.sleep(10)
+        time.sleep(30)
         # Verify containers are stopped
         client = docker.from_env()
         containers = client.containers.list(filters={"name": "traderpearl"})
