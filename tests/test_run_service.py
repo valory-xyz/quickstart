@@ -36,26 +36,57 @@ os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'stdlib'
 
 def check_docker_status(logger: logging.Logger) -> bool:
     """Check if Docker containers are running properly."""
-    try:
-        client = docker.from_env()
-        containers = client.containers.list(filters={"name": "traderpearl"})
-        
-        if not containers:
-            logger.error("No trader containers found")
+    max_retries = 3
+    retry_delay = 20
+    
+    for attempt in range(max_retries):
+        try:
+            client = docker.from_env()
+            containers = client.containers.list(filters={"name": "traderpearl"})
+            
+            if not containers:
+                logger.error(f"No trader containers found (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    logger.info(f"Waiting {retry_delay} seconds before retry...")
+                    time.sleep(retry_delay)
+                    continue
+                return False
+            
+            # Log all container statuses
+            all_running = True
+            for container in containers:
+                logger.info(f"Container {container.name} status: {container.status}")
+                
+                # If container is restarting, get logs to help debug
+                if container.status == 'restarting':
+                    logger.error(f"Container {container.name} is restarting. Last logs:")
+                    try:
+                        logs = container.logs(tail=50).decode('utf-8')
+                        logger.error(f"Container logs:\n{logs}")
+                    except Exception as e:
+                        logger.error(f"Could not get logs for container: {str(e)}")
+                
+                if container.status != 'running':
+                    logger.error(f"Container {container.name} is not running (status: {container.status})")
+                    all_running = False
+            
+            if all_running:
+                logger.info("All trader containers are running")
+                return True
+                
+            if attempt < max_retries - 1:
+                logger.info(f"Some containers not running, waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+            
+        except Exception as e:
+            logger.error(f"Error checking Docker status: {str(e)}")
+            if attempt < max_retries - 1:
+                logger.info(f"Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+                continue
             return False
             
-        for container in containers:
-            logger.info(f"Container {container.name} status: {container.status}")
-            if container.status != 'running':
-                logger.error(f"Container {container.name} is not running")
-                return False
-                
-        logger.info("All trader containers are running")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error checking Docker status: {str(e)}")
-        return False
+    return False
 
 def check_service_health(logger: logging.Logger) -> tuple[bool, dict]:
     """Enhanced service health check with metrics."""
