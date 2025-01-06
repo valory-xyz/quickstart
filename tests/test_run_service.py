@@ -477,7 +477,36 @@ class BaseTestService:
     config_path = None
     config_settings = None
     logger = None
-    _setup_complete = False  # Add class variable to track setup state
+    _setup_complete = False
+    
+
+    @classmethod
+    def test_01_health_check(cls):
+        """Test service health endpoint"""
+        cls.logger.info("Testing service health...")
+        status, metrics = check_service_health(cls.logger, cls.config_path)
+        cls.logger.info(f"Health check metrics: {metrics}")
+        assert status == True, f"Health check failed with metrics: {metrics}"
+            
+    @classmethod
+    def test_02_shutdown_logs(cls):
+        """Test service shutdown logs"""
+        try:
+            cls.logger.info("Testing shutdown logs...")
+            cls.stop_service()
+            time.sleep(CONTAINER_STOP_WAIT)
+            
+            client = docker.from_env()
+            service_config = get_service_config(cls.config_path)
+            container_name = service_config["container_name"]
+            
+            containers = client.containers.list(filters={"name": container_name})
+            assert len(containers) == 0, f"Containers with name {container_name} are still running"
+            assert check_shutdown_logs(cls.logger) == True, "Shutdown logs check failed"
+        finally:
+            if cls._setup_complete:
+                cls.teardown_class()
+                cls._setup_complete = False
 
     @classmethod
     def setup_class(cls):
@@ -653,44 +682,19 @@ class TestAgentService:
 
     @pytest.fixture(autouse=True)
     def setup_test(self, config_path):
-        """Setup before each test method if it's the first test"""
         TestAgentService.config_path = config_path
         if not BaseTestService._setup_complete:
             BaseTestService.config_path = config_path
             BaseTestService.setup_class()
         yield
-        # No teardown here - let the last test handle it
-
+    
     def test_01_health_check(self):
         """Test service health endpoint"""
-        BaseTestService.logger.info("Testing service health...")
-        status, metrics = check_service_health(BaseTestService.logger, self.config_path)
-        BaseTestService.logger.info(f"Health check metrics: {metrics}")
-        assert status == True, f"Health check failed with metrics: {metrics}"
+        BaseTestService.test_01_health_check()
             
     def test_02_shutdown_logs(self):
         """Test service shutdown logs"""
-        try:
-            BaseTestService.logger.info("Testing shutdown logs...")
-            # First stop the service
-            BaseTestService.stop_service()
-            # Wait for containers to stop
-            time.sleep(CONTAINER_STOP_WAIT)
-            # Verify containers are stopped
-            client = docker.from_env()
-            
-            service_config = get_service_config(self.config_path)
-            container_name = service_config["container_name"]
-            
-            containers = client.containers.list(filters={"name": container_name})
-            assert len(containers) == 0, f"Containers with name {container_name} are still running"
-            # Now check the logs
-            assert check_shutdown_logs(BaseTestService.logger) == True, "Shutdown logs check failed"
-        finally:
-            if BaseTestService._setup_complete:
-                BaseTestService.teardown_class()
-                BaseTestService._setup_complete = False
-
+        BaseTestService.test_02_shutdown_logs()
 
 
 if __name__ == "__main__":
