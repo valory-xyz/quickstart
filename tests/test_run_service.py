@@ -46,6 +46,121 @@ def get_service_config(config_path: str) -> dict:
             "health_check_url": HEALTH_CHECK_URL,
         }
 
+def check_docker_status(logger: logging.Logger, config_path: str) -> bool:
+    """Check if Docker containers are running properly."""
+    service_config = get_service_config(config_path)
+    container_name = service_config["container_name"]
+    
+    max_retries = 3
+    retry_delay = 20
+    
+    for attempt in range(max_retries):
+        logger.info(f"Checking Docker status (attempt {attempt + 1}/{max_retries})")
+        try:
+            client = docker.from_env()
+            
+            all_containers = client.containers.list(all=True, filters={"name": container_name})
+            running_containers = client.containers.list(filters={"name": container_name})
+            
+            if not all_containers:
+                logger.error(f"No {container_name} containers found (attempt {attempt + 1}/{max_retries})")
+                if attempt == max_retries - 1:
+                    return False
+                logger.info(f"Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+                continue
+            
+            for container in all_containers:
+                logger.info(f"Container {container.name} status: {container.status}")
+                
+                if container.status == "exited":
+                    inspect = client.api.inspect_container(container.id)
+                    exit_code = inspect['State']['ExitCode']
+                    logger.error(f"Container {container.name} exited with code {exit_code}")
+                    logs = container.logs(tail=50).decode('utf-8')
+                    logger.error(f"Container logs:\n{logs}")
+                
+                elif container.status == "restarting":
+                    logger.error(f"Container {container.name} is restarting. Last logs:")
+                    logs = container.logs(tail=50).decode('utf-8')
+                    logger.error(f"Container logs:\n{logs}")
+            
+            if not running_containers:
+                if attempt == max_retries - 1:
+                    return False
+                logger.info(f"Waiting {retry_delay} seconds for containers to start...")
+                time.sleep(retry_delay)
+                continue
+            
+            all_running = all(c.status == "running" for c in running_containers)
+            if all_running:
+                logger.info(f"All {container_name} containers are running")
+                return True
+            
+            if attempt == max_retries - 1:
+                return False
+                
+            logger.info(f"Some containers not running, waiting {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            
+        except Exception as e:
+            logger.error(f"Error checking Docker status: {str(e)}")
+            if attempt == max_retries - 1:
+                return False
+            logger.info(f"Waiting {retry_delay} seconds before retry...")
+            time.sleep(retry_delay)
+    
+    return False
+
+def check_service_health(logger: logging.Logger, config_path: str) -> tuple[bool, dict]:
+    """Enhanced service health check with metrics."""
+    service_config = get_service_config(config_path)
+    health_check_url = service_config["health_check_url"]
+    
+    metrics = {
+        'response_time': None,
+        'status_code': None,
+        'error': None,
+        'successful_checks': 0,
+        'total_checks': 0
+    }
+    
+    start_monitoring = time.time()
+    while time.time() - start_monitoring < 120:  # Run for 2 minutes
+        try:
+            metrics['total_checks'] += 1
+            start_time = time.time()
+            response = requests.get(health_check_url, timeout=10)
+            metrics['response_time'] = time.time() - start_time
+            metrics['status_code'] = response.status_code
+            
+            if response.status_code == 200:
+                metrics['successful_checks'] += 1
+                logger.info(f"Health check passed (response time: {metrics['response_time']:.2f}s)")
+            else:
+                logger.error(f"Health check failed - Status: {response.status_code}")
+                return False, metrics
+                
+        except requests.exceptions.Timeout:
+            metrics['error'] = 'timeout'
+            logger.error("Health check timeout")
+            return False, metrics
+        except requests.exceptions.ConnectionError as e:
+            metrics['error'] = 'connection_error'
+            logger.error(f"Connection error: {str(e)}")
+            return False, metrics
+        except Exception as e:
+            metrics['error'] = str(e)
+            logger.error(f"Unexpected error in health check: {str(e)}")
+            return False, metrics
+            
+        elapsed = time.time() - start_time
+        if elapsed < 5:
+            time.sleep(5 - elapsed)
+    
+    logger.info(f"Health check completed successfully - {metrics['successful_checks']} checks passed")
+    return True, metrics    
+
 def get_token_config():
     """Get token configurations"""
     return {
@@ -192,120 +307,6 @@ def create_token_funding_handler(rpc_url: str):
         return handle_erc20_funding(output, logger, rpc_url)
     return handler
 
-def check_docker_status(logger: logging.Logger, config_path: str) -> bool:
-    """Check if Docker containers are running properly."""
-    service_config = get_service_config(config_path)
-    container_name = service_config["container_name"]
-    
-    max_retries = 3
-    retry_delay = 20
-    
-    for attempt in range(max_retries):
-        logger.info(f"Checking Docker status (attempt {attempt + 1}/{max_retries})")
-        try:
-            client = docker.from_env()
-            
-            all_containers = client.containers.list(all=True, filters={"name": container_name})
-            running_containers = client.containers.list(filters={"name": container_name})
-            
-            if not all_containers:
-                logger.error(f"No {container_name} containers found (attempt {attempt + 1}/{max_retries})")
-                if attempt == max_retries - 1:
-                    return False
-                logger.info(f"Waiting {retry_delay} seconds before retry...")
-                time.sleep(retry_delay)
-                continue
-            
-            for container in all_containers:
-                logger.info(f"Container {container.name} status: {container.status}")
-                
-                if container.status == "exited":
-                    inspect = client.api.inspect_container(container.id)
-                    exit_code = inspect['State']['ExitCode']
-                    logger.error(f"Container {container.name} exited with code {exit_code}")
-                    logs = container.logs(tail=50).decode('utf-8')
-                    logger.error(f"Container logs:\n{logs}")
-                
-                elif container.status == "restarting":
-                    logger.error(f"Container {container.name} is restarting. Last logs:")
-                    logs = container.logs(tail=50).decode('utf-8')
-                    logger.error(f"Container logs:\n{logs}")
-            
-            if not running_containers:
-                if attempt == max_retries - 1:
-                    return False
-                logger.info(f"Waiting {retry_delay} seconds for containers to start...")
-                time.sleep(retry_delay)
-                continue
-            
-            all_running = all(c.status == "running" for c in running_containers)
-            if all_running:
-                logger.info(f"All {container_name} containers are running")
-                return True
-            
-            if attempt == max_retries - 1:
-                return False
-                
-            logger.info(f"Some containers not running, waiting {retry_delay} seconds...")
-            time.sleep(retry_delay)
-            
-        except Exception as e:
-            logger.error(f"Error checking Docker status: {str(e)}")
-            if attempt == max_retries - 1:
-                return False
-            logger.info(f"Waiting {retry_delay} seconds before retry...")
-            time.sleep(retry_delay)
-    
-    return False
-
-def check_service_health(logger: logging.Logger, config_path: str) -> tuple[bool, dict]:
-    """Enhanced service health check with metrics."""
-    service_config = get_service_config(config_path)
-    health_check_url = service_config["health_check_url"]
-    
-    metrics = {
-        'response_time': None,
-        'status_code': None,
-        'error': None,
-        'successful_checks': 0,
-        'total_checks': 0
-    }
-    
-    start_monitoring = time.time()
-    while time.time() - start_monitoring < 120:  # Run for 2 minutes
-        try:
-            metrics['total_checks'] += 1
-            start_time = time.time()
-            response = requests.get(health_check_url, timeout=10)
-            metrics['response_time'] = time.time() - start_time
-            metrics['status_code'] = response.status_code
-            
-            if response.status_code == 200:
-                metrics['successful_checks'] += 1
-                logger.info(f"Health check passed (response time: {metrics['response_time']:.2f}s)")
-            else:
-                logger.error(f"Health check failed - Status: {response.status_code}")
-                return False, metrics
-                
-        except requests.exceptions.Timeout:
-            metrics['error'] = 'timeout'
-            logger.error("Health check timeout")
-            return False, metrics
-        except requests.exceptions.ConnectionError as e:
-            metrics['error'] = 'connection_error'
-            logger.error(f"Connection error: {str(e)}")
-            return False, metrics
-        except Exception as e:
-            metrics['error'] = str(e)
-            logger.error(f"Unexpected error in health check: {str(e)}")
-            return False, metrics
-            
-        elapsed = time.time() - start_time
-        if elapsed < 5:
-            time.sleep(5 - elapsed)
-    
-    logger.info(f"Health check completed successfully - {metrics['successful_checks']} checks passed")
-    return True, metrics
 
 def check_shutdown_logs(logger: logging.Logger, config_path: str) -> bool:
     """Check shutdown logs for errors."""
