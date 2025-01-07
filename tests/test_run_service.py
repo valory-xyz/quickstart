@@ -348,9 +348,16 @@ def setup_logging(log_file: Optional[Path] = None) -> logging.Logger:
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
     
+    # Get the logger
     logger = logging.getLogger('test_runner')
+    
+    # Remove any existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    
     logger.setLevel(logging.DEBUG)
     
+    # Only add console handler if none exists
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
     console_formatter = ColoredFormatter(
@@ -532,9 +539,26 @@ class BaseTestService:
         try:
             cls.logger.info("Starting test cleanup...")
             
-            if cls.child and cls.child.isalive():
+            # Always try to stop the service first
+            try:
                 cls.stop_service()
+                time.sleep(CONTAINER_STOP_WAIT)  # Give containers time to stop
+                
+                # Verify all containers are stopped
+                client = docker.from_env()
+                service_config = get_service_config(cls.config_path)
+                container_name = service_config["container_name"]
+                containers = client.containers.list(filters={"name": container_name})
+                
+                if containers:
+                    cls.logger.warning(f"Found running containers after stop_service, forcing removal...")
+                    for container in containers:
+                        container.stop(timeout=30)
+                        container.remove()
+            except Exception as e:
+                cls.logger.error(f"Error stopping service: {str(e)}")
             
+            # Clean up resources
             os.chdir(cls.original_cwd)
             if cls.temp_dir:
                 cls.temp_dir.cleanup()
@@ -559,7 +583,8 @@ class BaseTestService:
                 cwd="."
             )
             
-            cls.child.logfile = sys.stdout
+            # Redirect pexpect logging to debug level only
+            cls.child.logfile =  sys.stdout  # Disable direct stdout logging
             
             try:
                 while True:
@@ -638,36 +663,45 @@ class BaseTestService:
             if self._setup_complete:
                 self.teardown_class()
 
+def pytest_generate_tests(metafunc):
+    """Generate test cases for each config file."""
+    if "config_path" in metafunc.fixturenames:
+        configs = get_config_files()
+        metafunc.parametrize("config_path", configs, ids=[Path(cfg).stem for cfg in configs])
+
 class TestAgentService:
-    """Test class that runs tests for all configs."""
+    """Test class that runs all tests for each config."""
     
-    @classmethod
-    def setup_class(cls):
-        """Initial setup before any tests"""
-        cls.configs = get_config_files()
-        
-    def test_agents(self):
-        """Test all agent configurations sequentially"""
-        for config_path in self.configs:
-            # Create a new test class instance for each config
-            test_class = type(
-                f'TestService_{Path(config_path).stem}',
-                (BaseTestService,),
-                {'config_path': config_path}
-            )
+    @pytest.fixture(autouse=True)
+    def setup(self, config_path):
+        """Setup for each config's test suite."""
+        # First ensure any existing service is stopped
+        try:
+            process = pexpect.spawn(f'bash ./stop_service.sh {config_path}', encoding='utf-8', timeout=30)
+            process.expect(pexpect.EOF)
+            time.sleep(CONTAINER_STOP_WAIT)
+        except Exception as e:
+            print(f"Warning: Error stopping previous service: {e}")
             
-            # Run the full test suite for this config
-            try:
-                test_class.setup_class()
-                test_instance = test_class()
-                test_instance.test_health_check()
-                test_instance.test_shutdown_logs()
-            except Exception as e:
-                pytest.fail(f"Tests failed for config {config_path}: {str(e)}")
-            finally:
-                if test_class._setup_complete:
-                    test_class.teardown_class()
+        self.test_class = type(
+            f'TestService_{Path(config_path).stem}',
+            (BaseTestService,),
+            {'config_path': config_path}
+        )
+        self.test_class.setup_class()
+        yield
+        if self.test_class._setup_complete:
+            self.test_class.teardown_class()
+            
+    def test_agent_full_suite(self, config_path):
+        """Run all tests for a single config."""
+        test_instance = self.test_class()
+        
+        # Run health check
+        test_instance.test_health_check()
+        
+        # Run shutdown logs test
+        test_instance.test_shutdown_logs()
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__, "-s", "--log-cli-level=INFO"])
-        
