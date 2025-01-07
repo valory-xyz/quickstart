@@ -473,30 +473,36 @@ class BaseTestService:
         # Create temporary directory and store original path
         cls.original_cwd = os.getcwd()
         cls.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
+        cls.logger.info(f"Created temporary directory: {cls.temp_dir.name}")
         
-        # Copy project files
+        # Define exclusion patterns
         exclude_patterns = [
-            '.git',
-            '.pytest_cache',
-            '__pycache__',
-            '*.pyc',
-            '.operate',
-            'logs',
-            '*.log',
-            '.env'
+            '.git',              # Git directory
+            '.pytest_cache',     # Pytest cache
+            '__pycache__',       # Python cache
+            '*.pyc',            # Python compiled files
+            '.operate',          # Operate directory
+            'logs',             # Log files
+            '*.log',            # Log files
+            '.env'              # Environment files
         ]
         
         def ignore_patterns(path, names):
             return set(n for n in names if any(p in n or any(p.endswith(n) for p in exclude_patterns) for p in exclude_patterns))
         
+        # Copy project files to temp directory
         shutil.copytree(cls.original_cwd, cls.temp_dir.name, dirs_exist_ok=True, ignore=ignore_patterns)
         
+        # Copy .git directory if it exists
         git_dir = Path(cls.original_cwd) / '.git'
         if git_dir.exists():
             shutil.copytree(git_dir, Path(cls.temp_dir.name) / '.git', symlinks=True)    
             
+        # Switch to temporary directory
         os.chdir(cls.temp_dir.name)
+        cls.logger.info(f"Changed working directory to: {cls.temp_dir.name}")
         
+        # Setup environment
         cls._setup_environment()
         
         # Start the service
@@ -584,7 +590,7 @@ class BaseTestService:
             )
             
             # Redirect pexpect logging to debug level only
-            cls.child.logfile =  sys.stdout  # Disable direct stdout logging
+            cls.child.logfile = None  # Disable direct stdout logging
             
             try:
                 while True:
@@ -663,18 +669,13 @@ class BaseTestService:
             if self._setup_complete:
                 self.teardown_class()
 
-def pytest_generate_tests(metafunc):
-    """Generate test cases for each config file."""
-    if "config_path" in metafunc.fixturenames:
-        configs = get_config_files()
-        metafunc.parametrize("config_path", configs, ids=[Path(cfg).stem for cfg in configs])
-
 class TestAgentService:
-    """Test class that runs all tests for each config."""
+    """Test class that runs tests for all configs."""
     
     @pytest.fixture(autouse=True)
-    def setup(self, config_path):
-        """Setup for each config's test suite."""
+    def setup(self, request):
+        """Setup for each test case."""
+        config_path = request.param
         # First ensure any existing service is stopped
         try:
             process = pexpect.spawn(f'bash ./stop_service.sh {config_path}', encoding='utf-8', timeout=30)
@@ -692,9 +693,11 @@ class TestAgentService:
         yield
         if self.test_class._setup_complete:
             self.test_class.teardown_class()
-            
-    def test_agent_full_suite(self, config_path):
-        """Run all tests for a single config."""
+
+    @pytest.mark.parametrize('setup', get_config_files(), indirect=True,
+                           ids=lambda x: Path(x).stem)
+    def test_agent_full_suite(self, setup):
+        """Run all tests for each config."""
         test_instance = self.test_class()
         
         # Run health check
