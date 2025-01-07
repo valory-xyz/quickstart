@@ -479,9 +479,8 @@ class BaseTestService:
         exclude_patterns = [
             '.git',              # Git directory
             '.pytest_cache',     # Pytest cache
-            '__pycache__',       # Python cache
+            '__pycache__',      # Python cache
             '*.pyc',            # Python compiled files
-            '.operate',          # Operate directory
             'logs',             # Log files
             '*.log',            # Log files
             '.env'              # Environment files
@@ -607,6 +606,8 @@ class BaseTestService:
 
                     if "password" in pattern.lower():
                         cls.logger.info("Sending: [HIDDEN]", extra={'is_input': True})
+                    elif "eth_newfilter" in pattern.lower():
+                        cls.logger.info("Sending: [HIDDEN RPC URL]", extra={'is_input': True})
                     else:
                         cls.logger.info(f"Sending: {response}", extra={'is_input': True})
                     
@@ -638,9 +639,19 @@ class BaseTestService:
 
     @classmethod
     def stop_service(cls):
-        """Stop the service"""
+        """Stop the service ensuring we're in temp directory"""
         cls.logger.info("Stopping service...")
-        process = pexpect.spawn(f'bash ./stop_service.sh {cls.config_path}', encoding='utf-8', timeout=30)
+        if hasattr(cls, 'temp_dir') and cls.temp_dir:
+            stop_dir = cls.temp_dir.name
+        else:
+            stop_dir = os.getcwd()
+            
+        process = pexpect.spawn(
+            f'bash ./stop_service.sh {cls.config_path}', 
+            encoding='utf-8', 
+            timeout=30,
+            cwd=stop_dir  # Explicitly set working directory for stop_service
+        )
         process.expect(pexpect.EOF)
         time.sleep(CONTAINER_STOP_WAIT)
 
@@ -676,14 +687,28 @@ class TestAgentService:
     def setup(self, request):
         """Setup for each test case."""
         config_path = request.param
-        # First ensure any existing service is stopped
+
+        # Create a temporary directory for stop_service
+        temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
+        
+        # Copy necessary files to temp directory
+        shutil.copytree('.', temp_dir.name, dirs_exist_ok=True, 
+                        ignore=shutil.ignore_patterns('.git', '.pytest_cache', '__pycache__', 
+                                                   '*.pyc', 'logs', '*.log', '.env'))
+        
+        # First ensure any existing service is stopped (in temp directory)
         try:
-            process = pexpect.spawn(f'bash ./stop_service.sh {config_path}', encoding='utf-8', timeout=30)
+            process = pexpect.spawn(
+                f'bash ./stop_service.sh {config_path}',
+                encoding='utf-8',
+                timeout=30,
+                cwd=temp_dir.name  # Run in temp directory
+            )
             process.expect(pexpect.EOF)
             time.sleep(CONTAINER_STOP_WAIT)
         except Exception as e:
             print(f"Warning: Error stopping previous service: {e}")
-            
+        
         self.test_class = type(
             f'TestService_{Path(config_path).stem}',
             (BaseTestService,),
@@ -693,6 +718,13 @@ class TestAgentService:
         yield
         if self.test_class._setup_complete:
             self.test_class.teardown_class()
+            
+        # Clean up the temporary directory used for stop_service
+        try:
+            shutil.rmtree(temp_dir.name, ignore_errors=True)
+            temp_dir.cleanup()
+        except Exception as e:
+            print(f"Warning: Error cleaning up temporary directory: {e}")
 
     @pytest.mark.parametrize('setup', get_config_files(), indirect=True,
                            ids=lambda x: Path(x).stem)
