@@ -580,18 +580,24 @@ def get_base_config() -> dict:
         "STAKING_CHOICE": '1'
     }
     
+    # def handle_please_enter(output, logger, config):
+    #     pass
+        # parse config
+        # for env_var in config.env_vars:
+        #     if f"Please enter {env_var.name}" in output:
+        #         return env_var.value
+        # return "\n"
+
     # Common prompts used across all services
     base_prompts = {
-        r"input your password": base_config["TEST_PASSWORD"] + "\n",
-        r"confirm your password": base_config["TEST_PASSWORD"] + "\n",
-        r"Enter your choice": base_config["STAKING_CHOICE"] + "\n",
-        r"backup owner \(leave empty to skip\)": base_config["BACKUP_WALLET"] + "\n",  # Escape parentheses
+        r"Please input your password \(or press enter\)\:": base_config["TEST_PASSWORD"],
+        r"Please confirm your password\:": base_config["TEST_PASSWORD"],
+        r"Enter your choice": base_config["STAKING_CHOICE"],
+        r"Please input your backup owner \(leave empty to skip\)\:": base_config["BACKUP_WALLET"],  # Escape parentheses
         r"Press enter to continue": "\n",
-        r"press enter": "\n",
-        r"Enter local user account password \[hidden input\]": base_config["TEST_PASSWORD"] + "\n",
-        r"Please enter": "\n",
+        r"Please enter ": "\n",
     }
-    
+
     return {"config": base_config, "prompts": base_prompts}
 
 def get_config_specific_settings(config_path: str) -> dict:
@@ -610,7 +616,7 @@ def get_config_specific_settings(config_path: str) -> dict:
 
         # Add Modius-specific prompts
         prompts.update({
-                r"eth_newFilter \[hidden input\]": test_config["RPC_URL"] + "\n",
+                r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
                 r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                     lambda output, logger: create_funding_handler(test_config["RPC_URL"], "modius")(output, logger),
                 r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
@@ -642,9 +648,9 @@ def get_config_specific_settings(config_path: str) -> dict:
                 return test_config["MODIUS_RPC_URL"]
 
         prompts.update({
-            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODIUS_RPC_URL"] + "\n",
-            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"] + "\n",
-            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"] + "\n",
+            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODIUS_RPC_URL"],
+            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
+            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
             r"\[(?:optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger), "optimus")(output, logger),
             r"\[(?:optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
@@ -671,7 +677,7 @@ def get_config_specific_settings(config_path: str) -> dict:
 
         # Add Mech-specific prompts
         prompts.update({
-            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"] + "\n",
+            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                 lambda output, logger: create_funding_handler(test_config["RPC_URL"], "mech")(output, logger),
             r"Please enter API keys": handle_api_keys  # Use handler instead of direct dict
@@ -686,7 +692,7 @@ def get_config_specific_settings(config_path: str) -> dict:
 
         # Add Memeooorr-specific prompts
         prompts.update({
-            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"] + "\n",
+            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
             r"Please enter.*": "",  # Handles all "Please enter" prompts with empty string
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                 lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"], "memeooorr")(output, logger),
@@ -701,7 +707,7 @@ def get_config_specific_settings(config_path: str) -> dict:
 
         # Add PredictTrader-specific prompts
         prompts.update({
-            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"] + "\n",
+            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                 lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger)
         })
