@@ -709,19 +709,8 @@ def get_config_specific_settings(config_path: str) -> dict:
     return {"prompts": prompts, "test_config": test_config}
 
 def log_expect_match(child, pattern, match_index, logger):
-    """Log the exact match and surrounding context."""
-    # Get the full buffer content around the match
-    before = child.before.strip() if child.before else ""
-    after = child.after.strip() if child.after else ""
-    
-    logger.debug(f"""
-    === Match Details ===
-    Pattern matched: {pattern}
-    Index: {match_index}
-    Before match: {before}
-    Matched text: {after}
-    Buffer content: {child.buffer}
-    ===================""")
+    """Log minimal match information without exposing sensitive data."""
+    logger.debug(f"Pattern matched at index: {match_index}")
     
 def validate_input_match(pattern, response, prompt_text, logger):
     """Validate that the input matches the expected prompt."""
@@ -739,22 +728,14 @@ def validate_input_match(pattern, response, prompt_text, logger):
     prompt_type = next((k for k, v in prompt_validators.items() 
                        if v(pattern, response)), "unknown")
     
-    logger.debug(f"""
-    === Input Validation ===
-    Prompt type: {prompt_type}
-    Pattern: {pattern}
-    Actual prompt text: {prompt_text}
-    Response (sanitized): {response if prompt_type != "password" else "[HIDDEN]"}
-    =======================""")
+    logger.debug(f"Processing input of type: {prompt_type}")
     
     return prompt_type
+
 
 def send_input_safely(child, response, prompt_type, logger):
     """Send input with appropriate handling based on prompt type."""
     try:
-        logger.debug(f"Original response type: {type(response)}")
-        logger.debug(f"Original response: {response}")
-        
         # Force string encoding
         if isinstance(response, bytes):
             response = response.decode('utf-8')
@@ -764,12 +745,8 @@ def send_input_safely(child, response, prompt_type, logger):
         # Clean the response
         response = response.strip()
         
-        # Log what we're about to send
-        logger.debug(f"Cleaned response type: {type(response)}")
-        logger.debug(f"Cleaned response: {response}")
-        
         if prompt_type == "rpc":
-            logger.debug("Sending RPC URL using write + os.linesep")
+            logger.debug("Sending RPC URL")
             child.write(response + os.linesep)
             time.sleep(1)
         elif prompt_type == "password":
@@ -786,12 +763,8 @@ def send_input_safely(child, response, prompt_type, logger):
             time.sleep(0.5)
             
     except Exception as e:
-        logger.error(f"Error details:")
-        logger.error(f"- Error type: {type(e)}")
-        logger.error(f"- Error message: {str(e)}")
-        logger.error(f"- Prompt type: {prompt_type}")
-        logger.error(f"- Response type: {type(response)}")
-        logger.error(f"- Response: {response if prompt_type != 'password' else '[HIDDEN]'}")
+        logger.error(f"Error sending input: {str(e)}")
+        logger.error(f"Prompt type: {prompt_type}")
         raise
 
 def cleanup_directory(path: str, logger: logging.Logger) -> bool:
@@ -943,7 +916,7 @@ class BaseTestService:
         try:
             cls.logger.info(f"Starting run_service.py test with config: {cls.config_path}")
             
-            # Enable extended logging for pexpect
+            # Enable extended logging for pexpect only in debug mode
             if cls.logger.getEffectiveLevel() <= logging.DEBUG:
                 cls.child = pexpect.spawn(
                     f'bash ./run_service.sh {cls.config_path}',
@@ -962,7 +935,7 @@ class BaseTestService:
                     cwd="."
                 )
             
-            input_sequence = []  # Track input sequence for debugging
+            input_sequence = []
             
             try:
                 while True:
@@ -970,40 +943,27 @@ class BaseTestService:
                     index = cls.child.expect(patterns, timeout=600)
                     pattern = patterns[index]
                     
-                    # Log the exact match details
                     log_expect_match(cls.child, pattern, index, cls.logger)
                     
-                    # Get response
                     response = cls.config_settings["prompts"][pattern]
                     if callable(response):
                         output = cls.child.before + cls.child.after
                         response = response(output, cls.logger)
                     
-                    # Validate the prompt and response
                     prompt_text = cls.child.after
                     prompt_type = validate_input_match(pattern, response, prompt_text, cls.logger)
                     
-                    # Track input sequence
                     input_sequence.append({
                         'prompt_type': prompt_type,
-                        'pattern': pattern,
-                        'prompt_text': prompt_text,
                         'timestamp': datetime.now().isoformat()
                     })
                     
-                    # Send input based on type
                     send_input_safely(cls.child, response, prompt_type, cls.logger)
-                    
-                    # Log sequence periodically
-                    if len(input_sequence) % 5 == 0:
-                        cls.logger.debug(f"Input sequence so far: {json.dumps(input_sequence, indent=2)}")
                     
             except pexpect.EOF:
                 cls.logger.info("Initial setup completed")
-                cls.logger.debug("Final input sequence: " + json.dumps(input_sequence, indent=2))
                 time.sleep(SERVICE_INIT_WAIT)
                 
-                # Check Docker status with retries
                 retries = 5
                 while retries > 0:
                     if check_docker_status(cls.logger, cls.config_path):
@@ -1019,7 +979,7 @@ class BaseTestService:
         except Exception as e:
             cls.logger.error(f"Service start failed: {str(e)}")
             if 'input_sequence' in locals():
-                cls.logger.error("Input sequence at failure: " + json.dumps(input_sequence, indent=2))
+                cls.logger.error(f"Number of inputs processed: {len(input_sequence)}")
             raise
 
     @classmethod
