@@ -6,6 +6,7 @@ import sys
 import logging
 import pexpect 
 import os
+import json
 import time
 import pytest
 import tempfile
@@ -62,6 +63,16 @@ def get_service_config(config_path: str) -> dict:
         # Traderpearl service and variants
         "traderpearl": {
             "container_name": "traderpearl",
+            "health_check_url": HEALTH_CHECK_URL,
+        },
+        # Mech service
+        "mech": {
+            "container_name": "mech",
+            "health_check_url": HEALTH_CHECK_URL,
+        },
+        # Memeooor service
+        "memeooorr": {
+            "container_name": "memeooorr",
             "health_check_url": HEALTH_CHECK_URL,
         }
     }
@@ -347,6 +358,10 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, con
                 original_amount = required_amount
                 required_amount = 100
                 logger.info(f"Optimus detected: Increasing funding from {original_amount} ETH to {required_amount} ETH for gas buffer")
+            if "mech" in config_type.lower():
+                original_amount = required_amount
+                required_amount = 100
+                logger.info(f"Mech detected: Increasing funding from {original_amount} ETH to {required_amount} ETH for gas buffer")    
             
             try:
                 w3 = Web3(Web3.HTTPProvider(rpc_url))
@@ -546,7 +561,8 @@ def get_config_files():
     logger.info(f"Found config files: {[f.name for f in config_files]}")
     
     # TODO: Support the test for memeooorr and mech
-    return [str(f) for f in config_files if "memeooorr" not in f.name and "mech" not in f.name]
+    return [str(f) for f in config_files if "mech" not in f.name]
+
 
 def validate_backup_owner(backup_owner: str) -> str:
     """Validate and normalize backup owner address."""
@@ -634,6 +650,47 @@ def get_config_specific_settings(config_path: str) -> dict:
             r"\[(?:optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                 lambda output, logger: create_token_funding_handler(get_chain_rpc(output, logger))(output, logger)
         })
+
+    elif "mech" in config_path.lower():
+        # Define API keys dict once
+        api_keys = {
+            "openai": ["dummy_api_key"],
+            "google_api_key": ["dummy_api_key"]
+        }
+        prompts = {k: v for k, v in base["prompts"].items() if k != r"Please enter"}
+        
+        test_config = {
+            **base_config,  
+            "RPC_URL": os.getenv('GNOSIS_RPC_URL', ''),
+        }
+
+        def handle_api_keys(output: str, logger: logging.Logger) -> str:
+            """Handler for API keys"""
+            logger.info("Sending API keys")
+            return json.dumps(api_keys)  # Return the dictionary directly, not as a JSON string
+
+        # Add Mech-specific prompts
+        prompts.update({
+            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"] + "\n",
+            r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "mech")(output, logger),
+            r"Please enter API keys": handle_api_keys  # Use handler instead of direct dict
+        })
+
+    elif "memeooorr" in config_path.lower():
+        # Memeooorr specific settings
+        test_config = {
+            **base_config,  # Include base config
+            "BASE_RPC_URL": os.getenv('BASE_RPC_URL'),
+        }
+
+        # Add Memeooorr-specific prompts
+        prompts.update({
+            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"] + "\n",
+            r"Please enter.*": "",  # Handles all "Please enter" prompts with empty string
+            r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+                lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"], "memeooorr")(output, logger),
+        })    
         
     else:
         # Default PredictTrader settings
@@ -650,6 +707,92 @@ def get_config_specific_settings(config_path: str) -> dict:
         })
 
     return {"prompts": prompts, "test_config": test_config}
+
+def log_expect_match(child, pattern, match_index, logger):
+    """Log the exact match and surrounding context."""
+    # Get the full buffer content around the match
+    before = child.before.strip() if child.before else ""
+    after = child.after.strip() if child.after else ""
+    
+    logger.debug(f"""
+    === Match Details ===
+    Pattern matched: {pattern}
+    Index: {match_index}
+    Before match: {before}
+    Matched text: {after}
+    Buffer content: {child.buffer}
+    ===================""")
+    
+def validate_input_match(pattern, response, prompt_text, logger):
+    """Validate that the input matches the expected prompt."""
+    # Map of expected prompt types and their validation rules
+    prompt_validators = {
+        "password": lambda p, r: "password" in p.lower() and len(r.strip()) > 0,
+        "backup_owner": lambda p, r: "backup owner" in p.lower() and Web3.is_address(r.strip()),
+        "api_keys": lambda p, r: "api keys" in p.lower() and isinstance(json.loads(r.strip()), dict),
+        "rpc": lambda p, r: "eth_newfilter" in p.lower() and r.strip().startswith(("http://", "https://")),
+        "choice": lambda p, r: "choice" in p.lower() and r.strip().isdigit(),
+        "enter": lambda p, r: any(x in p.lower() for x in ["press enter", "continue"]) and r.strip() == ""
+    }
+    
+    # Try to determine prompt type
+    prompt_type = next((k for k, v in prompt_validators.items() 
+                       if v(pattern, response)), "unknown")
+    
+    logger.debug(f"""
+    === Input Validation ===
+    Prompt type: {prompt_type}
+    Pattern: {pattern}
+    Actual prompt text: {prompt_text}
+    Response (sanitized): {response if prompt_type != "password" else "[HIDDEN]"}
+    =======================""")
+    
+    return prompt_type
+
+def send_input_safely(child, response, prompt_type, logger):
+    """Send input with appropriate handling based on prompt type."""
+    try:
+        logger.debug(f"Original response type: {type(response)}")
+        logger.debug(f"Original response: {response}")
+        
+        # Force string encoding
+        if isinstance(response, bytes):
+            response = response.decode('utf-8')
+        elif not isinstance(response, str):
+            response = str(response)
+            
+        # Clean the response
+        response = response.strip()
+        
+        # Log what we're about to send
+        logger.debug(f"Cleaned response type: {type(response)}")
+        logger.debug(f"Cleaned response: {response}")
+        
+        if prompt_type == "rpc":
+            logger.debug("Sending RPC URL using write + os.linesep")
+            child.write(response + os.linesep)
+            time.sleep(1)
+        elif prompt_type == "password":
+            logger.debug("Sending password")
+            child.write(response + os.linesep)
+            time.sleep(2)
+        elif prompt_type == "api_keys":
+            logger.debug("Sending API keys")
+            child.write(response + os.linesep)
+            time.sleep(1)
+        else:
+            logger.debug(f"Sending {prompt_type} input")
+            child.write(response + os.linesep)
+            time.sleep(0.5)
+            
+    except Exception as e:
+        logger.error(f"Error details:")
+        logger.error(f"- Error type: {type(e)}")
+        logger.error(f"- Error message: {str(e)}")
+        logger.error(f"- Prompt type: {prompt_type}")
+        logger.error(f"- Response type: {type(response)}")
+        logger.error(f"- Response: {response if prompt_type != 'password' else '[HIDDEN]'}")
+        raise
 
 def cleanup_directory(path: str, logger: logging.Logger) -> bool:
     """
@@ -796,79 +939,87 @@ class BaseTestService:
 
     @classmethod
     def start_service(cls):
-        """Start the service and handle initial setup."""
+        """Start the service and handle initial setup with input validation."""
         try:
             cls.logger.info(f"Starting run_service.py test with config: {cls.config_path}")
             
-            # Basic spawn with consistent environment
-            cls.child = pexpect.spawn(
-                f'bash ./run_service.sh {cls.config_path}',
-                encoding='utf-8',
-                timeout=600,
-                env=cls.temp_env,
-                cwd="."
-            )
+            # Enable extended logging for pexpect
+            if cls.logger.getEffectiveLevel() <= logging.DEBUG:
+                cls.child = pexpect.spawn(
+                    f'bash ./run_service.sh {cls.config_path}',
+                    encoding='utf-8',
+                    timeout=600,
+                    env=cls.temp_env,
+                    cwd=".",
+                    logfile=sys.stdout
+                )
+            else:
+                cls.child = pexpect.spawn(
+                    f'bash ./run_service.sh {cls.config_path}',
+                    encoding='utf-8',
+                    timeout=600,
+                    env=cls.temp_env,
+                    cwd="."
+                )
             
-            # Redirect pexpect logging to debug level only
-            cls.child.logfile = sys.stdout  # Disable direct stdout logging
+            input_sequence = []  # Track input sequence for debugging
+            
             try:
                 while True:
                     patterns = list(cls.config_settings["prompts"].keys())
                     index = cls.child.expect(patterns, timeout=600)
                     pattern = patterns[index]
+                    
+                    # Log the exact match details
+                    log_expect_match(cls.child, pattern, index, cls.logger)
+                    
+                    # Get response
                     response = cls.config_settings["prompts"][pattern]
-                
-                    cls.logger.info(f"Matched prompt: {pattern}", extra={'is_expect': True})
-
                     if callable(response):
                         output = cls.child.before + cls.child.after
                         response = response(output, cls.logger)
                     
-                    # Ensure consistent line endings
-                    if not response.endswith('\n'):
-                        response += '\n' 
-
-
-                    # Special handling for backup owner
-                    if "backup owner" in pattern.lower():
-                        time.sleep(1)  # Small delay before
-                        cls.child.sendline(response)
-                        time.sleep(1)  # Small delay after
-                    else:
-                        if "password" in pattern.lower():
-                            cls.logger.info("Sending: [HIDDEN]", extra={'is_input': True})
-                        elif "eth_newfilter" in pattern.lower():
-                            cls.logger.info("Sending: [HIDDEN RPC URL]", extra={'is_input': True})
-                        else:
-                            cls.logger.info(f"Sending: {response}", extra={'is_input': True})
-                        cls.child.sendline(response)
+                    # Validate the prompt and response
+                    prompt_text = cls.child.after
+                    prompt_type = validate_input_match(pattern, response, prompt_text, cls.logger)
                     
-                    # Small delay between inputs
-                    time.sleep(0.5)
+                    # Track input sequence
+                    input_sequence.append({
+                        'prompt_type': prompt_type,
+                        'pattern': pattern,
+                        'prompt_text': prompt_text,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    
+                    # Send input based on type
+                    send_input_safely(cls.child, response, prompt_type, cls.logger)
+                    
+                    # Log sequence periodically
+                    if len(input_sequence) % 5 == 0:
+                        cls.logger.debug(f"Input sequence so far: {json.dumps(input_sequence, indent=2)}")
                     
             except pexpect.EOF:
                 cls.logger.info("Initial setup completed")
+                cls.logger.debug("Final input sequence: " + json.dumps(input_sequence, indent=2))
                 time.sleep(SERVICE_INIT_WAIT)
-
-
+                
+                # Check Docker status with retries
                 retries = 5
                 while retries > 0:
                     if check_docker_status(cls.logger, cls.config_path):
                         break
                     time.sleep(CONTAINER_STOP_WAIT)
                     retries -= 1
-
+                    
                 if retries == 0:
                     service_config = get_service_config(cls.config_path)
                     container_name = service_config["container_name"]
                     raise Exception(f"{container_name} containers failed to start")
                     
-            except Exception as e:
-                cls.logger.error(f"Error in setup: {str(e)}")
-                raise
-                
         except Exception as e:
             cls.logger.error(f"Service start failed: {str(e)}")
+            if 'input_sequence' in locals():
+                cls.logger.error("Input sequence at failure: " + json.dumps(input_sequence, indent=2))
             raise
 
     @classmethod
