@@ -569,7 +569,6 @@ def get_config_files():
     logger = logging.getLogger('test_runner')
     logger.info(f"Found config files: {[f.name for f in config_files]}")
     
-    # TODO: Support the test for memeooorr and mech
     return [str(f) for f in config_files]
 
 
@@ -737,67 +736,9 @@ def get_config_specific_settings(config_path: str) -> dict:
 def log_expect_match(child, pattern, match_index, logger):
     """Log minimal match information without exposing sensitive data."""
     logger.debug(f"Pattern matched at index: {match_index}")
-    
-def validate_input_match(pattern, response, prompt_text, logger):
-    """Validate that the input matches the expected prompt."""
-    # Extract the actual prompt text if available
-    prompt_lower = prompt_text.lower() if prompt_text else ""
 
-    # Map of expected prompt types and their validation rules
-    prompt_validators = {
-        # Security/Authentication inputs
-        "password": lambda p: "password" in p,
-        "backup_owner": lambda p: "backup owner" in p,
-        
-        # API Keys and Keys
-        "api_key": lambda p: any(x in p for x in [
-            "api key", 
-            "api_key", 
-            "apikey", 
-            "tenderly api", 
-            "coingecko api",
-            "gemini api"
-        ]),
-        
-        # Tenderly specific inputs
-        "tenderly_info": lambda p: any(x in p for x in [
-            "tenderly account", 
-            "tenderly project",
-            "account slug",
-            "project slug"
-        ]),
-        
-        # Twitter related inputs
-        "twitter_creds": lambda p: any(x in p for x in [
-            "twitter username", 
-            "twitter email", 
-            "twitter password"
-        ]),
-        
-        # Technical configurations
-        "rpc": lambda p: any(x in p for x in ["rpc", "eth_newfilter"]),
-        "address": lambda p: any(x in p for x in ["address", "contract", "safe"]),
-        
-        # Content/Description inputs
-        "persona": lambda p: "persona" in p,
-        
-        # Navigation inputs
-        "choice": lambda p: "choice" in p,
-        "enter": lambda p: any(x in p for x in ["press enter", "continue"])
-    }
-    
-    # Try to determine prompt type
-    for ptype, validator in prompt_validators.items():
-        if validator(prompt_lower):
-            logger.debug(f"Matched input type: {ptype} for prompt: {prompt_text}")
-            return ptype
-            
-    logger.debug(f"No specific type match for prompt: {prompt_text}")
-    return "unknown"
-
-
-def send_input_safely(child, response, prompt_type, logger):
-    """Send input with appropriate handling based on prompt type."""
+def send_input_safely(child, response, logger):
+    """Send input safely with basic delay."""
     try:
         # Force string encoding
         if isinstance(response, bytes):
@@ -808,26 +749,12 @@ def send_input_safely(child, response, prompt_type, logger):
         # Clean the response
         response = response.strip()
         
-        if prompt_type == "rpc":
-            logger.debug("Sending RPC URL")
-            child.write(response + os.linesep)
-            time.sleep(1)
-        elif prompt_type == "password":
-            logger.debug("Sending password")
-            child.write(response + os.linesep)
-            time.sleep(2)
-        elif prompt_type == "api_keys":
-            logger.debug("Sending API keys")
-            child.write(response + os.linesep)
-            time.sleep(1)
-        else:
-            logger.debug(f"Sending {prompt_type} input")
-            child.write(response + os.linesep)
-            time.sleep(0.5)
+        # Send input with a small delay
+        child.write(response + os.linesep)
+        time.sleep(2)
             
     except Exception as e:
         logger.error(f"Error sending input: {str(e)}")
-        logger.error(f"Prompt type: {prompt_type}")
         raise
 
 def cleanup_directory(path: str, logger: logging.Logger) -> bool:
@@ -998,8 +925,6 @@ class BaseTestService:
                     cwd="."
                 )
             
-            input_sequence = []
-            
             try:
                 while True:
                     patterns = list(cls.config_settings["prompts"].keys())
@@ -1013,15 +938,7 @@ class BaseTestService:
                         output = cls.child.before + cls.child.after
                         response = response(output, cls.logger)
                     
-                    prompt_text = cls.child.after
-                    prompt_type = validate_input_match(pattern, response, prompt_text, cls.logger)
-                    
-                    input_sequence.append({
-                        'prompt_type': prompt_type,
-                        'timestamp': datetime.now().isoformat()
-                    })
-                    
-                    send_input_safely(cls.child, response, prompt_type, cls.logger)
+                    send_input_safely(cls.child, response, cls.logger)
                     
             except pexpect.EOF:
                 cls.logger.info("Initial setup completed")
@@ -1041,8 +958,6 @@ class BaseTestService:
                     
         except Exception as e:
             cls.logger.error(f"Service start failed: {str(e)}")
-            if 'input_sequence' in locals():
-                cls.logger.error(f"Number of inputs processed: {len(input_sequence)}")
             raise
 
     @classmethod
