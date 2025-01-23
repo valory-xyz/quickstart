@@ -1,7 +1,7 @@
 {
     "name": "Trader Agent",
-    "agent_id": 14,
-    "hash": "bafybeidr735y3y7sto7t7bdzxf4xwvnk4h4xgzr5gkssa34hu6mu2bukoq",
+    "agent_id": 25,
+    "hash": "bafybeib56fc36pednrzbfqxijvini4j6n4rqdfys43axctgbg4jql7tqmy",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
     "service_version": "v0.23.0",
@@ -34,7 +34,9 @@
         "quickstart_beta_expert_9": "0x17dBAe44BC5618Cc254055b386A29576b4F87015",
         "quickstart_beta_expert_10": "0xB0ef657b8302bd2c74B6E6D9B2b4b39145b19c6f",
         "quickstart_beta_expert_11": "0x3112c1613eAC3dBAE3D4E38CeF023eb9E2C91CF7",
-        "quickstart_beta_expert_12": "0xF4a75F476801B3fBB2e7093aCDcc3576593Cc1fc"
+        "quickstart_beta_expert_12": "0xF4a75F476801B3fBB2e7093aCDcc3576593Cc1fc",
+        "quickstart_beta_expert_15_mech_marketplace": "0x88eB38FF79fBa8C19943C0e5Acfa67D5876AdCC1",
+        "quickstart_beta_expert_16_mech_marketplace": "0x6c65430515c70a3f5E62107CC301685B7D46f991"
     },
     "env_variables": {
         "GNOSIS_LEDGER_RPC": {
@@ -69,6 +71,12 @@
         },
         "MECH_MARKETPLACE_CONFIG": {
             "name": "Mech marketplace config",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "USE_MECH_MARKETPLACE": {
+            "name": "Use mech marketplace",
             "description": "",
             "value": "",
             "provision_type": "computed"
