@@ -37,7 +37,9 @@ then
 fi
 
 # Check dependencies
-if command -v python3 >/dev/null 2>&1; then
+if command -v python3.10 >/dev/null 2>&1; then
+    PYTHON_CMD="python3.10"
+elif command -v python3 >/dev/null 2>&1; then
     PYTHON_CMD="python3"
 elif command -v python >/dev/null 2>&1; then
     PYTHON_CMD="python"
@@ -47,7 +49,7 @@ else
 fi
 
 if ! [[ $($PYTHON_CMD --version) =~ ^(Python\ 3\.[8-9])|(Python\ 3\.10)|(Python\ 3\.11) ]]; then
-    echo "Python version >=3.8.0, <3.12.0 is required"
+    echo "Python version >=3.8.0, <3.12.0 is required, but $($PYTHON_CMD --version) was found"
     exit 1
 fi
 echo "`$PYTHON_CMD --version` is compatible"
@@ -62,7 +64,7 @@ command -v docker >/dev/null 2>&1 ||
   exit 1
 }
 
-docker rm -f abci0 node0 trader_abci_0 trader_tm_0 &> /dev/null ||
+sudo docker rm -f abci0 node0 trader_abci_0 trader_tm_0 &> /dev/null ||
 { echo >&2 "Docker is not running!";
   exit 1
 }

@@ -1,0 +1,51 @@
+{
+    "name": "Langchain",
+    "agent_id": 1,
+    "hash": "bafybeieqhwfxnd3olv2t7ihikqggdj7zvanpidepre6fgwu3qicbf2zrn4",
+    "description": "Basic Langchain service",
+    "image": "",
+    "service_version": "v0.1.0",
+    "home_chain": "gnosis",
+    "configurations": {
+        "gnosis": {
+            "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+            "threshold": 1,
+            "use_mech_marketplace": false,
+            "fund_requirements": {
+                "0x0000000000000000000000000000000000000000": {
+                    "agent": 1500000000000000000,
+                    "safe": 0
+                }
+            }
+        }
+    },
+    "staking_programs": {
+        "no_staking": "0x0000000000000000000000000000000000000000"
+    },
+    "env_variables": {
+        "GNOSIS_LEDGER_RPC": {
+            "name": "Gnosis ledger RPC",
+            "description": "",
+            "value": "https://virtual.gnosis.rpc.tenderly.co/64c9ff29-21bf-4bd1-82bd-3aee5afe2fd5",
+            "provision_type": "fixed"
+        },
+        "SERVICE_REGISTRY_ADDRESS": {
+            "name": "Service registry address",
+            "description": "",
+            "value": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
+            "provision_type": "fixed"
+        },
+        "MECH_MARKETPLACE_ADDRESS": {
+            "name": "Mech marketplace address",
+            "description": "",
+            "value": "0x4554fE75c1f5576c1d7F765B2A036c199Adae329",
+            "provision_type": "fixed"
+        },
+        "API_KEYS": {
+            "name": "API keys",
+            "description": "API keys are the key value pairs for every AI tool your mech uses. The name of the tool will be the key used in the file. The value will be an array of valid API keys the tool can use.",
+            "value": "{\"TAVILY_API_KEY\":[\"xxxxx\"], \"OPENAI_API_KEY\":[\"xxxxx\"]}",
+            "provision_type": "fixed"
+        }
+    }
+}
