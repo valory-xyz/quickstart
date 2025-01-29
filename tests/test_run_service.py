@@ -266,12 +266,22 @@ def get_token_config():
                 "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
                 "decimals": 6
             }
+        },
+        "gnosis":{
+            "USDC": {
+                "address": "0xd988097fb8612cc24eeC14542bC03424c656005f",
+                "decimals": 6
+            },
+            "OLAS": {
+                "address": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "decimals": 18
+            }
         }
     }
 
 def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for ERC20 tokens."""
-    pattern = r"\[(optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) (0x[a-fA-F0-9]{40}) has at least ([0-9.]+) ([A-Z]+)"
+    pattern = r"\[(optimistic|base|mode|gnosis)\].*Please make sure Master (?:EOA|Safe) (0x[a-fA-F0-9]{40}) has at least ([0-9.]+) ([A-Z]+)"
     match = re.search(pattern, output)
     if match:
         chain = match.group(1)
@@ -283,7 +293,8 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
         chain_map = {
             "optimistic": "optimism",
             "base": "base",
-            "mode": "mode"
+            "mode": "mode",
+            "gnosis":"gnosis"
         }
         chain_key = chain_map.get(chain, "mode")  # Default to mode if chain not found
         
@@ -387,10 +398,6 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, con
                     token_name = "ETH" if chain.ledger_type == LedgerType.ETHEREUM else "xDAI"
                     
                     logger.info(f"Successfully funded {required_amount} {token_name} to {wallet_type} {wallet_address}")
-
-                    if "optimus" in config_type.lower():
-                        logger.info("Adding additional delay for Optimus safe creation...")
-                        time.sleep(5)
 
                     new_balance = w3.eth.get_balance(wallet_address)
                     logger.info(f"New balance: {w3.from_wei(new_balance, 'ether')} {token_name}")
@@ -714,7 +721,9 @@ def get_config_specific_settings(config_path: str) -> dict:
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger)
+                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger),
+            r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+                lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
     return {"prompts": prompts}
