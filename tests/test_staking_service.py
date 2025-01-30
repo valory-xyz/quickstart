@@ -8,6 +8,7 @@ import time
 import pytest
 import tempfile
 import shutil
+import typing as t
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
@@ -17,14 +18,18 @@ import requests
 import docker
 from dotenv import load_dotenv
 
+from operate.services.protocol import StakingState
+from operate.data import DATA_DIR
+from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.operate_types import Chain, LedgerType
+from operate.wallet.master import MasterWalletManager
+
 # Import from existing test script
 from test_run_service import (
-    cleanup_directory, get_config_specific_settings, setup_logging, get_config_files, validate_backup_owner,
-    handle_env_var_prompt, get_service_config, check_docker_status,
+    cleanup_directory, get_config_specific_settings, setup_logging, get_config_files,
+    validate_backup_owner, handle_env_var_prompt, get_service_config, check_docker_status,
     check_service_health, check_shutdown_logs, ensure_service_stopped,
-    handle_native_funding, handle_erc20_funding, create_funding_handler,
-    create_token_funding_handler, BaseTestService, ColoredFormatter,
-    STARTUP_WAIT, SERVICE_INIT_WAIT, CONTAINER_STOP_WAIT
+    BaseTestService, ColoredFormatter, STARTUP_WAIT, SERVICE_INIT_WAIT, CONTAINER_STOP_WAIT
 )
 
 def get_test_configs(excluded_agents: List[str] = None) -> List[str]:
@@ -126,6 +131,186 @@ def get_staking_config_settings(config_path: str) -> dict:
     
     return settings
 
+class StakingStatusChecker:
+    """Handles checking staking status and service state."""
+    
+    def __init__(self, config_path: str, logger: logging.Logger):
+        """Initialize the checker with config and logger."""
+        self.logger = logger
+        self.config_path = Path(config_path)
+        self.config = self._load_config()
+        
+        # Initialize chain
+        self.chain_name = self.config.get("home_chain", "gnosis")
+        self.chain = Chain[self.chain_name.upper()]
+        temp_data = Chain[self.chain_name.upper()]
+        logger.info(f"Chain[self.chain_name.upper()] :{temp_data}")
+        
+        # Get .operate directory from the current working directory
+        # since we're already chdir'd to the temp directory in setup
+        operate_dir = Path(os.getcwd()) / ".operate"
+        keys_dir = operate_dir / "keys"
+        
+        if not keys_dir.exists():
+            raise RuntimeError(f"Keys directory not found at {keys_dir}")
+        
+        # Load local config to get RPC URL
+        local_config_path = operate_dir / "local_config.json"
+        try:
+            with open(local_config_path) as f:
+                local_config = json.load(f)
+                rpc_url = local_config.get("rpc", {}).get(self.chain_name)
+        except Exception as e:
+            self.logger.error(f"Failed to load RPC URL from local config: {e}")
+            rpc_url = None
+        
+        # Setup wallet manager and get ledger
+        self.wallet_manager = MasterWalletManager(
+            path=keys_dir,
+            password=os.getenv("MASTER_WALLET_PASSWORD", "DUMMY_PWD"),
+            logger=self.logger
+        ).setup()
+        
+        self.master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        self.ledger_api = self.master_wallet.ledger_api(chain=self.chain, rpc=rpc_url)
+        
+        # Initialize staking contract
+        self.staking_contract = t.cast(
+            StakingTokenContract,
+            StakingTokenContract.from_dir(
+                directory=str(DATA_DIR / "contracts" / "staking_token")
+            ),
+        )
+        
+    def _load_config(self) -> dict:
+        """Load and parse the agent config file."""
+        try:
+            with open(self.config_path) as f:
+                return json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to load config: {e}")
+            raise
+            
+    def get_staking_state(self, service_id: int, staking_address: str) -> StakingState:
+        """Get the current staking state for a service."""
+        try:  
+            # Get staking state using ledger API
+            state = StakingState(
+                self.staking_contract.get_instance(
+                    ledger_api=self.ledger_api,
+                    contract_address=staking_address,
+                )
+                .functions.getStakingState(service_id)
+                .call()
+            )
+            
+            self.logger.info(f"Got staking state for service {service_id}: {state}")
+            return state
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get staking state: {e}")
+            raise
+            
+    def check_service_staking(self, service_id: int, staking_address: str) -> bool:
+        """Check if service is properly staked."""
+        try:
+            state = self.get_staking_state(service_id, staking_address)
+            
+            # Validate staking state
+            is_staked = state == StakingState.STAKED
+            
+            self.logger.info(
+                f"Service {service_id} staking check:\n"
+                f"Status: {'Passed' if is_staked else 'Failed'}"
+            )
+            return is_staked
+            
+        except Exception as e:
+            self.logger.error(f"Staking check failed: {e}")
+            return False
+
+def get_service_token(test_instance) -> Optional[int]:
+    """Get service token from runtime config."""
+    try:
+        # Find the service config directory
+        services_dir = Path(os.getcwd()) / ".operate" / "services"
+        if not services_dir.exists():
+            test_instance.logger.error(f"Services directory not found at {services_dir}")
+            return None
+            
+        # Find service directory by looking for config.json
+        for service_dir in services_dir.iterdir():
+            config_file = service_dir / "config.json"
+            if config_file.exists():
+                with open(config_file) as f:
+                    runtime_config = json.load(f)
+                
+                # Get token from chain_data
+                chain_name = runtime_config.get("home_chain", "gnosis")
+                chain_config = runtime_config.get("chain_configs", {}).get(chain_name, {})
+                chain_data = chain_config.get("chain_data", {})
+                token = chain_data.get("token")
+                
+                if token:
+                    test_instance.logger.info(f"Found service token: {token}")
+                    return token
+                    
+        test_instance.logger.error("No service token found in runtime config")
+        return None
+        
+    except Exception as e:
+        test_instance.logger.error(f"Error getting service token: {e}")
+        return None
+
+def verify_staking(test_instance) -> bool:
+    """Verify staking status for a service."""
+    checker = StakingStatusChecker(test_instance.config_path, test_instance.logger)
+    
+    try:
+        # Find and load runtime config
+        services_dir = Path(os.getcwd()) / ".operate" / "services"
+        runtime_config = None
+        
+        for service_dir in services_dir.iterdir():
+            config_file = service_dir / "config.json"
+            if config_file.exists():
+                with open(config_file) as f:
+                    runtime_config = json.load(f)
+                break
+                
+        if not runtime_config:
+            test_instance.logger.error("No runtime config found")
+            return False
+        
+        # Get chain data from runtime config
+        chain_name = runtime_config.get("home_chain", "gnosis")
+        chain_data = runtime_config.get("chain_configs", {}).get(chain_name, {}).get("chain_data", {})
+        
+        # Get service token and staking program
+        service_token = chain_data.get("token")
+        staking_program_id = chain_data.get("user_params", {}).get("staking_program_id")
+        
+        if not service_token:
+            test_instance.logger.error("Could not find service token")
+            return False
+            
+        if not staking_program_id or staking_program_id == "no_staking":
+            test_instance.logger.info("Service is not using staking")
+            return True
+            
+        # Get staking contract address
+        staking_address = test_instance.config.get("staking_programs", {}).get(staking_program_id)
+        if not staking_address:
+            test_instance.logger.error(f"Could not find staking contract for program: {staking_program_id}")
+            return False
+        
+        # Check staking status
+        test_instance.logger.info(f"Checking staking for token {service_token} on {staking_program_id} with {staking_address}")
+        return checker.check_service_staking(service_token, staking_address)
+        
+    except Exception as e:
+        test_instance.logger.error(f"Error checking staking status: {e}")
+        return False
 
 class StakingBaseTestService(BaseTestService):
     """Extended base test service with staking-specific configuration."""
@@ -143,25 +328,46 @@ class StakingBaseTestService(BaseTestService):
         cls.logger.info(f"Created temporary directory: {cls.temp_dir.name}")
         
         # Copy project files with exclusions
-        exclude_patterns = ['.git', '.pytest_cache', '__pycache__', '*.pyc', 'logs', '*.log', '.env']
+        exclude_patterns = ['.git', '.pytest_cache', '__pycache__', '*.pyc', 'logs', '*.log']
         def ignore_patterns(path, names):
             return set(n for n in names if any(p in n or any(p.endswith(n) for p in exclude_patterns) for p in exclude_patterns))
         
         shutil.copytree(cls.original_cwd, cls.temp_dir.name, dirs_exist_ok=True, ignore=ignore_patterns)
-        
         # Copy .git directory if it exists
         git_dir = Path(cls.original_cwd) / '.git'
         if git_dir.exists():
             shutil.copytree(git_dir, Path(cls.temp_dir.name) / '.git', symlinks=True)    
-            
+                    
         # Switch to temporary directory
         os.chdir(cls.temp_dir.name)
         cls.logger.info(f"Changed working directory to: {cls.temp_dir.name}")
         
+        # Load config
+        with open(cls.config_path) as f:
+            cls.config = json.load(f)
+        
         # Setup environment
         cls._setup_environment()
-
-        # Important: Load staking-specific settings
+        
+        # Setup .operate directory and wallet
+        operate_dir = Path(cls.temp_dir.name) / ".operate"
+        operate_dir.mkdir(exist_ok=True)
+        keys_dir = operate_dir / "keys"
+        keys_dir.mkdir(exist_ok=True)
+        
+        # Initialize wallet manager
+        cls.wallet_manager = MasterWalletManager(
+            path=keys_dir,
+            password="DUMMY_PWD",  # Use env var in production
+            logger=cls.logger
+        ).setup()
+        
+        # Create wallet if it doesn't exist
+        if not cls.wallet_manager.exists(LedgerType.ETHEREUM):
+            cls.logger.info("Creating new Ethereum wallet...")
+            cls.wallet_manager.create(LedgerType.ETHEREUM)
+        
+        # Important: Load staking-specific settings with staking handler
         cls.config_settings = get_staking_config_settings(cls.config_path)
         cls.logger.info(f"Loaded staking settings for config: {cls.config_path}")
         
@@ -171,6 +377,26 @@ class StakingBaseTestService(BaseTestService):
         
         cls._setup_complete = True
 
+    # @classmethod
+    # def teardown_class(cls):
+    #     """Override teardown to ensure proper cleanup."""
+    #     try:
+    #         if hasattr(cls, '_setup_complete') and cls._setup_complete:
+    #             # Stop the service
+    #             cls.stop_service()
+    #             time.sleep(CONTAINER_STOP_WAIT)
+                
+    #             # Change back to original directory
+    #             os.chdir(cls.original_cwd)
+                
+    #             # Cleanup temporary directory
+    #             if hasattr(cls, 'temp_dir'):
+    #                 cls.temp_dir.cleanup()
+                    
+    #     except Exception as e:
+    #         cls.logger.error(f"Error in teardown: {str(e)}")
+    #         raise
+
 class TestAgentStaking:
     """Test class for staking-specific tests."""
     
@@ -179,6 +405,8 @@ class TestAgentStaking:
     @pytest.fixture(autouse=True)
     def setup(self, request):
         """Setup with staking-specific configuration."""
+        # Set environment variable for wallet password
+        os.environ["MASTER_WALLET_PASSWORD"] = "DUMMY_PWD"
         config_path = request.param
         temp_dir = None
 
@@ -224,12 +452,15 @@ class TestAgentStaking:
     def test_agent_staking(self, setup):
         """Run staking-specific tests."""
         test_instance = self.test_class()
-        
+
         # Run standard health check
         test_instance.test_health_check()
+
+         # Verify staking status
+        assert verify_staking(test_instance), "Staking verification failed"
+        
         
         # Additional staking-specific tests will go here
-        # TODO: Add staking verification
         # TODO: Add time fast-forward
         # TODO: Add termination script
         # TODO: Add rewards claiming
