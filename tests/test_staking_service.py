@@ -26,7 +26,7 @@ from operate.wallet.master import MasterWalletManager
 
 # Import from existing test script
 from test_run_service import (
-    cleanup_directory, get_config_specific_settings, setup_logging, get_config_files,
+    cleanup_directory, create_funding_handler, create_token_funding_handler, get_config_specific_settings, setup_logging, get_config_files,
     validate_backup_owner, handle_env_var_prompt, get_service_config, check_docker_status,
     check_service_health, check_shutdown_logs, ensure_service_stopped,
     BaseTestService, ColoredFormatter, STARTUP_WAIT, SERVICE_INIT_WAIT, CONTAINER_STOP_WAIT
@@ -377,25 +377,205 @@ class StakingBaseTestService(BaseTestService):
         
         cls._setup_complete = True
 
-    # @classmethod
-    # def teardown_class(cls):
-    #     """Override teardown to ensure proper cleanup."""
-    #     try:
-    #         if hasattr(cls, '_setup_complete') and cls._setup_complete:
-    #             # Stop the service
-    #             cls.stop_service()
-    #             time.sleep(CONTAINER_STOP_WAIT)
+    def assert_service_stopped(self):
+        """Assert that all service containers are stopped and removed."""
+        try:
+            self.logger.info("Verifying service is fully stopped...")
+            
+            # Call stop_service script
+            process = pexpect.spawn(
+                f'bash ./stop_service.sh {self.config_path}',
+                encoding='utf-8',
+                timeout=30,
+                cwd=self.temp_dir.name
+            )
+            process.expect(pexpect.EOF)
+            time.sleep(CONTAINER_STOP_WAIT)
+            
+            # Verify containers are stopped
+            client = docker.from_env()
+            service_config = get_service_config(self.config_path)
+            container_name = service_config["container_name"]
+            
+            # Check for any containers with this name
+            containers = client.containers.list(
+                all=True,  # Include stopped containers
+                filters={"name": container_name}
+            )
+            
+            if containers:
+                self.logger.error(f"Found {len(containers)} containers that should be stopped:")
+                for container in containers:
+                    self.logger.error(f"Container {container.name} - Status: {container.status}")
+                assert False, f"Service containers for {container_name} still exist"
                 
-    #             # Change back to original directory
-    #             os.chdir(cls.original_cwd)
+            self.logger.info("Service successfully stopped and containers removed")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error checking stopped service: {str(e)}")
+            raise
+
+    def fast_forward_time(self, seconds: int = 86400*3):
+        """
+        Fast forward blockchain time based on agent's chain configuration.
+        Default is 72 hours (86400*3 seconds).
+        
+        Args:
+            seconds (int): Number of seconds to fast forward
+        """
+        try:
+            self.logger.info(f"Fast forwarding time by {seconds} seconds...")
+            
+            # Get chain and RPC from agent's config
+            with open(self.config_path) as f:
+                config = json.load(f)
                 
-    #             # Cleanup temporary directory
-    #             if hasattr(cls, 'temp_dir'):
-    #                 cls.temp_dir.cleanup()
+            # Get chain name from config
+            chain_name = config.get("home_chain", "gnosis").lower()
+            
+            # Map chain names to environment variables for RPCs
+            rpc_mapping = {
+                "gnosis": "GNOSIS_RPC_URL",
+                "mode": "MODIUS_RPC_URL",
+                "optimism": "OPTIMISM_RPC_URL", 
+                "base": "BASE_RPC_URL"
+            }
+            
+            env_var = rpc_mapping.get(chain_name)
+            if not env_var:
+                raise ValueError(f"Unsupported chain: {chain_name}")
+                
+            rpc_url = os.getenv(env_var)
+            if not rpc_url:
+                raise ValueError(f"{env_var} environment variable not set")
+            
+            self.logger.info(f"Using RPC for chain: {chain_name}")
+            
+            # Prepare request payload
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "evm_increaseTime",
+                "params": [seconds],
+                "id": 1
+            }
+            
+            # Make request to increase time
+            response = requests.post(rpc_url, headers=headers, json=payload)
+            
+            if response.status_code != 200:
+                raise Exception(f"RPC request failed with status {response.status_code}")
+                
+            result = response.json()
+            if 'error' in result:
+                raise Exception(f"RPC error: {result['error']}")
+                
+            self.logger.info(f"Successfully fast forwarded time by {seconds} seconds on {chain_name} chain")
+            return response.status_code == 200
+            
+        except Exception as e:
+            self.logger.error(f"Error fast forwarding time: {str(e)}")
+            raise    
+
+    def run_termination_script(self):
+        """
+        Run the termination script and handle its interactive prompts.
+        """
+        try:
+            self.logger.info("Running termination script...")
+            
+            # Get chain and RPC from config
+            with open(self.config_path) as f:
+                config = json.load(f)
+            # Get chain name from config
+            chain_name = config.get("home_chain", "gnosis").lower()
+            
+            # Map chain names to environment variables for RPCs
+            rpc_mapping = {
+                "gnosis": "GNOSIS_RPC_URL",
+                "mode": "MODIUS_RPC_URL",
+                "optimism": "OPTIMISM_RPC_URL", 
+                "base": "BASE_RPC_URL"
+            }
+            
+            env_var = rpc_mapping.get(chain_name)
+            if not env_var:
+                raise ValueError(f"Unsupported chain: {chain_name}")
+                
+            rpc_url = os.getenv(env_var)
+            if not rpc_url:
+                raise ValueError(f"{env_var} environment variable not set")
+            
+            self.logger.info(f"Using RPC for chain: {chain_name}")
+            
+            # Define expected prompts and responses
+            prompts = {
+                r"Do you want to continue\? \(yes/no\):": "yes",
+                r"Enter local user account password \[hidden input\]:": os.getenv('TEST_PASSWORD', 'test_secret'),
+                # Add funding prompts from main script
+                r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+                    lambda output, logger: create_funding_handler(rpc_url, "staking")(output, logger),
+                r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+                    lambda output, logger: create_token_funding_handler(rpc_url)(output, logger)
+            }
+            
+            # Run termination script with output logging
+            process = pexpect.spawn(
+                f'bash ./terminate_on_chain_service.sh {self.config_path}',
+                encoding='utf-8',
+                timeout=300,
+                cwd=self.temp_dir.name,
+                logfile=sys.stdout
+            )
+            
+            # Handle interactive prompts
+            while True:
+                try:
+                    patterns = list(prompts.keys())
+                    patterns.append(pexpect.EOF)
                     
-    #     except Exception as e:
-    #         cls.logger.error(f"Error in teardown: {str(e)}")
-    #         raise
+                    index = process.expect(patterns)
+                    
+                    # If EOF reached, break
+                    if index == len(patterns) - 1:
+                        break
+                        
+                    # Get matching prompt and send response
+                    matched_prompt = patterns[index]
+                    response = prompts[matched_prompt]
+                    
+                    # Handle callable responses (for funding handlers)
+                    if callable(response):
+                        output = process.before + process.after
+                        response = response(output, self.logger)
+                        
+                    process.sendline(response)
+
+                    # Check for success message in real-time
+                    output = process.before + process.after
+                    self.logger.info(output)
+
+                    success_pattern = re.compile(r"Service (\d+) is now terminated and unbonded.*")
+                    if success_pattern.search(output):
+                        self.logger.info("Termination confirmed as successful.")
+                        return True
+                    
+                except pexpect.TIMEOUT:
+                    self.logger.error("Timeout waiting for prompt")
+                    return False
+                    
+            exit_status = process.exitstatus
+            if exit_status != 0:
+                self.logger.error(f"Termination script failed with exit code: {exit_status}")
+                return False
+                
+            self.logger.info("Termination script executed successfully")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error running termination script: {str(e)}")
+            raise
 
 class TestAgentStaking:
     """Test class for staking-specific tests."""
@@ -458,11 +638,15 @@ class TestAgentStaking:
 
          # Verify staking status
         assert verify_staking(test_instance), "Staking verification failed"
-        
-        
+
+        # Stop the service and verify it's stopped
+        assert test_instance.assert_service_stopped(), "Service stoppage failed"
+
+        assert test_instance.fast_forward_time(), "Fast-forwading time failed"
+
+        assert test_instance.run_termination_script(), "Service termination failed"
+
         # Additional staking-specific tests will go here
-        # TODO: Add time fast-forward
-        # TODO: Add termination script
         # TODO: Add rewards claiming
         # TODO: Add staking reset
         # TODO: Add unstaking verification
