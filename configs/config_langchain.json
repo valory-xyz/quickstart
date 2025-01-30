@@ -1,11 +1,12 @@
 {
     "name": "Langchain",
     "agent_id": 1,
-    "hash": "bafybeidgu5v53g4235lr6j7ggy4scqzpa4z4dfzuo7oowctmtyez2ijefq",
+    "hash": "bafybeif6t6kxdkklesvsxohqrdfbypzjtoy5wlmzovfxp3wklr4k3nusiu",
     "description": "Basic Langchain service",
     "image": "",
     "service_version": "v0.1.0",
     "home_chain": "gnosis",
+    "docker_image_name":"nrosavalory/langchain-hello-world:30012025",
     "configurations": {
         "gnosis": {
             "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
@@ -13,7 +14,7 @@
             "use_mech_marketplace": false,
             "fund_requirements": {
                 "0x0000000000000000000000000000000000000000": {
-                    "agent": 1500000000000000000,
+                    "agent": 0,
                     "safe": 0
                 }
             }
@@ -30,16 +31,16 @@
             "provision_type": "computed"
         },
         "TAVILY_API_KEY": {
-            "name": "",
+            "name": "Tavily API Key",
             "description": "",
-            "value": "test A",
-            "provision_type": "fixed"
+            "value": "",
+            "provision_type": "user"
         },
         "OPENAI_API_KEY": {
             "name": "",
-            "description": "",
-            "value": "test B",
-            "provision_type": "fixed"
+            "description": "OpenAI API Key",
+            "value": "",
+            "provision_type": "user"
         }
     }
 }
