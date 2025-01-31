@@ -143,8 +143,6 @@ class StakingStatusChecker:
         # Initialize chain
         self.chain_name = self.config.get("home_chain", "gnosis")
         self.chain = Chain[self.chain_name.upper()]
-        temp_data = Chain[self.chain_name.upper()]
-        logger.info(f"Chain[self.chain_name.upper()] :{temp_data}")
         
         # Get .operate directory from the current working directory
         # since we're already chdir'd to the temp directory in setup
@@ -214,16 +212,8 @@ class StakingStatusChecker:
     def check_service_staking(self, service_id: int, staking_address: str) -> bool:
         """Check if service is properly staked."""
         try:
-            state = self.get_staking_state(service_id, staking_address)
-            
-            # Validate staking state
-            is_staked = state == StakingState.STAKED
-            
-            self.logger.info(
-                f"Service {service_id} staking check:\n"
-                f"Status: {'Passed' if is_staked else 'Failed'}"
-            )
-            return is_staked
+            state = self.get_staking_state(service_id, staking_address)            
+            return state == StakingState.STAKED
             
         except Exception as e:
             self.logger.error(f"Staking check failed: {e}")
@@ -513,12 +503,14 @@ class StakingBaseTestService(BaseTestService):
             prompts = {
                 r"Do you want to continue\? \(yes/no\):": "yes",
                 r"Enter local user account password \[hidden input\]:": os.getenv('TEST_PASSWORD', 'test_secret'),
-                # Add funding prompts from main script
                 r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                     lambda output, logger: create_funding_handler(rpc_url, "staking")(output, logger),
                 r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                     lambda output, logger: create_token_funding_handler(rpc_url)(output, logger)
             }
+            
+            # Initialize success flag
+            termination_success = False
             
             # Run termination script with output logging
             process = pexpect.spawn(
@@ -529,6 +521,9 @@ class StakingBaseTestService(BaseTestService):
                 logfile=sys.stdout
             )
             
+            # Compile success pattern once
+            success_pattern = re.compile(r"Service (\d+) is now terminated and unbonded.*")
+            
             # Handle interactive prompts
             while True:
                 try:
@@ -536,6 +531,16 @@ class StakingBaseTestService(BaseTestService):
                     patterns.append(pexpect.EOF)
                     
                     index = process.expect(patterns)
+                    
+                    # Safely handle process output
+                    before_output = process.before if process.before else ""
+                    after_output = process.after if process.after else ""
+                    current_output = str(before_output) + str(after_output)
+                    
+                    # Check for success message in current output
+                    if success_pattern.search(current_output):
+                        self.logger.info("Found termination success message!")
+                        termination_success = True
                     
                     # If EOF reached, break
                     if index == len(patterns) - 1:
@@ -547,36 +552,30 @@ class StakingBaseTestService(BaseTestService):
                     
                     # Handle callable responses (for funding handlers)
                     if callable(response):
-                        output = process.before + process.after
-                        response = response(output, self.logger)
+                        response = response(current_output, self.logger)
                         
                     process.sendline(response)
-
-                    # Check for success message in real-time
-                    output = process.before + process.after
-                    self.logger.info(output)
-
-                    success_pattern = re.compile(r"Service (\d+) is now terminated and unbonded.*")
-                    if success_pattern.search(output):
-                        self.logger.info("Termination confirmed as successful.")
-                        return True
                     
                 except pexpect.TIMEOUT:
                     self.logger.error("Timeout waiting for prompt")
                     return False
                     
-            exit_status = process.exitstatus
-            if exit_status != 0:
-                self.logger.error(f"Termination script failed with exit code: {exit_status}")
-                return False
+            # Final check for success in any remaining output
+            final_output = str(process.before) if process.before else ""
+            if success_pattern.search(final_output):
+                self.logger.info("Found termination success message in final output!")
+                termination_success = True
                 
-            self.logger.info("Termination script executed successfully")
-            return True
+            if termination_success:
+                self.logger.info("Termination confirmed as successful")
+                return True
+                
+            self.logger.error("Termination success message not found in output")
+            return False
             
         except Exception as e:
             self.logger.error(f"Error running termination script: {str(e)}")
             raise
-
 class TestAgentStaking:
     """Test class for staking-specific tests."""
     
@@ -636,20 +635,20 @@ class TestAgentStaking:
         # Run standard health check
         test_instance.test_health_check()
 
-         # Verify staking status
-        assert verify_staking(test_instance), "Staking verification failed"
+        # Verify staking status after service is up
+        assert verify_staking(test_instance), "Staking verification failed after service running"
 
         # Stop the service and verify it's stopped
         assert test_instance.assert_service_stopped(), "Service stoppage failed"
 
+        # Fast-forward ledger time by 72 hours
         assert test_instance.fast_forward_time(), "Fast-forwading time failed"
 
+        # Terminating the service
         assert test_instance.run_termination_script(), "Service termination failed"
 
-        # Additional staking-specific tests will go here
-        # TODO: Add rewards claiming
-        # TODO: Add staking reset
-        # TODO: Add unstaking verification
+        # Verify staking status after service is terminated and unstaked
+        assert verify_staking(test_instance) == False, "Staking verification failed after termination"
         
         # Run shutdown logs test
         test_instance.test_shutdown_logs()
