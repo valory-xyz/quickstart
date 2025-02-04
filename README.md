@@ -26,8 +26,6 @@ Ensure your machine satisfies the requirements:
 
 ## Run the Service
 
-### For Non-Stakers
-
 Clone this repository locally and execute:
 
 ```bash
@@ -46,6 +44,8 @@ where `agent_config.json` is the path to your agent configuration file. Check th
 | Modius | `configs/config_modius.json` | [Modius README](https://github.com/valory-xyz/modius-quickstart) |
 | Memeooorr | `configs/config_memeooorr.json` | [Memeooorr README](https://github.com/dvilelaf/meme-ooorr) |
 
+### For Non-Stakers
+
 Answer `1) No staking` when prompted:
 
 ```text
@@ -60,13 +60,6 @@ Please, select your staking program preference
 > Exercise caution and use this code at your own risk. Please refer to the [LICENSE](./LICENSE) file for details about the terms and conditions.
 
 Each staking program has different OLAS requirements. The script will check that your owner address meets the minimum required OLAS on the required Chain.
-
-Clone this repository locally and execute:
-
-```bash
-chmod +x run_service.sh
-./run_service.sh
-```
 
 Select your preferred staking program when prompted (example):
 
