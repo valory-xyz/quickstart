@@ -7,9 +7,8 @@ from halo import Halo
 import json
 from pathlib import Path
 import sys
-from time import time
 
-from aea_ledger_ethereum import EthereumCrypto
+from aea_ledger_ethereum import Account, EthereumCrypto, LocalAccount
 from autonomy.chain.config import ChainType
 from autonomy.chain.base import registry_contracts
 from operate.cli import OperateApp
@@ -61,10 +60,18 @@ class TraderData:
 
 
 def decrypt_private_keys(eoa: Path, password: str) -> dict[str, str]:
-    crypto = EthereumCrypto(private_key_path=eoa, password=password)
+    if not password:
+        private_key = "0x" + eoa.read_text()
+        account: LocalAccount = Account.from_key(private_key)
+        address = account.address
+    else:
+        crypto = EthereumCrypto(private_key_path=eoa, password=password)
+        private_key = crypto.private_key
+        address = crypto.address
+
     return {
-        "address": crypto.address,
-        "private_key": crypto.private_key,
+        "address": address,
+        "private_key": private_key,
         "ledger": LedgerType.ETHEREUM.value,
     }
 
@@ -149,8 +156,16 @@ def populate_operate(operate: OperateApp, trader_data: TraderData) -> Service:
     if not operate.wallet_manager.exists(LedgerType.ETHEREUM):
         spinner = Halo(text="Creating master account...", spinner="dots").start()
         operate.wallet_manager.setup()
-        (operate.wallet_manager.path / "ethereum.txt").write_bytes(trader_data.master_eoa.read_bytes())
         master_eoa = decrypt_private_keys(trader_data.master_eoa, trader_data.password)
+        with open(operate.wallet_manager.path / "ethereum.txt", "w") as f:
+            json.dump(
+                obj=Account.encrypt(
+                    private_key=master_eoa["private_key"],
+                    password=trader_data.password,
+                ),
+                fp=f,
+                indent=2,
+            )
         with open(operate.wallet_manager.path / "ethereum.json", "w") as f:
             json.dump(
                 obj={
@@ -231,7 +246,7 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
     else:
         if not ask_yes_or_no(
             f"Your service {chain_config.chain_data.token} will be unstaked "
-            f"from staking program {trader_data.staking_variables['STAKING_PROGRAM']} during this migration. "
+            f"from staking program {trader_data.staking_variables['STAKING_PROGRAM']} during this migration.\n"
             "Do you want to continue?"
         ):
             print("Cancelled.")
