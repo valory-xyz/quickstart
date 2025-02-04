@@ -279,8 +279,10 @@ if __name__ == "__main__":
             or staking_state == StakingState.EVICTED
         )
         _print_status("Is service staked?", _color_bool(is_staked, "Yes", "No"))
+        staking_program = config.staking_vars.get("STAKING_PROGRAM")
+        is_mm_staking = "mech_marketplace" in staking_program
         if is_staked:
-            _print_status("Staking program", config.staking_vars.get("STAKING_PROGRAM"))  # type: ignore
+            _print_status("Staking program", staking_program)  # type: ignore
         if staking_state == StakingState.STAKED:
             _print_status("Staking state", staking_state.name)
         elif staking_state == StakingState.EVICTED:
@@ -308,7 +310,16 @@ if __name__ == "__main__":
                 abi=service_registry_token_utility_abi,
             )
 
-            mech_contract_address = activity_checker_contract.functions.agentMech().call()
+            if is_mm_staking:
+                activity_checker_data = requests.get(MECH_CONTRACT_JSON_URL).json()
+                activity_checker_abi = activity_checker_data.get("abi", [])
+                mm_activity_checker_contract = w3.eth.contract(
+                    address=activity_checker_address, abi=activity_checker_abi  # type: ignore
+                )
+                mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call()
+            else:
+                mech_contract_address = activity_checker_contract.functions.agentMech().call()
+
             mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
 
             mech_contract_abi = mech_contract_data.get("abi", [])
