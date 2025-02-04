@@ -248,7 +248,11 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
             ledger_api=staking_manager.ledger_api,
             contract_address=staking_contract,
         ).get("data")
-        staked_duration = time() - ts_start
+        
+        current_block = staking_manager.ledger_api.api.eth.get_block("latest")
+        current_timestamp = current_block.timestamp
+        staked_duration = current_timestamp - ts_start
+        
         if staked_duration < minimum_staking_duration:
             print(
                 f"Cannot unstake service {chain_config.chain_data.token}."
