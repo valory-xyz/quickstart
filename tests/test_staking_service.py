@@ -98,37 +98,37 @@ class StakingOptionParser:
 
 
 class StakingStatusChecker:
-    """Handles checking staking status and service state."""
+    """Simplified checker for verifying staking status."""
     
     def __init__(self, config_path: str, logger: logging.Logger):
-        """Initialize the checker with config and logger."""
+        """Initialize checker with config and logger.
+        
+        Args:
+            config_path: Path to the service configuration file
+            logger: Logger instance for output
+        """
         self.logger = logger
         self.config_path = Path(config_path)
-        self.config = self._load_config()
         
-        # Initialize chain
+        # Load config
+        with open(self.config_path) as f:
+            self.config = json.load(f)
+        
+        # Setup chain
         self.chain_name = self.config.get("home_chain", "gnosis")
         self.chain = Chain[self.chain_name.upper()]
         
-        # Get .operate directory from the current working directory
-        # since we're already chdir'd to the temp directory in setup
+        # Setup wallet
         operate_dir = Path(os.getcwd()) / ".operate"
         keys_dir = operate_dir / "keys"
         
         if not keys_dir.exists():
             raise RuntimeError(f"Keys directory not found at {keys_dir}")
         
-        # Load local config to get RPC URL
-        local_config_path = operate_dir / "local_config.json"
-        try:
-            with open(local_config_path) as f:
-                local_config = json.load(f)
-                rpc_url = local_config.get("rpc", {}).get(self.chain_name)
-        except Exception as e:
-            self.logger.error(f"Failed to load RPC URL from local config: {e}")
-            rpc_url = None
+        # Get RPC URL from local config
+        rpc_url = self._get_rpc_url(operate_dir)
         
-        # Setup wallet manager and get ledger
+        # Initialize wallet and ledger
         self.wallet_manager = MasterWalletManager(
             path=keys_dir,
             password=os.getenv("MASTER_WALLET_PASSWORD", "DUMMY_PWD"),
@@ -139,25 +139,31 @@ class StakingStatusChecker:
         self.ledger_api = self.master_wallet.ledger_api(chain=self.chain, rpc=rpc_url)
         
         # Initialize staking contract
-        self.staking_contract = t.cast(
-            StakingTokenContract,
-            StakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "staking_token")
-            ),
+        self.staking_contract = StakingTokenContract.from_dir(
+            str(DATA_DIR / "contracts" / "staking_token")
         )
-        
-    def _load_config(self) -> dict:
-        """Load and parse the agent config file."""
+    
+    def _get_rpc_url(self, operate_dir: Path) -> Optional[str]:
+        """Get RPC URL from local config."""
         try:
-            with open(self.config_path) as f:
-                return json.load(f)
+            with open(operate_dir / "local_config.json") as f:
+                local_config = json.load(f)
+                return local_config.get("rpc", {}).get(self.chain_name)
         except Exception as e:
-            self.logger.error(f"Failed to load config: {e}")
-            raise
+            self.logger.error(f"Failed to load RPC URL: {e}")
+            return None
             
-    def get_staking_state(self, service_id: int, staking_address: str) -> StakingState:
-        """Get the current staking state for a service."""
-        try:  
+    def check_staking_status(self, service_id: int, staking_address: str) -> bool:
+        """Check if service is properly staked.
+        
+        Args:
+            service_id: ID of the service to check
+            staking_address: Address of the staking contract
+            
+        Returns:
+            bool: True if service is staked, False otherwise
+        """
+        try:
             # Get staking state using ledger API
             state = StakingState(
                 self.staking_contract.get_instance(
@@ -168,74 +174,67 @@ class StakingStatusChecker:
                 .call()
             )
             
-            self.logger.info(f"Got staking state for service {service_id}: {state}")
-            return state
-            
-        except Exception as e:
-            self.logger.error(f"Failed to get staking state: {e}")
-            raise
-            
-    def check_service_staking(self, service_id: int, staking_address: str) -> bool:
-        """Check if service is properly staked."""
-        try:
-            state = self.get_staking_state(service_id, staking_address)            
+            self.logger.info(f"Staking state for service {service_id}: {state}")
             return state == StakingState.STAKED
             
         except Exception as e:
-            self.logger.error(f"Staking check failed: {e}")
+            self.logger.error(f"Failed to check staking status: {e}")
             return False
 
-
-def verify_staking(test_instance) -> bool:
-    """Verify staking status for a service."""
-    checker = StakingStatusChecker(test_instance.config_path, test_instance.logger)
-    
-    try:
-        # Find and load runtime config
-        services_dir = Path(os.getcwd()) / ".operate" / "services"
-        runtime_config = None
+    def verify_service_staking(self) -> bool:
+        """Verify staking status for the current service.
         
-        for service_dir in services_dir.iterdir():
-            config_file = service_dir / "config.json"
-            if config_file.exists():
-                with open(config_file) as f:
-                    runtime_config = json.load(f)
-                break
+        This is a core method to be called by test instances to verify staking status.
+        
+        Returns:
+            bool: True if service is properly staked or staking not required,
+                 False if staking is required but not properly configured
+        """
+        try:
+            # Get runtime config
+            services_dir = Path(os.getcwd()) / ".operate" / "services"
+            runtime_config = None
+            
+            for service_dir in services_dir.iterdir():
+                config_file = service_dir / "config.json"
+                if config_file.exists():
+                    with open(config_file) as f:
+                        runtime_config = json.load(f)
+                    break
+            
+            if not runtime_config:
+                self.logger.error("No runtime config found")
+                return False
+            
+            # Get chain data
+            chain_name = runtime_config.get("home_chain", "gnosis")
+            chain_data = runtime_config.get("chain_configs", {}).get(chain_name, {}).get("chain_data", {})
+            
+            # Get service token and staking program
+            service_token = chain_data.get("token")
+            staking_program_id = chain_data.get("user_params", {}).get("staking_program_id")
+            
+            if not service_token:
+                self.logger.error("Service token not found")
+                return False
                 
-        if not runtime_config:
-            test_instance.logger.error("No runtime config found")
-            return False
-        
-        # Get chain data from runtime config
-        chain_name = runtime_config.get("home_chain", "gnosis")
-        chain_data = runtime_config.get("chain_configs", {}).get(chain_name, {}).get("chain_data", {})
-        
-        # Get service token and staking program
-        service_token = chain_data.get("token")
-        staking_program_id = chain_data.get("user_params", {}).get("staking_program_id")
-        
-        if not service_token:
-            test_instance.logger.error("Could not find service token")
-            return False
+            if not staking_program_id or staking_program_id == "no_staking":
+                self.logger.info("Service does not require staking")
+                return True
             
-        if not staking_program_id or staking_program_id == "no_staking":
-            test_instance.logger.info("Service is not using staking")
-            return True
+            # Get staking contract address
+            staking_address = self.config.get("staking_programs", {}).get(staking_program_id)
+            if not staking_address:
+                self.logger.error(f"Staking contract not found for program: {staking_program_id}")
+                return False
             
-        # Get staking contract address
-        staking_address = test_instance.config.get("staking_programs", {}).get(staking_program_id)
-        if not staking_address:
-            test_instance.logger.error(f"Could not find staking contract for program: {staking_program_id}")
+            # Check staking status
+            self.logger.info(f"Checking staking for token {service_token} on program {staking_program_id}")
+            return self.check_staking_status(service_token, staking_address)
+            
+        except Exception as e:
+            self.logger.error(f"Error verifying service staking: {e}")
             return False
-        
-        # Check staking status
-        test_instance.logger.info(f"Checking staking for token {service_token} on {staking_program_id} with {staking_address}")
-        return checker.check_service_staking(service_token, staking_address)
-        
-    except Exception as e:
-        test_instance.logger.error(f"Error checking staking status: {e}")
-        return False
-
 class StakingBaseTestService(BaseTestService):
     """Extended base test service with staking-specific configuration."""
 
@@ -262,6 +261,19 @@ class StakingBaseTestService(BaseTestService):
             logger.error(f"Error in staking choice handler: {str(e)}")
             logger.warning("Falling back to option 2")
             return "2"
+        
+    def verify_staking(self) -> bool:
+        """Verify staking status for the service.
+        
+        Returns:
+            bool: True if staking verification passes, False otherwise
+        """
+        try:
+            checker = StakingStatusChecker(self.config_path, self.logger)
+            return checker.verify_service_staking()
+        except Exception as e:
+            self.logger.error(f"Error in staking verification: {e}")
+            return False    
     
     @classmethod
     def setup_class(cls):
@@ -570,7 +582,7 @@ class TestAgentStaking:
         test_instance.test_health_check()
 
         # Verify staking status after service is up
-        assert verify_staking(test_instance), "Staking verification failed after service running"
+        assert test_instance.verify_staking(), "Staking verification failed after service running"
 
         # Stop the service and verify it's stopped
         assert test_instance.assert_service_stopped(), "Service stoppage failed"
@@ -582,7 +594,7 @@ class TestAgentStaking:
         assert test_instance.run_termination_script(), "Service termination failed"
 
         # Verify staking status after service is terminated and unstaked
-        assert verify_staking(test_instance) == False, "Staking verification failed after termination"
+        assert not test_instance.verify_staking(), "Staking verification failed after termination"
         
         # Run shutdown logs test
         test_instance.test_shutdown_logs()
