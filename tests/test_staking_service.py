@@ -11,36 +11,36 @@ import shutil
 import typing as t
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
-from web3 import Web3
-from eth_account import Account
+from typing import Optional, List, Dict
 import requests
 import docker
-from dotenv import load_dotenv
-
 from operate.services.protocol import StakingState
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.operate_types import Chain, LedgerType
 from operate.wallet.master import MasterWalletManager
-
 # Import from existing test script
 from test_run_service import (
-    cleanup_directory, create_funding_handler, create_token_funding_handler, get_config_specific_settings, setup_logging, get_config_files,
-    validate_backup_owner, handle_env_var_prompt, get_service_config, check_docker_status,
-    check_service_health, check_shutdown_logs, ensure_service_stopped,
-    BaseTestService, ColoredFormatter, STARTUP_WAIT, SERVICE_INIT_WAIT, CONTAINER_STOP_WAIT
+    cleanup_directory,
+    create_funding_handler,
+    create_token_funding_handler,
+    get_config_specific_settings,
+    setup_logging,
+    get_config_files,
+    get_service_config,
+    ensure_service_stopped,
+    BaseTestService,
+    STARTUP_WAIT,
+    CONTAINER_STOP_WAIT
 )
 
-def get_test_configs(excluded_agents: List[str] = None) -> List[str]:
-    """Get list of configs to test, excluding specified agents."""
-    if excluded_agents is None:
-        excluded_agents = []
-        
+def get_included_test_configs() -> List[str]:
+    """Get list of configs to test for staking-enabled services."""
+    included_agents = ["trader"]  # List of agents with staking enabled
     all_configs = get_config_files()
     return [
         config for config in all_configs 
-        if not any(excluded in config.lower() for excluded in excluded_agents)
+        if any(included in config.lower() for included in included_agents)
     ]
 
 class StakingOptionParser:
@@ -96,40 +96,6 @@ class StakingOptionParser:
         
         return str(selected['number'])
 
-def handle_staking_choice(output: str, logger: logging.Logger) -> str:
-    """Handle staking choice based on available slots."""
-    try:
-        parser = StakingOptionParser()
-        options = parser.parse_staking_options(output, logger)
-        selected = parser.select_staking_option(options, logger)
-        
-        # Final safety check
-        if selected == "1":
-            logger.warning("Safety check caught attempt to select option 1, forcing option 2")
-            return "2"
-        
-        logger.info(f"Final choice: option {selected}")
-        return selected
-        
-    except Exception as e:
-        logger.error(f"Error in staking choice handler: {str(e)}")
-        logger.warning("Falling back to option 2")
-        return "2"
-
-def get_staking_config_settings(config_path: str) -> dict:
-    """Get config specific settings with updated staking handler."""
-    
-    # Get original settings from main test script
-    settings = get_config_specific_settings(config_path)
-    
-    # Remove any default staking choice patterns if they exist
-    if r"Enter your choice" in settings["prompts"]:
-        settings["prompts"].pop(r"Enter your choice", None)
-    
-    # Add our custom staking handler with highest priority
-    settings["prompts"][r"Enter your choice \(1 - \d+\):"] = handle_staking_choice
-    
-    return settings
 
 class StakingStatusChecker:
     """Handles checking staking status and service state."""
@@ -219,38 +185,6 @@ class StakingStatusChecker:
             self.logger.error(f"Staking check failed: {e}")
             return False
 
-def get_service_token(test_instance) -> Optional[int]:
-    """Get service token from runtime config."""
-    try:
-        # Find the service config directory
-        services_dir = Path(os.getcwd()) / ".operate" / "services"
-        if not services_dir.exists():
-            test_instance.logger.error(f"Services directory not found at {services_dir}")
-            return None
-            
-        # Find service directory by looking for config.json
-        for service_dir in services_dir.iterdir():
-            config_file = service_dir / "config.json"
-            if config_file.exists():
-                with open(config_file) as f:
-                    runtime_config = json.load(f)
-                
-                # Get token from chain_data
-                chain_name = runtime_config.get("home_chain", "gnosis")
-                chain_config = runtime_config.get("chain_configs", {}).get(chain_name, {})
-                chain_data = chain_config.get("chain_data", {})
-                token = chain_data.get("token")
-                
-                if token:
-                    test_instance.logger.info(f"Found service token: {token}")
-                    return token
-                    
-        test_instance.logger.error("No service token found in runtime config")
-        return None
-        
-    except Exception as e:
-        test_instance.logger.error(f"Error getting service token: {e}")
-        return None
 
 def verify_staking(test_instance) -> bool:
     """Verify staking status for a service."""
@@ -304,41 +238,44 @@ def verify_staking(test_instance) -> bool:
 
 class StakingBaseTestService(BaseTestService):
     """Extended base test service with staking-specific configuration."""
+
+    def get_staking_config_settings(self) -> dict:
+        """Get config specific settings with updated staking handler."""
+        settings = get_config_specific_settings(self.config_path)
+        if r"Enter your choice" in settings["prompts"]:
+            settings["prompts"].pop(r"Enter your choice", None)
+        settings["prompts"][r"Enter your choice \(1 - \d+\):"] = self.handle_staking_choice
+        return settings
+    
+    def handle_staking_choice(self, output: str, logger: logging.Logger) -> str:
+        """Handle staking choice based on available slots."""
+        try:
+            parser = StakingOptionParser()
+            options = parser.parse_staking_options(output, logger)
+            selected = parser.select_staking_option(options, logger)
+            if selected == "1":
+                logger.warning("Safety check caught attempt to select option 1, forcing option 2")
+                return "2"
+            logger.info(f"Final choice: option {selected}")
+            return selected
+        except Exception as e:
+            logger.error(f"Error in staking choice handler: {str(e)}")
+            logger.warning("Falling back to option 2")
+            return "2"
     
     @classmethod
     def setup_class(cls):
-        """Override setup to ensure staking config is properly initialized."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        cls.log_file = Path(f'test_staking_{timestamp}.log')
-        cls.logger = setup_logging(cls.log_file)
-            
-        # Create temporary directory and store original path
-        cls.original_cwd = os.getcwd()
-        cls.temp_dir = tempfile.TemporaryDirectory(prefix='staking_test_')
-        cls.logger.info(f"Created temporary directory: {cls.temp_dir.name}")
+        """Setup staking-specific configuration."""
+        # Save original start_service and setup flag since super() will set them
+        original_start = cls.start_service
+        cls.start_service = lambda: None
         
-        # Copy project files with exclusions
-        exclude_patterns = ['.git', '.pytest_cache', '__pycache__', '*.pyc', 'logs', '*.log']
-        def ignore_patterns(path, names):
-            return set(n for n in names if any(p in n or any(p.endswith(n) for p in exclude_patterns) for p in exclude_patterns))
-        
-        shutil.copytree(cls.original_cwd, cls.temp_dir.name, dirs_exist_ok=True, ignore=ignore_patterns)
-        # Copy .git directory if it exists
-        git_dir = Path(cls.original_cwd) / '.git'
-        if git_dir.exists():
-            shutil.copytree(git_dir, Path(cls.temp_dir.name) / '.git', symlinks=True)    
-                    
-        # Switch to temporary directory
-        os.chdir(cls.temp_dir.name)
-        cls.logger.info(f"Changed working directory to: {cls.temp_dir.name}")
-        
-        # Load config
+        # Don't let super() set _setup_complete
+        original_setup_complete = cls._setup_complete
+        super().setup_class()
+        cls._setup_complete = original_setup_complete
         with open(cls.config_path) as f:
-            cls.config = json.load(f)
-        
-        # Setup environment
-        cls._setup_environment()
-        
+            cls.config = json.load(f)        
         # Setup .operate directory and wallet
         operate_dir = Path(cls.temp_dir.name) / ".operate"
         operate_dir.mkdir(exist_ok=True)
@@ -357,29 +294,26 @@ class StakingBaseTestService(BaseTestService):
             cls.logger.info("Creating new Ethereum wallet...")
             cls.wallet_manager.create(LedgerType.ETHEREUM)
         
-        # Important: Load staking-specific settings with staking handler
-        cls.config_settings = get_staking_config_settings(cls.config_path)
+        # Initialize staking contract and settings
+        cls.staking_contract = StakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "staking_token")
+        )
+        cls.config_settings = cls().get_staking_config_settings()
         cls.logger.info(f"Loaded staking settings for config: {cls.config_path}")
         
-        # Start the service
+        # Restore and call original start_service
+        cls.start_service = original_start
         cls.start_service()
         time.sleep(STARTUP_WAIT)
         
+        # Now set setup complete
         cls._setup_complete = True
 
     def assert_service_stopped(self):
         """Assert that all service containers are stopped and removed."""
         try:
             self.logger.info("Verifying service is fully stopped...")
-            
-            # Call stop_service script
-            process = pexpect.spawn(
-                f'bash ./stop_service.sh {self.config_path}',
-                encoding='utf-8',
-                timeout=30,
-                cwd=self.temp_dir.name
-            )
-            process.expect(pexpect.EOF)
+            self.stop_service()
             time.sleep(CONTAINER_STOP_WAIT)
             
             # Verify containers are stopped
@@ -624,7 +558,7 @@ class TestAgentStaking:
 
     @pytest.mark.parametrize(
         'setup',
-        get_test_configs(excluded_agents=["mech", "meme", "optimus", "modius"]),
+        get_included_test_configs(),
         indirect=True,
         ids=lambda x: Path(x).stem
     )
