@@ -43,6 +43,7 @@ def get_included_test_configs() -> List[str]:
         if any(included in config.lower() for included in included_agents)
     ]
 
+
 class StakingOptionParser:
     """Parser that selects options based on available slots."""
     
@@ -101,12 +102,7 @@ class StakingStatusChecker:
     """Simplified checker for verifying staking status."""
     
     def __init__(self, config_path: str, logger: logging.Logger):
-        """Initialize checker with config and logger.
-        
-        Args:
-            config_path: Path to the service configuration file
-            logger: Logger instance for output
-        """
+        """Initialize checker with config and logger."""
         self.logger = logger
         self.config_path = Path(config_path)
         
@@ -154,15 +150,7 @@ class StakingStatusChecker:
             return None
             
     def check_staking_status(self, service_id: int, staking_address: str) -> bool:
-        """Check if service is properly staked.
-        
-        Args:
-            service_id: ID of the service to check
-            staking_address: Address of the staking contract
-            
-        Returns:
-            bool: True if service is staked, False otherwise
-        """
+        """Check if service is properly staked."""
         try:
             # Get staking state using ledger API
             state = StakingState(
@@ -182,14 +170,7 @@ class StakingStatusChecker:
             return False
 
     def verify_service_staking(self) -> bool:
-        """Verify staking status for the current service.
-        
-        This is a core method to be called by test instances to verify staking status.
-        
-        Returns:
-            bool: True if service is properly staked or staking not required,
-                 False if staking is required but not properly configured
-        """
+        """Verify staking status for the current service."""
         try:
             # Get runtime config
             services_dir = Path(os.getcwd()) / ".operate" / "services"
@@ -235,6 +216,8 @@ class StakingStatusChecker:
         except Exception as e:
             self.logger.error(f"Error verifying service staking: {e}")
             return False
+        
+        
 class StakingBaseTestService(BaseTestService):
     """Extended base test service with staking-specific configuration."""
 
@@ -522,6 +505,8 @@ class StakingBaseTestService(BaseTestService):
         except Exception as e:
             self.logger.error(f"Error running termination script: {str(e)}")
             raise
+
+
 class TestAgentStaking:
     """Test class for staking-specific tests."""
     
