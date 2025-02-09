@@ -158,27 +158,22 @@ def populate_operate(operate: OperateApp, modius_data: ModiusData) -> Service:
     qs_config_path = OPERATE_HOME / "local_config.json"
     if not qs_config_path.exists():
         spinner = Halo(text="Creating quickstart config...", spinner="dots").start()
-        
         source_config = json.loads((MODIUS_PATH / "local_config.json").read_text())
-        service_config = json.loads((next(MODIUS_PATH.glob("services/*/config.json"))).read_text())
-            
-        new_config = {
-            "rpc": {"mode": source_config["mode_rpc"]},
-            "password_migrated": True,
-            "staking_vars": modius_data.staking_variables,
-            "principal_chain": "mode",
-            "user_provided_args": {
+        qs_config = QuickstartConfig(
+            path=OPERATE_HOME / "local_config.json",
+            password_migrated=True,
+            principal_chain="mode",
+            rpc={"mode": modius_data.rpc},
+            user_provided_args={
                 "TENDERLY_ACCESS_KEY": source_config.get("tenderly_access_key", ""),
                 "TENDERLY_ACCOUNT_SLUG": source_config.get("tenderly_account_slug", ""),
                 "TENDERLY_PROJECT_SLUG": source_config.get("tenderly_project_slug", ""),
                 "COINGECKO_API_KEY": source_config.get("coingecko_api_key", "")
-            }
-        }
-        
-        qs_config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(qs_config_path, 'w') as f:
-            json.dump(new_config, fp=f, indent=2)
-        spinner.succeed("Quickstart config created")
+            },
+            staking_vars=modius_data.staking_variables,
+        )
+        qs_config.store()
+        spinner.succeed("Quickstart config created")   
 
     # Setup wallet
     if not operate.wallet_manager.exists(LedgerType.ETHEREUM):

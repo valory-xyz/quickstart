@@ -153,57 +153,40 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
     qs_config_path = OPERATE_HOME / "local_config.json"
     if not qs_config_path.exists():
         spinner = Halo(text="Creating quickstart config...", spinner="dots").start()
-        
-        new_config = {
-            "rpc": {"gnosis": mech_data.rpc},
-            "password_migrated": True,
-            "staking_vars": mech_data.staking_variables,
-            "principal_chain": "gnosis",
-            "user_provided_args": {
+        qs_config = QuickstartConfig(
+            path=OPERATE_HOME / "local_config.json",
+            password_migrated=True,
+            principal_chain="gnosis",
+            rpc={"mode": mech_data.rpc},
+            user_provided_args={
                 "API_KEYS": "{\"openai\":[\"dummy_api_key\"], \"google_api_key\":[\"dummy_api_key\"]}"
-            }
-        }
-        
-        qs_config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(qs_config_path, 'w') as f:
-            json.dump(new_config, fp=f, indent=2)
-        spinner.succeed("Quickstart config created")
+            },
+            staking_vars=mech_data.staking_variables,
+        )
+        qs_config.store()
+        spinner.succeed("Quickstart config created")     
 
+    # Setup wallet
     if not operate.wallet_manager.exists(LedgerType.ETHEREUM):
-        spinner = Halo(text="Creating master account...", spinner="dots").start()
+        spinner = Halo(text="Setting up wallet...", spinner="dots").start()
         operate.wallet_manager.setup()
         
-        master_wallet_file = MECH_PATH / "wallets/ethereum.txt" 
-        with open(master_wallet_file, 'r') as f:
-            wallet_crypto = json.load(f)
-            
-        # Copy the encrypted wallet file
-        with open(operate.wallet_manager.path / "ethereum.txt", "w") as f:
-            json.dump(wallet_crypto, fp=f, indent=2)
-            
-        # Setup wallet json with safe
-        wallet_json = {
-            "address": wallet_crypto["address"],
-            "safes": {},
-            "safe_chains": [],
-            "ledger_type": "ethereum",
-            "safe_nonce": None
-        }
+        source_wallets = MECH_PATH / "wallets"
+        shutil.copytree(source_wallets, operate.wallet_manager.path, dirs_exist_ok=True)
         
-        with open(operate.wallet_manager.path / "ethereum.json", "w") as f:
-            json.dump(wallet_json, fp=f, indent=2)
-        spinner.succeed("Master account created")
+        wallet_json_path = operate.wallet_manager.path / "ethereum.json"
+        with open(wallet_json_path, 'r') as f:
+            wallet_data = json.load(f)
+            
+        if "2" in wallet_data.get("safes", {}):
+            wallet_data["safes"] = {"gnosis": wallet_data["safes"]["2"]}
+        wallet_data["safe_chains"] = ["gnosis"]
+        if wallet_data["ledger_type"] == 0:
+            wallet_data["ledger_type"] = "ethereum"
         
-    master_wallet = operate.wallet_manager.load(LedgerType.ETHEREUM)
-    if Chain.GNOSIS not in master_wallet.safes:
-        backup_owner = input("Please input your backup owner for the master safe (leave empty to skip): ")
-        spinner = Halo(text="Creating master safe...", spinner="dots").start()
-        master_wallet.create_safe(
-            chain=Chain.GNOSIS,
-            rpc=mech_data.rpc,
-            backup_owner=None if backup_owner == "" else backup_owner,
-        )
-        spinner.succeed("Master safe created")
+        with open(wallet_json_path, 'w') as f:
+            json.dump(wallet_data, fp=f, indent=2)
+        spinner.succeed("Wallet setup complete")
     
     spinner = Halo(text="Setting up agent keys...", spinner="dots").start()
     operate.keys_manager.setup()
