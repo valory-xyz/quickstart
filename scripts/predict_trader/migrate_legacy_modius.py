@@ -67,11 +67,6 @@ def verify_password(password: str) -> bool:
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     is_valid = password_hash == stored_hash
     
-    if is_valid:
-        print("Password verified successfully")
-    else:
-        print("Invalid password provided")
-    
     return is_valid
  
 def parse_modius_files() -> ModiusData:
@@ -269,6 +264,7 @@ def populate_operate(operate: OperateApp, modius_data: ModiusData) -> Service:
 def main() -> None:
     print_title("Modius Quickstart Migration")
     if not MODIUS_PATH.exists():
+        print("No .olas-modius folder found!")
         sys.exit(1)
     
     modius_data = parse_modius_files()

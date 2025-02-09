@@ -45,6 +45,7 @@ class MechData:
     service_safe: str
     use_staking: bool
     staking_variables: StakingVariables
+    api_keys: str
 
 def verify_password(password: str) -> bool:
     user_json_path = MECH_PATH / "user.json"
@@ -65,19 +66,48 @@ def verify_password(password: str) -> bool:
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     is_valid = password_hash == stored_hash
     
-    if is_valid:
-        print("Password verified successfully")
-    else:
-        print("Invalid password provided")
-    
     return is_valid
  
+def find_api_keys_file(base_paths: list[Path], filename: str) -> Path | None:
+    """Search for API keys file in multiple locations."""
+    for base_path in base_paths:
+        for name in [filename, f"{filename}.json"]:
+            file_path = base_path / name
+            if file_path.exists():
+                return file_path
+    return None
+
 def parse_mech_files() -> MechData:
     print_section("Parsing .mech_quickstart files")
     
     config_file = MECH_PATH / "local_config.json"
     config = json.loads(config_file.read_text())
     use_staking = config.get("use_staking", False)
+    api_keys_path = config.get("api_keys_path")
+    
+    # Handle API keys
+    default_api_keys = {
+        "openai": ["dummy_api_key"],
+        "google_api_key": ["dummy_api_key"]
+    }
+    
+    api_keys = default_api_keys
+    if api_keys_path:
+        filename = Path(api_keys_path).name
+        search_paths = [
+            Path.cwd(),
+            MECH_PATH,
+            MECH_PATH.parent,
+            Path(__file__).parent,
+            Path(__file__).parent.parent
+        ]
+        
+        if api_keys_file := find_api_keys_file(search_paths, filename):
+            try:
+                api_keys = json.loads(api_keys_file.read_text())
+                print(f"Loaded API keys from: {api_keys_file}")
+            except Exception as e:
+                print(f"Error loading API keys, using defaults: {e}")
     
     agent_key_file = next(MECH_PATH.glob("keys/*"))
     agent_key = json.loads(agent_key_file.read_text())
@@ -85,8 +115,6 @@ def parse_mech_files() -> MechData:
     master_wallet_file = MECH_PATH / "wallets/ethereum.txt"
     master_key = json.loads(master_wallet_file.read_text())
     
-    config_file = MECH_PATH / "local_config.json"
-    config = json.loads(config_file.read_text())
     rpc = config.get("gnosis_rpc")
     
     service_dir = next(MECH_PATH.glob("services/*"))
@@ -102,9 +130,7 @@ def parse_mech_files() -> MechData:
         if verify_password(password):
             break
         password = None
-        print("Invalid password!")
-
-    print(f"use_staking :{use_staking}")    
+        print("Invalid password!") 
 
     staking_vars = {
         "USE_STAKING": use_staking == "True",
@@ -128,6 +154,7 @@ def parse_mech_files() -> MechData:
         service_safe,
         use_staking,
         staking_vars,
+        json.dumps(api_keys)
     )
 
 def copy_data_files(target_data_dir: Path) -> None:
@@ -159,7 +186,7 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
             principal_chain="gnosis",
             rpc={"mode": mech_data.rpc},
             user_provided_args={
-                "API_KEYS": "{\"openai\":[\"dummy_api_key\"], \"google_api_key\":[\"dummy_api_key\"]}"
+                "API_KEYS": mech_data.api_keys
             },
             staking_vars=mech_data.staking_variables,
         )
@@ -255,6 +282,7 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
 def main() -> None:
     print_title("Mech Quickstart Migration")
     if not MECH_PATH.exists():
+        print("No .mech_quickstart folder found!")
         sys.exit(1)
     
     mech_data = parse_mech_files()
