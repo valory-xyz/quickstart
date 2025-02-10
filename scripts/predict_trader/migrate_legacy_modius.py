@@ -18,6 +18,8 @@ from operate.operate_types import Chain, LedgerType
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.service import Service
 from operate.utils.common import print_section, print_title
+from migrate_legacy_mech import verify_password
+
 
 MODIUS_PATH = Path(__file__).parent.parent.parent / ".olas-modius"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
@@ -46,29 +48,6 @@ class ModiusData:
     use_staking: bool
     staking_variables: StakingVariables
 
-def verify_password(password: str) -> bool:
-    """Verify password against stored hash in user.json"""
-    user_json_path = MODIUS_PATH / "user.json"
-    print("\nVerifying password...")
-    
-    if not user_json_path.exists():
-        print("No user.json found - first time setup")
-        return True
-        
-    with open(user_json_path, 'r') as f:
-        user_data = json.load(f)
-        
-    stored_hash = user_data.get("password_sha")
-    if not stored_hash:
-        print("No password hash stored - first time setup")
-        return True
-        
-    # Calculate SHA-256 hash of provided password
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    is_valid = password_hash == stored_hash
-    
-    return is_valid
- 
 def parse_modius_files() -> ModiusData:
     print_section("Parsing .olas-modius files")
     
