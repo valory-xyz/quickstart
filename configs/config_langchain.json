@@ -1,0 +1,45 @@
+{
+    "name": "langchain_basic",
+    "agent_id": 49,
+    "hash": "bafybeifc7eqzhm5bs6vr3e3sjjtehf5iymb4gpskzsc6222txjjlczcltu",
+    "description": "Basic Langchain service",
+    "image": "",
+    "service_version": "v0.1.0",
+    "home_chain": "gnosis",
+    "configurations": {
+        "gnosis": {
+            "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+            "threshold": 1,
+            "use_mech_marketplace": false,
+            "fund_requirements": {
+                "0x0000000000000000000000000000000000000000": {
+                    "agent": 0,
+                    "safe": 0
+                }
+            }
+        }
+    },
+    "staking_programs": {
+        "no_staking": "0x0000000000000000000000000000000000000000"
+    },
+    "env_variables": {
+        "GNOSIS_LEDGER_RPC": {
+            "name": "Gnosis ledger RPC",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "TAVILY_API_KEY": {
+            "name": "Tavily API Key",
+            "description": "",
+            "value": "",
+            "provision_type": "user"
+        },
+        "OPENAI_API_KEY": {
+            "name": "",
+            "description": "OpenAI API Key",
+            "value": "",
+            "provision_type": "user"
+        }
+    }
+}
