@@ -23,41 +23,5 @@ export PYTHONUTF8=1
 
 set -e  # Exit script on first error
 
-ATTENDED_ARG=""
-
-while [[ $# -gt 0 ]]; do
-   case $1 in
-       --attended=*)
-           value="${1#*=}"
-           if [[ "$value" != "true" && "$value" != "false" ]]; then
-               echo "Error: --attended only accepts true/false values"
-               exit 1
-           fi
-           if [[ "$value" == "false" ]]; then
-               ATTENDED_ARG="--attended=false"
-           fi
-           shift
-           ;;
-       --help|-h)
-           echo "Usage: ./terminate.sh [--attended=true|false]"
-           echo
-           echo "Arguments:"
-           echo "  --attended=true|false      Run in attended/unattended mode (default: true)"
-           echo "  --help,-h                 Show this help message"
-           exit 0
-           ;;
-       --*)
-           echo "Error: Unknown flag $1"
-           echo "Use --help for available options"
-           exit 1
-           ;;
-       *)
-           echo "Error: Unknown argument $1"
-           echo "Use --help for available options"
-           exit 1
-           ;;
-   esac
-done
-
 poetry install --only main --no-cache
-poetry run python -m operate.cli reset-password $ATTENDED_ARG
+poetry run python -m operate.cli reset-password $@
