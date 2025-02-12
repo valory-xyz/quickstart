@@ -1,10 +1,10 @@
 {
     "name": "Trader Agent",
     "agent_id": 25,
-    "hash": "bafybeib56fc36pednrzbfqxijvini4j6n4rqdfys43axctgbg4jql7tqmy",
+    "hash": "bafybeiftdsc6xi77hwvbxwwfrc2tnssenqk6ixxkl5n4nil4n34dgbdgda",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.23.0",
+    "service_version": "v0.24.1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {

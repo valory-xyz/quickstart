@@ -1,10 +1,10 @@
 {
     "name": "Memeooorr",
     "agent_id": 43,
-    "hash": "bafybeicqdfq36w6ermc2tlrvqrtq323blu4pempztzsuuqo4xzoqditfji",
+    "hash": "bafybeiboafhfh3ufjgqb6jj5ik3b6znde6ghyksgla2ygfns5vtx2n2yge",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v0.2.0-alpha16",
+    "service_version": "v0.4.0-alpha1",
     "home_chain": "base",
     "configurations": {
         "base": {
