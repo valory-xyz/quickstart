@@ -1,7 +1,7 @@
 {
     "name": "langchain_basic",
     "agent_id": 49,
-    "hash": "bafybeifc7eqzhm5bs6vr3e3sjjtehf5iymb4gpskzsc6222txjjlczcltu",
+    "hash": "bafybeifui2doa2iv3jwjl4cvo4l6rev2xx37ysfzmliaztir27vddjpbnm",
     "description": "Basic Langchain service",
     "image": "",
     "service_version": "v0.1.0",
@@ -23,6 +23,12 @@
         "no_staking": "0x0000000000000000000000000000000000000000"
     },
     "env_variables": {
+        "SAFE_CONTRACT_ADDRESSES": {
+            "name": "Safe contract addresses",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
