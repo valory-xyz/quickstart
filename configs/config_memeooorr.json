@@ -1,13 +1,13 @@
 {
     "name": "Memeooorr",
-    "agent_id": 43,
-    "hash": "bafybeic6yi22szouojeueui5ewcibckcmxcbmkhzspwqxygen6twjtg7lm",
+    "hash": "bafybeihrfc7vxnkikd5eqiry4fu7dybmeianetnbgohuw3fupfr5wx6uc4",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v0.4.0-alpha1",
+    "service_version": "v0.4.0-alpha5",
     "home_chain": "base",
     "configurations": {
         "base": {
+            "agent_id": 43,
             "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
             "threshold": 1,
             "use_mech_marketplace": false,
@@ -18,10 +18,6 @@
                 }
             }
         }
-    },
-    "staking_programs": {
-        "no_staking": "0x0000000000000000000000000000000000000000",
-        "meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA"
     },
     "env_variables": {
         "BASE_LEDGER_RPC": {
@@ -57,37 +53,37 @@
         "TWIKIT_USERNAME": {
             "name": "Twitter username",
             "description": "Twitter username of the agent",
-            "value": "",
+            "value": "username",
             "provision_type": "user"
         },
         "TWIKIT_EMAIL": {
             "name": "Twitter email",
             "description": "Twitter email of the agent",
-            "value": "",
+            "value": "email@mail.com",
             "provision_type": "user"
         },
         "TWIKIT_PASSWORD": {
             "name": "Twitter password",
             "description": "Twitter password of the agent",
-            "value": "",
+            "value": "password",
             "provision_type": "user"
         },
         "TWIKIT_COOKIES": {
             "name": "Twitter cookies",
             "description": "Stringified Twitter cookies of the agent",
-            "value": "",
+            "value": "{\"d_prefs\":\"...\",\"night_mode\":\"...\",\"kdt\":\"...\",\"dnt\":\"...\",\"lang\":\"...\"}",
             "provision_type": "user"
         },
         "GENAI_API_KEY": {
             "name": "Gemini api key",
             "description": "Gemini api key to allow the agent to use Gemini",
-            "value": "",
+            "value": "api_key",
             "provision_type": "user"
         },
         "PERSONA": {
             "name": "Persona description",
             "description": "A persona to describe the personality of the agent",
-            "value": "",
+            "value": "persona",
             "provision_type": "user"
         },
         "FEEDBACK_PERIOD_HOURS": {

@@ -1,6 +1,5 @@
 {
     "name": "Optimus",
-    "agent_id": 40,
     "hash": "bafybeigqnpor6cuheucgake6a6fzbh2ula7qxrnwibkjjyjncevgekcyim",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
@@ -8,6 +7,7 @@
     "home_chain": "optimistic",
     "configurations": {
         "optimistic": {
+            "agent_id": 40,
             "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
             "threshold": 1,
             "use_mech_marketplace": false,
@@ -23,6 +23,7 @@
             }
         },
         "base": {
+            "agent_id": 40,
             "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
             "threshold": 1,
             "use_mech_marketplace": false,
@@ -38,6 +39,7 @@
             }
         },
         "mode": {
+            "agent_id": 40,
             "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
             "threshold": 1,
             "use_mech_marketplace": false,
@@ -52,10 +54,6 @@
                 }
             }
         }
-    },
-    "staking_programs": {
-        "no_staking": "0x0000000000000000000000000000000000000000",
-        "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992"
     },
     "env_variables": {
         "SAFE_CONTRACT_ADDRESSES": {
