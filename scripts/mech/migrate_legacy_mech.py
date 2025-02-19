@@ -1,39 +1,22 @@
 from dataclasses import dataclass
-import hashlib
-import os
-from typing import TypedDict
 from getpass import getpass
 from halo import Halo
 import json
 from pathlib import Path
 import sys
 import shutil
-import logging
-
-from aea_ledger_ethereum import Account
 from operate.cli import OperateApp
 from operate.constants import KEYS_JSON, OPERATE
 from operate.keys import Key
 from operate.operate_types import Chain, LedgerType
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.service import Service
-from operate.utils.common import print_section, print_title
+from operate.quickstart.utils import print_section, print_title
+from scripts.utils import verify_password
 
 MECH_PATH = Path(__file__).parent.parent.parent / ".mech_quickstart"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
 DATA_FILES = ("current_pool.json", "gas_costs.json", "assets.json")
-
-class StakingVariables(TypedDict):
-    USE_STAKING: bool
-    STAKING_PROGRAM: str
-    AGENT_ID: int
-    CUSTOM_SERVICE_REGISTRY_ADDRESS: str
-    CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS: str
-    CUSTOM_OLAS_ADDRESS: str
-    CUSTOM_STAKING_ADDRESS: str
-    MECH_ACTIVITY_CHECKER_CONTRACT: str
-    MIN_STAKING_BOND_OLAS: int
-    MIN_STAKING_DEPOSIT_OLAS: int
 
 @dataclass
 class MechData:
@@ -44,29 +27,8 @@ class MechData:
     service_id: int
     service_safe: str
     use_staking: bool
-    staking_variables: StakingVariables
+    staking_program_id: str
     api_keys: str
-
-def verify_password(password: str, path : Path= MECH_PATH) -> bool:
-    user_json_path = path / "user.json"
-    print("\nVerifying password...")
-    
-    if not user_json_path.exists():
-        print("No user.json found - first time setup")
-        return True
-        
-    with open(user_json_path, 'r') as f:
-        user_data = json.load(f)
-        
-    stored_hash = user_data.get("password_sha")
-    if not stored_hash:
-        print("No password hash stored - first time setup")
-        return True
-        
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    is_valid = password_hash == stored_hash
-    
-    return is_valid
  
 def find_api_keys_file(base_paths: list[Path], filename: str) -> Path | None:
     """Search for API keys file in multiple locations."""
@@ -127,23 +89,12 @@ def parse_mech_files() -> MechData:
     password = None
     while password is None:
         password = getpass("Enter local user account password [hidden input]: ")
-        if verify_password(password):
+        if verify_password(password, MECH_PATH):
             break
         password = None
         print("Invalid password!") 
 
-    staking_vars = {
-        "USE_STAKING": use_staking == "True",
-        "STAKING_PROGRAM": "mech_marketplace" if use_staking else "no_staking",
-        "AGENT_ID": 37,
-        "CUSTOM_SERVICE_REGISTRY_ADDRESS": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-        "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS": "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
-        "CUSTOM_OLAS_ADDRESS": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f" if use_staking else "0x0000000000000000000000000000000000000000",
-        "CUSTOM_STAKING_ADDRESS": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90" if use_staking else "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237",
-        "MECH_ACTIVITY_CHECKER_CONTRACT": "0x32B5A40B43C4eDb123c9cFa6ea97432380a38dDF" if use_staking else "0x0000000000000000000000000000000000000000",
-        "MIN_STAKING_BOND_OLAS": 50000000000000000000 if use_staking else 1,
-        "MIN_STAKING_DEPOSIT_OLAS": 50000000000000000000 if use_staking else 1
-    }
+    staking_program_id = "mech_marketplace" if use_staking else "no_staking"
 
     return MechData(
         password,
@@ -153,7 +104,7 @@ def parse_mech_files() -> MechData:
         service_id,
         service_safe,
         use_staking,
-        staking_vars,
+        staking_program_id,
         json.dumps(api_keys)
     )
 
@@ -188,7 +139,7 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
             user_provided_args={
                 "API_KEYS": mech_data.api_keys
             },
-            staking_vars=mech_data.staking_variables,
+            staking_program_id=mech_data.staking_program_id,
         )
         qs_config.store()
         spinner.succeed("Quickstart config created")     
@@ -239,11 +190,11 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
         service_template = json.load(config_file)
 
     service_template["configurations"]["gnosis"] |= {
-        "staking_program_id": mech_data.staking_variables["STAKING_PROGRAM"],
+        "staking_program_id": mech_data.staking_program_id,
         "rpc": mech_data.rpc,
-        "agent_id": mech_data.staking_variables["AGENT_ID"],
+        "agent_id": 37,
         "use_staking": mech_data.use_staking,
-        "cost_of_bond": mech_data.staking_variables["MIN_STAKING_BOND_OLAS"],
+        "cost_of_bond": 50000000000000000000 if mech_data.use_staking else 1,
     }
 
     service_manager = operate.service_manager()

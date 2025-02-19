@@ -1,41 +1,22 @@
 from dataclasses import dataclass
-import hashlib
-import os
-from typing import TypedDict
 from getpass import getpass
 from halo import Halo
 import json
 from pathlib import Path
 import sys
 import shutil
-import logging
-
-from aea_ledger_ethereum import Account
 from operate.cli import OperateApp
 from operate.constants import KEYS_JSON, OPERATE
 from operate.keys import Key
 from operate.operate_types import Chain, LedgerType
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.service import Service
-from operate.utils.common import print_section, print_title
-from migrate_legacy_mech import verify_password
-
+from operate.quickstart.utils import print_section, print_title
+from scripts.utils import verify_password
 
 MODIUS_PATH = Path(__file__).parent.parent.parent / ".olas-modius"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
 DATA_FILES = ("current_pool.json", "gas_costs.json", "assets.json")
-
-class StakingVariables(TypedDict):
-    USE_STAKING: bool
-    STAKING_PROGRAM: str
-    AGENT_ID: int
-    CUSTOM_SERVICE_REGISTRY_ADDRESS: str
-    CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS: str
-    CUSTOM_OLAS_ADDRESS: str
-    CUSTOM_STAKING_ADDRESS: str
-    MECH_ACTIVITY_CHECKER_CONTRACT: str
-    MIN_STAKING_BOND_OLAS: int
-    MIN_STAKING_DEPOSIT_OLAS: int
 
 @dataclass
 class ModiusData:
@@ -46,7 +27,7 @@ class ModiusData:
     service_id: int
     service_safe: str
     use_staking: bool
-    staking_variables: StakingVariables
+    staking_program_id: str
 
 def parse_modius_files() -> ModiusData:
     print_section("Parsing .olas-modius files")
@@ -62,7 +43,6 @@ def parse_modius_files() -> ModiusData:
     rpc = config.get("mode_rpc")
     use_staking = config.get("use_staking", False)
 
-    
     service_dir = next(MODIUS_PATH.glob("services/*"))
     service_config = json.loads((service_dir / "config.json").read_text())
     
@@ -78,18 +58,7 @@ def parse_modius_files() -> ModiusData:
         password = None
         print("Invalid password!")
 
-    staking_vars = {
-        "USE_STAKING": use_staking,
-        "STAKING_PROGRAM": "optimus_alpha" if use_staking else "no_staking",
-        "AGENT_ID": 40,
-        "CUSTOM_SERVICE_REGISTRY_ADDRESS": "0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE" if use_staking else "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-        "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS": "0x34C895f302D0b5cf52ec0Edd3945321EB0f83dd5" if use_staking else "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
-        "CUSTOM_OLAS_ADDRESS": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9" if use_staking else "0x0000000000000000000000000000000000000000",
-        "CUSTOM_STAKING_ADDRESS": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91" if use_staking else "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237",
-        "MECH_ACTIVITY_CHECKER_CONTRACT": "0x07bc3C23DbebEfBF866Ca7dD9fAA3b7356116164" if use_staking else "0x0000000000000000000000000000000000000000",
-        "MIN_STAKING_BOND_OLAS": 20000000000000000000 if use_staking else 1,
-        "MIN_STAKING_DEPOSIT_OLAS": 20000000000000000000 if use_staking else 1
-    }
+    staking_program_id = "optimus_alpha" if use_staking else "no_staking"
 
     return ModiusData(
         password,
@@ -99,7 +68,7 @@ def parse_modius_files() -> ModiusData:
         service_id,
         service_safe,
         use_staking,
-        staking_vars,
+        staking_program_id,
     )
 
 def copy_data_files(target_data_dir: Path) -> None:
@@ -138,7 +107,7 @@ def populate_operate(operate: OperateApp, modius_data: ModiusData) -> Service:
                 "TENDERLY_PROJECT_SLUG": source_config.get("tenderly_project_slug", ""),
                 "COINGECKO_API_KEY": source_config.get("coingecko_api_key", "")
             },
-            staking_vars=modius_data.staking_variables,
+            staking_program_id=modius_data.staking_program_id,
         )
         qs_config.store()
         spinner.succeed("Quickstart config created")   
@@ -195,11 +164,11 @@ def populate_operate(operate: OperateApp, modius_data: ModiusData) -> Service:
         service_template = json.load(config_file)
 
     service_template["configurations"]["mode"] |= {
-        "staking_program_id": modius_data.staking_variables["STAKING_PROGRAM"],
+        "staking_program_id": modius_data.staking_program_id,
         "rpc": modius_data.rpc,
-        "agent_id": modius_data.staking_variables["AGENT_ID"],
+        "agent_id": 40,
         "use_staking": modius_data.use_staking,
-        "cost_of_bond": modius_data.staking_variables["MIN_STAKING_BOND_OLAS"],
+        "cost_of_bond": 20000000000000000000 if modius_data.use_staking else 1,
     }
 
     service_manager = operate.service_manager()

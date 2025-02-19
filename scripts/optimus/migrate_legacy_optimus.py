@@ -1,47 +1,22 @@
 from dataclasses import dataclass
-import hashlib
-import os
-from typing import TypedDict, List, Optional
 from getpass import getpass
 from halo import Halo
 import json
 from pathlib import Path
 import sys
 import shutil
-import logging
-
-from aea_ledger_ethereum import Account
 from operate.cli import OperateApp
 from operate.constants import KEYS_JSON, OPERATE
 from operate.keys import Key
 from operate.operate_types import Chain, LedgerType
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.service import Service
-from operate.utils.common import print_section, print_title
-
-from migrate_legacy_mech import verify_password
+from operate.quickstart.utils import print_section, print_title
+from scripts.utils import verify_password
 
 OPTIMUS_PATH = Path(__file__).parent.parent.parent / ".optimus"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
 DATA_FILES = ("current_pool.json", "gas_costs.json", "assets.json")
-
-CHAIN_ID_MAPPING = {
-    "4": "optimistic",
-    "5": "base",
-    "6": "mode"
-}
-
-class StakingVariables(TypedDict):
-    USE_STAKING: bool
-    STAKING_PROGRAM: str
-    AGENT_ID: int
-    CUSTOM_SERVICE_REGISTRY_ADDRESS: str
-    CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS: str
-    CUSTOM_OLAS_ADDRESS: str
-    CUSTOM_STAKING_ADDRESS: str
-    MECH_ACTIVITY_CHECKER_CONTRACT: str
-    MIN_STAKING_BOND_OLAS: int
-    MIN_STAKING_DEPOSIT_OLAS: int
 
 @dataclass
 class OptimusData:
@@ -51,7 +26,7 @@ class OptimusData:
     service_id: int
     service_safe: str
     use_staking: bool
-    staking_variables: StakingVariables
+    staking_program_id: str
     principal_chain: str
     user_provided_args: dict
 
@@ -104,20 +79,9 @@ def parse_optimus_files() -> OptimusData:
     }
     # Remove any None values
     rpc = {k: v for k, v in rpc_mapping.items() if v is not None}
-    
-    staking_vars = {
-        "USE_STAKING": use_staking,
-        "STAKING_PROGRAM": "optimus_alpha" if use_staking else "no_staking",
-        "AGENT_ID": 40,
-        "CUSTOM_SERVICE_REGISTRY_ADDRESS": "0x3d77596beb0f130a4415df3D2D8232B3d3D31e44" if use_staking else "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-        "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS": "0xBb7e1D6Cb6F243D6bdE81CE92a9f2aFF7Fbe7eac" if use_staking else "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
-        "CUSTOM_OLAS_ADDRESS": "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527" if use_staking else "0x0000000000000000000000000000000000000000",
-        "CUSTOM_STAKING_ADDRESS": "0x88996bbdE7f982D93214881756840cE2c77C4992" if use_staking else "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237",
-        "MECH_ACTIVITY_CHECKER_CONTRACT": "0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68" if use_staking else "0x0000000000000000000000000000000000000000",
-        "MIN_STAKING_BOND_OLAS": 20000000000000000000 if use_staking else 1,
-        "MIN_STAKING_DEPOSIT_OLAS": 20000000000000000000 if use_staking else 1
-    }
-    
+
+    staking_program_id = "optimus_alpha" if use_staking else "no_staking"
+
     service_dir = next(OPTIMUS_PATH.glob("services/*"))
     service_config = json.loads((service_dir / "config.json").read_text())
     
@@ -140,7 +104,7 @@ def parse_optimus_files() -> OptimusData:
         service_id,
         service_safe,
         use_staking,
-        staking_vars,
+        staking_program_id,
         "optimistic",
         {
             "TENDERLY_ACCESS_KEY": config.get("tenderly_access_key", ""),
@@ -179,7 +143,7 @@ def populate_operate(operate: OperateApp, optimus_data: OptimusData) -> Service:
             path=OPERATE_HOME / "local_config.json",
             password_migrated=True,
             rpc=optimus_data.rpc,
-            staking_vars=optimus_data.staking_variables,
+            staking_program_id=optimus_data.staking_program_id,
             principal_chain=optimus_data.principal_chain,
             user_provided_args=optimus_data.user_provided_args
         )
@@ -262,7 +226,7 @@ def populate_operate(operate: OperateApp, optimus_data: OptimusData) -> Service:
             service_template["configurations"][chain_name].update({
                 "rpc": chain_config["ledger_config"]["rpc"],
                 "staking_program_id": chain_config["chain_data"]["user_params"]["staking_program_id"],
-                "agent_id": optimus_data.staking_variables["AGENT_ID"],
+                "agent_id":40,
                 "use_staking": chain_config["chain_data"]["user_params"].get("use_staking", False),
                 "cost_of_bond": chain_config["chain_data"]["user_params"]["cost_of_bond"],
             })
@@ -305,9 +269,6 @@ def populate_operate(operate: OperateApp, optimus_data: OptimusData) -> Service:
                 service.chain_configs[chain_name].chain_data.multisig = chain_data_fields["multisig"]
                 service.chain_configs[chain_name].chain_data.staked = chain_data_fields["staked"]
                 service.chain_configs[chain_name].chain_data.on_chain_state = chain_data_fields["on_chain_state"]
-                
-                print(f"Updated configuration for chain {chain_name}")
-                print(f"Chain data fields: {chain_data_fields}")
 
         copy_data_files(service.path / "data")
         
