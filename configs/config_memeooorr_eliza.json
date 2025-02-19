@@ -1,0 +1,87 @@
+{
+  "name": "memeooorr_eliza",
+  "agent_id": 51,
+  "hash": "bafybeibdnpaenxh7frwgrdpdttmy2exyiww2ao4oijf2bu2semj45agmjy",
+  "description": "My awesome agent service",
+  "image": "",
+  "service_version": "v0.1.0",
+  "home_chain": "base",
+  "configurations": {
+    "base": {
+      "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+      "threshold": 1,
+      "use_mech_marketplace": false,
+      "fund_requirements": {
+        "0x0000000000000000000000000000000000000000": {
+          "agent": 1000000000000000,
+          "safe": 12500000000000000
+        }
+      }
+    }
+  },
+  "staking_programs": {
+    "no_staking": "0x0000000000000000000000000000000000000000"
+  },
+  "env_variables": {
+    "SAFE_CONTRACT_ADDRESSES": {
+      "name": "Safe contract addresses",
+      "description": "",
+      "value": "",
+      "provision_type": "computed"
+    },
+    "STAKING_CONTRACT_ADDRESS": {
+      "name": "Staking contract address",
+      "description": "",
+      "value": "",
+      "provision_type": "computed"
+    },
+    "BASE_LEDGER_RPC": {
+      "name": "Base Ledger RPC",
+      "description": "",
+      "value": "",
+      "provision_type": "computed"
+    },
+    "TWITTER_USERNAME": {
+      "name": "Twitter Username",
+      "description": "Twitter Username of the user",
+      "value": "Keshav_Mis",
+      "provision_type": "user"
+    },
+    "TWITTER_PASSWORD": {
+      "name": "Twitter Password",
+      "description": "Password of your twitter account",
+      "value": "",
+      "provision_type": "user"
+    },
+    "TWITTER_EMAIL": {
+      "name": "Twitter Email",
+      "description": "Email attached to your twitter account",
+      "value": "",
+      "provision_type": "user"
+    },
+    "OPENAI_API_KEY": {
+      "name": "OpenAI API Key",
+      "description": "",
+      "value": "",
+      "provision_type": "user"
+    },
+    "SUBGRAPH_URL": {
+      "name": "Subgraph URL",
+      "description": "Subgraph url to pull active twitter users",
+      "value": "",
+      "provision_type": "user"
+    },
+    "MEME_SUBGRAPH_URL": {
+      "name": "Meme Subgraph URL",
+      "description": "Sub graph url to pull meme coins from",
+      "value": "",
+      "provision_type": "user"
+    },
+    "MEME_FACTORY_CONTRACT": {
+      "name": "Meme Factory Contract",
+      "description": "Meme Factory Contract Address",
+      "value": "",
+      "provision_type": "user"
+    }
+  }
+}
