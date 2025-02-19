@@ -51,14 +51,6 @@ class ModiusData:
 def parse_modius_files() -> ModiusData:
     print_section("Parsing .olas-modius files")
     
-    # Get user input for staking configuration
-    while True:
-        staking_input = input("Was this a staked Modius agent? (yes/no): ").lower()
-        if staking_input in ['yes', 'no']:
-            use_staking = staking_input == 'yes'
-            break
-        print("Please enter 'yes' or 'no'")
-    
     agent_key_file = next(MODIUS_PATH.glob("keys/*"))
     agent_key = json.loads(agent_key_file.read_text())
     
@@ -68,6 +60,8 @@ def parse_modius_files() -> ModiusData:
     config_file = MODIUS_PATH / "local_config.json"
     config = json.loads(config_file.read_text())
     rpc = config.get("mode_rpc")
+    use_staking = config.get("use_staking", False)
+
     
     service_dir = next(MODIUS_PATH.glob("services/*"))
     service_config = json.loads((service_dir / "config.json").read_text())
@@ -79,7 +73,7 @@ def parse_modius_files() -> ModiusData:
     password = None
     while password is None:
         password = getpass("Enter local user account password [hidden input]: ")
-        if verify_password(password):
+        if verify_password(password, MODIUS_PATH):
             break
         password = None
         print("Invalid password!")

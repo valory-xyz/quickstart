@@ -47,8 +47,8 @@ class MechData:
     staking_variables: StakingVariables
     api_keys: str
 
-def verify_password(password: str) -> bool:
-    user_json_path = MECH_PATH / "user.json"
+def verify_password(password: str, path : Path= MECH_PATH) -> bool:
+    user_json_path = path / "user.json"
     print("\nVerifying password...")
     
     if not user_json_path.exists():

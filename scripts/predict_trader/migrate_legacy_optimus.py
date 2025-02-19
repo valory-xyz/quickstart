@@ -128,7 +128,7 @@ def parse_optimus_files() -> OptimusData:
     password = None
     while password is None:
         password = getpass("Enter local user account password [hidden input]: ")
-        if verify_password(password):
+        if verify_password(password, OPTIMUS_PATH):
             break
         password = None
         print("Invalid password!")
@@ -141,7 +141,7 @@ def parse_optimus_files() -> OptimusData:
         service_safe,
         use_staking,
         staking_vars,
-        config.get("principal_chain", "optimistic"),
+        "optimistic",
         {
             "TENDERLY_ACCESS_KEY": config.get("tenderly_access_key", ""),
             "TENDERLY_ACCOUNT_SLUG": config.get("tenderly_account_slug", ""),
@@ -258,18 +258,15 @@ def populate_operate(operate: OperateApp, optimus_data: OptimusData) -> Service:
     for chain_id, chain_config in legacy_config["chain_configs"].items():
         chain_name = chain_id_to_name.get(chain_id)
         if chain_name and chain_name in service_template["configurations"]:
+            # Update basic configuration
             service_template["configurations"][chain_name].update({
                 "rpc": chain_config["ledger_config"]["rpc"],
                 "staking_program_id": chain_config["chain_data"]["user_params"]["staking_program_id"],
                 "agent_id": optimus_data.staking_variables["AGENT_ID"],
                 "use_staking": chain_config["chain_data"]["user_params"].get("use_staking", False),
                 "cost_of_bond": chain_config["chain_data"]["user_params"]["cost_of_bond"],
-                "instances": chain_config["chain_data"]["instances"],
-                "token": chain_config["chain_data"]["token"],
-                "multisig": chain_config["chain_data"]["multisig"],
-                "staked": chain_config["chain_data"]["staked"],
-                "on_chain_state": chain_config["chain_data"]["on_chain_state"]
             })
+
     service_manager = operate.service_manager()
     if len(service_manager.json) == 0:
         spinner = Halo(text="Creating service...", spinner="dots").start()
@@ -290,9 +287,27 @@ def populate_operate(operate: OperateApp, optimus_data: OptimusData) -> Service:
 
         service.keys = [Key(**service_keys[0])]
         
-        # Use values from legacy config
-        service.chain_configs["mode"].chain_data.token = legacy_config["chain_configs"]["34443"]["chain_data"]["token"]
-        service.chain_configs["mode"].chain_data.multisig = legacy_config["chain_configs"]["34443"]["chain_data"]["multisig"]
+        # Update chain data fields for each chain after service creation
+        for chain_id, chain_config in legacy_config["chain_configs"].items():
+            chain_name = chain_id_to_name.get(chain_id)
+            if chain_name and chain_name in service.chain_configs:
+                chain_data_fields = {
+                    "instances": chain_config["chain_data"]["instances"],
+                    "token": chain_config["chain_data"]["token"],
+                    "multisig": chain_config["chain_data"]["multisig"],
+                    "staked": chain_config["chain_data"]["staked"],
+                    "on_chain_state": chain_config["chain_data"]["on_chain_state"]
+                }
+                
+                # Update the chain data in the service configuration
+                service.chain_configs[chain_name].chain_data.instances = chain_data_fields["instances"]
+                service.chain_configs[chain_name].chain_data.token = chain_data_fields["token"]
+                service.chain_configs[chain_name].chain_data.multisig = chain_data_fields["multisig"]
+                service.chain_configs[chain_name].chain_data.staked = chain_data_fields["staked"]
+                service.chain_configs[chain_name].chain_data.on_chain_state = chain_data_fields["on_chain_state"]
+                
+                print(f"Updated configuration for chain {chain_name}")
+                print(f"Chain data fields: {chain_data_fields}")
 
         copy_data_files(service.path / "data")
         
