@@ -814,20 +814,13 @@ class BaseTestService:
                 
                 # Modify env variables - create new dict instead of modifying
                 if 'env_variables' in config_data:
-                    new_env_variables = {}
-                    for key, value in config_data['env_variables'].items():
-                        if key != 'TWIKIT_COOKIES':  # Skip TWIKIT_COOKIES
-                            new_env_variables[key] = value
-                    
                     # Add TWIKIT_SKIP_CONNECTION
-                    new_env_variables['TWIKIT_SKIP_CONNECTION'] = {
+                    config_data['env_variables']['TWIKIT_SKIP_CONNECTION'] = {
                         "name": "Skip Twitter connection",
                         "description": "Skip Twitter connection for testing",
                         "value": "true",  
                         "provision_type": "fixed"
                     }
-                    
-                    config_data['env_variables'] = new_env_variables
                 
                 # Write modified config back with read/write permissions for all
                 with open(temp_config_path, 'w') as f:
