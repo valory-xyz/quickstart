@@ -24,6 +24,7 @@ class MechData:
     agent_eoa: dict
     master_eoa: dict
     rpc: str
+    mech_type:str
     service_id: int
     service_safe: str
     use_staking: bool
@@ -78,6 +79,7 @@ def parse_mech_files() -> MechData:
     master_key = json.loads(master_wallet_file.read_text())
     
     rpc = config.get("gnosis_rpc")
+    mech_type= config.get("mech_type")
     
     service_dir = next(MECH_PATH.glob("services/*"))
     service_config = json.loads((service_dir / "config.json").read_text())
@@ -101,6 +103,7 @@ def parse_mech_files() -> MechData:
         agent_key,
         master_key,
         rpc,
+        mech_type,
         service_id,
         service_safe,
         use_staking,
@@ -135,9 +138,10 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
             path=OPERATE_HOME / "local_config.json",
             password_migrated=True,
             principal_chain="gnosis",
-            rpc={"mode": mech_data.rpc},
+            rpc={"gnosis": mech_data.rpc},
             user_provided_args={
-                "API_KEYS": mech_data.api_keys
+                "API_KEYS": mech_data.api_keys,
+                "MECH_TYPE":mech_data.mech_type
             },
             staking_program_id=mech_data.staking_program_id,
         )
@@ -202,24 +206,24 @@ def populate_operate(operate: OperateApp, mech_data: MechData) -> Service:
         spinner = Halo(text="Creating service...", spinner="dots").start()
         service = get_service(service_manager, service_template)
         
-        # Clean up auto-generated keys and use mech keys
+        # Get service keys
+        service_source = next(MECH_PATH.glob("services/*"))
+        with open(service_source / KEYS_JSON, 'r') as f:
+            service_keys = json.load(f)
+
+        # Copy keys
+        with open(service.path / KEYS_JSON, "w") as f:
+            json.dump(obj=service_keys, fp=f, indent=2)
+
+        # Clean up any keys that don't match service keys
+        valid_addresses = {key["address"].lower() for key in service_keys}
         keys_dir = operate.keys_manager.path
         for key_file in keys_dir.glob("*"):
-            key_file.unlink()
+            if key_file.name.lower() not in valid_addresses:
+                key_file.unlink()
 
-        # Copy mech keys
-        source_keys = MECH_PATH / "keys"
-        for key_file in source_keys.glob("*"):
-            if key_file.is_file():
-                with open(key_file, 'r') as f:
-                    key_data = json.load(f)
-                if key_data.get("ledger") == 0:
-                    key_data["ledger"] = "ethereum"
-                
-                target_file = keys_dir / key_file.name
-                with open(target_file, 'w') as f:
-                    json.dump(key_data, fp=f, indent=4)
-                service.keys = [Key(**key_data)]
+        service.keys = [Key(**service_keys[0])]
+
         service.chain_configs["gnosis"].chain_data.token = mech_data.service_id
         service.chain_configs["gnosis"].chain_data.multisig = mech_data.service_safe
 
