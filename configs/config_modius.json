@@ -1,13 +1,13 @@
 {
     "name": "Modius",
-    "agent_id": 40,
-    "hash": "bafybeigze75dsdbqb3uf5mutdaquvh2lxaga25ybvf7npmkome3gvxqqcu",
+    "hash": "bafybeifl56xp3o26zb6uaoyeg2pwoduhnm22ukjcv5wcj32tswibsikosa",
     "description": "Modius",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
     "service_version": "v0.18.1",
     "home_chain": "mode",
     "configurations": {
         "mode": {
+            "agent_id": 40,
             "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
             "threshold": 1,
             "use_mech_marketplace": false,
@@ -22,10 +22,6 @@
                 }
             }
         }
-    },
-    "staking_programs": {
-        "no_staking": "0x0000000000000000000000000000000000000000",
-        "optimus_alpha": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91"
     },
     "env_variables": {
         "SAFE_CONTRACT_ADDRESSES": {

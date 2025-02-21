@@ -54,6 +54,8 @@ from operate.constants import (
     MECH_ACTIVITY_CHECKER_JSON_URL,
     MECH_CONTRACT_JSON_URL,
 )
+from operate.ledger.profiles import STAKING
+from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
 from scripts.utils import get_service_from_config
 
@@ -260,7 +262,7 @@ if __name__ == "__main__":
     try:
         w3 = Web3(HTTPProvider(rpc))
 
-        staking_token_address = config.staking_vars["CUSTOM_STAKING_ADDRESS"]
+        staking_token_address = STAKING[Chain.GNOSIS][config.staking_program_id]
         staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
 
         staking_token_abi = staking_token_data.get("abi", [])
@@ -279,8 +281,9 @@ if __name__ == "__main__":
             or staking_state == StakingState.EVICTED
         )
         _print_status("Is service staked?", _color_bool(is_staked, "Yes", "No"))
+        is_mm_staking = "mech_marketplace" in config.staking_program_id
         if is_staked:
-            _print_status("Staking program", config.staking_vars.get("STAKING_PROGRAM"))  # type: ignore
+            _print_status("Staking program", config.staking_program_id)  # type: ignore
         if staking_state == StakingState.STAKED:
             _print_status("Staking state", staking_state.name)
         elif staking_state == StakingState.EVICTED:
@@ -308,7 +311,16 @@ if __name__ == "__main__":
                 abi=service_registry_token_utility_abi,
             )
 
-            mech_contract_address = activity_checker_contract.functions.agentMech().call()
+            if is_mm_staking:
+                activity_checker_data = requests.get(MECH_CONTRACT_JSON_URL).json()
+                activity_checker_abi = activity_checker_data.get("abi", [])
+                mm_activity_checker_contract = w3.eth.contract(
+                    address=activity_checker_address, abi=activity_checker_abi  # type: ignore
+                )
+                mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call()
+            else:
+                mech_contract_address = activity_checker_contract.functions.agentMech().call()
+
             mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
 
             mech_contract_abi = mech_contract_data.get("abi", [])
@@ -322,7 +334,7 @@ if __name__ == "__main__":
                     operator_address, service_id
                 ).call()
             )
-            agent_id = int(config.staking_vars["AGENT_ID"])
+            agent_id = int(staking_token_contract.functions.getAgentIds().call()[0])
             agent_bond = service_registry_token_utility_contract.functions.getAgentBond(
                 service_id, agent_id
             ).call()

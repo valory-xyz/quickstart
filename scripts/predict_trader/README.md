@@ -5,7 +5,7 @@ A quickstart for the trader agent for AI prediction markets on Gnosis at https:/
 ## Resource Requirements
 
 - You need xDAI on Gnosis Chain in one of your wallets.
-- You need an RPC for your agent instance. We recommend [Nodies RPC](https://www.nodies.app/).
+- You need an RPC for your agent instance. We currently recommend providers [Quicknode](https://www.quicknode.com/) and [Chainstack](https://www.chainstack.com/).
 - Some scripts may ask for a Subgraph API key that can be obtained at [The Graph](https://thegraph.com/studio/apikeys/).
 
 ## Observe your agents
