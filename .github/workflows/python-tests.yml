@@ -6,6 +6,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        agent: ${{ fromJson(needs.get-agents.outputs.agent_names) }}
+      fail-fast: false
+    needs: get-agents
     env:
       GNOSIS_RPC_URL: ${{ secrets.GNOSIS_RPC_URL }}
       MODIUS_RPC_URL: ${{ secrets.MODIUS_RPC_URL }}
@@ -62,7 +67,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git
+        sudo apt-get install -y git jq
         
     - name: Clean Python cache
       run: |
@@ -96,33 +101,47 @@ jobs:
         poetry env use python3.10
         poetry install --no-interaction
 
-    - name: Run tests
-      run: |  
-        # Run the tests with debug logging
-        poetry run pytest -v tests/test_run_service.py -s --log-cli-level=INFO
+    - name: Run test
+      run: |
+        # Extract agent name from config file and run specific test
+        poetry run pytest -v tests/test_run_service.py -s --log-cli-level=INFO -k ${{ matrix.agent }} 2>&1 | tee ${DOCKER_LOGS_DIR}/${{ matrix.agent }}.log
 
     - name: Debug container failure
       if: failure()
       run: |
-        echo "==== Docker container status ===="
-        docker ps -a
+        echo "==== Docker container status for ${{ matrix.agent }} ====" >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
+        docker ps -a >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
         
-        echo "==== Container logs ===="
+        echo "==== Container logs for ${{ matrix.agent }} ====" >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
         for container in $(docker ps -aq); do
-          echo "=== Logs for $container ==="
-          docker logs $container
+          echo "=== Logs for $container ===" >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
+          docker logs $container >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
           
-          echo "=== Inspect for $container ==="
-          docker inspect $container
+          echo "=== Inspect for $container ===" >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
+          docker inspect $container >> ${DOCKER_LOGS_DIR}/${{ matrix.agent }}_debug.log
         done
 
     - name: Upload test logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-logs
+        name: test-logs-${{ matrix.agent }}
         path: |
           logs/
           /logs/
           .env
         retention-days: 30
+
+  # Job to discover agents from config files
+  get-agents:
+    runs-on: ubuntu-latest
+    outputs:
+      agent_names: ${{ steps.find-agents.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find-agents
+        run: |
+          # Find all config files and extract agent names
+          NAMES=$(ls config/config_*.json | sed 's/config\/config_//' | sed 's/\.json//' | jq -R -s -c 'split("\n")[:-1]')
+          echo "Found agents: $NAMES"
+          echo "names=$NAMES" >> $GITHUB_OUTPUT
