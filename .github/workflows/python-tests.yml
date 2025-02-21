@@ -4,16 +4,70 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      agent_names: ${{ steps.find-agents.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker
+        run: |
+          # Stop and remove existing Docker installations
+          sudo systemctl stop docker || true
+          sudo systemctl stop docker.socket || true
+          
+          # Clean existing installations
+          sudo apt-get remove -y docker docker-engine docker.io containerd runc
+          sudo apt-get update
+          
+          # Install prerequisites
+          sudo apt-get install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg \
+            lsb-release jq
+
+          # Add Docker's GPG key
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          
+          # Add Docker repository
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Install Docker
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+          
+          # Get current user info
+          CURRENT_USER=$(id -u)
+          CURRENT_GROUP=$(id -g)
+          
+          # Start Docker service
+          sudo systemctl start docker
+
+      - id: find-agents
+        run: |
+          NAMES=$(ls configs/config_*.json | sed 's/configs\/config_//' | sed 's/\.json//' | jq -R -s -c 'split("\n")[:-1]')
+          echo "Found agents: $NAMES"
+          echo "names=$NAMES" >> $GITHUB_OUTPUT
+
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        agent: ${{ fromJson(needs.setup.outputs.agent_names) }}
+      fail-fast: false
     env:
       GNOSIS_RPC_URL: ${{ secrets.GNOSIS_RPC_URL }}
       MODIUS_RPC_URL: ${{ secrets.MODIUS_RPC_URL }}
       OPTIMISM_RPC_URL: ${{ secrets.OPTIMISM_RPC_URL }}
       BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-      DOCKER_LOGS_DIR: ${GITHUB_WORKSPACE}/logs
-    
+
     steps:
     - uses: actions/checkout@v4
     
@@ -21,44 +75,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    - name: Set up Docker
-      run: |
-        # Stop and remove existing Docker installations
-        sudo systemctl stop docker || true
-        sudo systemctl stop docker.socket || true
-        
-        # Clean existing installations
-        sudo apt-get remove -y docker docker-engine docker.io containerd runc
-        sudo apt-get update
-        
-        # Install prerequisites
-        sudo apt-get install -y \
-          apt-transport-https \
-          ca-certificates \
-          curl \
-          gnupg \
-          lsb-release
 
-        # Add Docker's GPG key
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        
-        # Add Docker repository
-        echo \
-          "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-          $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-        # Install Docker
-        sudo apt-get update
-        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-        
-        # Get current user info
-        CURRENT_USER=$(id -u)
-        CURRENT_GROUP=$(id -g)
-        
-        # Start Docker service
-        sudo systemctl start docker
-        
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -96,33 +113,14 @@ jobs:
         poetry env use python3.10
         poetry install --no-interaction
 
-    - name: Run tests
-      run: |  
-        # Run the tests with debug logging
-        poetry run pytest -v tests/test_run_service.py -s --log-cli-level=INFO
+    - name: Run test
+      run: poetry run pytest -v tests/test_run_service.py -s --log-cli-level=INFO -k ${{ matrix.agent }}
 
     - name: Debug container failure
       if: failure()
       run: |
-        echo "==== Docker container status ===="
         docker ps -a
-        
-        echo "==== Container logs ===="
         for container in $(docker ps -aq); do
           echo "=== Logs for $container ==="
           docker logs $container
-          
-          echo "=== Inspect for $container ==="
-          docker inspect $container
         done
-
-    - name: Upload test logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-logs
-        path: |
-          logs/
-          /logs/
-          .env
-        retention-days: 30
