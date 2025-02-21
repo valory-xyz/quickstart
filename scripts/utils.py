@@ -19,6 +19,7 @@
 
 """This package contains utils for working with the staking contract."""
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -53,3 +54,24 @@ def get_service_from_config(config_path: Path) -> Service:
     manager = operate.service_manager()
     configure_local_config(template)
     return get_service(manager, template)
+
+def verify_password(password: str, path : Path) -> bool:
+    user_json_path = path / "user.json"
+    print("\nVerifying password...")
+    
+    if not user_json_path.exists():
+        print("No user.json found - first time setup")
+        return True
+        
+    with open(user_json_path, 'r') as f:
+        user_data = json.load(f)
+        
+    stored_hash = user_data.get("password_sha")
+    if not stored_hash:
+        print("No password hash stored - first time setup")
+        return True
+        
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    is_valid = password_hash == stored_hash
+    
+    return is_valid
