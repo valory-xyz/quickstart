@@ -155,12 +155,9 @@ The accrued OLAS will be transferred to your service Safe without having to unst
 
 Agent runners are recommended to create a [backup](#backup-and-recovery) of the relevant secret key material.
 
-<!-- 
-TODO: support this
 ### Skip user prompts
 
-You can optionally pass `--attended=false` or export the environment variable `ATTENDED=false` to skip asking for inputs from the user.
--->
+You can optionally pass `--attended=false` to skip asking for inputs from the user. Note that, in this mode appropriate environment variables must be set.
 
 ## Update between versions
 
@@ -291,17 +288,14 @@ Error: Service deployment failed with following error; ChainTimeoutError(Timed o
 Error: Service terminatation failed with following error; ChainInteractionError({'code': -32010, 'message': 'AlreadyKnown'})
 ```
 
-<!-- 
-TODO: support this
 ## Build deployments without executing the service
 
-The script builds both a Docker Compose deployment (on `./trader/trader_service/abci_build_????`) 
-and a Kubernetes deployment (on `./trader/trader_service/abci_build_k8s`). 
+The script builds both a Docker Compose deployment (on `.operate.optimus/services/sc-*/deployment`) 
+and a Kubernetes deployment (on `.operate.optimus/services/sc-*/deployment/abci_build_k8s`). 
 Then, by default, the script will launch the local Docker Compose deployment. 
 If you just want to build the deployment without executing the service 
 (for example, if you are deploying to a custom Kubernetes cluster), then execute the script as:
 
 ```bash
-    ./run_service.sh --build-only
+./run_service.sh <agent_config.json> --build-only
 ```
--->

@@ -85,6 +85,12 @@
             "description": "",
             "value": "",
             "provision_type": "computed"
+        },
+        "MECH_TYPE": {
+            "name": "Mech type",
+            "description": "Type of mech to deploy (Native, Token, or Nevermined)",
+            "value": "Native",
+            "provision_type": "user"
         }
     }
 }

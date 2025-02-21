@@ -25,4 +25,4 @@ export PYTHONUTF8=1
 set -e  # Exit script on first error
 
 poetry install --only main --no-cache
-poetry run python -m operate.cli terminate "$1"
+poetry run python -m operate.cli terminate $@
