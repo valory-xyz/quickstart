@@ -75,3 +75,25 @@ def verify_password(password: str, path : Path) -> bool:
     is_valid = password_hash == stored_hash
     
     return is_valid
+
+def validate_config_params(config_data: dict, required_params: list[str]) -> None:
+    """
+    Validates required configuration parameters from the source config.
+    
+    Args:
+        config_data (dict): Configuration dictionary to validate
+        required_params (list[str]): List of required parameter keys
+        
+    Raises:
+        ValueError: If any required parameter is missing or empty
+    """
+    missing_params = []
+    for param in required_params:
+        if not config_data.get(param):  # Checks for None, empty string, or missing key
+            missing_params.append(param)
+    
+    if missing_params:
+        raise ValueError(
+            f"Missing required configuration parameters: {', '.join(missing_params)}. "
+            "Please ensure all required parameters are provided in the local_config.json file."
+        )
