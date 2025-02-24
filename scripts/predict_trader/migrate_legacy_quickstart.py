@@ -21,7 +21,8 @@ from operate.operate_types import Chain, LedgerType, OnChainState
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import Service
-from operate.utils.common import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils  import ask_yes_or_no, print_section, print_title
+from operate.quickstart.run_service import NO_STAKING_PROGRAM_ID
 
 TRADER_RUNNER_PATH = Path(__file__).parent.parent.parent / ".trader_runner"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
@@ -148,7 +149,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData) -> Service:
             principal_chain="gnosis",
             rpc={"gnosis": trader_data.rpc},
             user_provided_args={"SUBGRAPH_API_KEY": trader_data.subgraph_api_key},
-            staking_vars=trader_data.staking_variables,
+            staking_program_id = trader_data.staking_variables["STAKING_PROGRAM"],
         )
         qs_config.store()
         spinner.succeed("Quickstart config created")
@@ -238,12 +239,13 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
     wallet_manager = operate.wallet_manager.load(LedgerType.ETHEREUM)
     os.environ["CUSTOM_CHAIN_RPC"] = os.environ["GNOSIS_CHAIN_RPC"] = trader_data.rpc
 
-    if ocm.staking_status(
-        service_id=chain_config.chain_data.token,
-        staking_contract=staking_contract,
-    ) == StakingState.UNSTAKED:
-        print(f"Service {chain_config.chain_data.token} is not staked.")
-    else:
+    if (
+        trader_data.staking_variables['STAKING_PROGRAM'] != NO_STAKING_PROGRAM_ID and
+        ocm.staking_status(
+            service_id=chain_config.chain_data.token,
+            staking_contract=staking_contract,
+        ) != StakingState.UNSTAKED
+    ):
         if not ask_yes_or_no(
             f"Your service {chain_config.chain_data.token} will be unstaked "
             f"from staking program {trader_data.staking_variables['STAKING_PROGRAM']} during this migration.\n"
@@ -278,6 +280,8 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         
         ocm.unstake(service_id=chain_config.chain_data.token, staking_contract=staking_contract)
         spinner.succeed("Service unstaked")
+    else:
+        print(f"Service {chain_config.chain_data.token} is not staked or using no-staking program. Skipping unstaking.")
 
     service_manager = operate.service_manager()
     if service_manager._get_on_chain_state(service=service, chain=service.home_chain) in (
