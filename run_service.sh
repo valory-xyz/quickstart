@@ -69,4 +69,4 @@ docker rm -f abci0 node0 trader_abci_0 trader_tm_0 &> /dev/null ||
 
 # Install dependencies and run the agent througth the middleware
 poetry install --only main --no-cache
-poetry run python -m operate.cli quickstart "$1"
+poetry run python -m operate.cli quickstart $@

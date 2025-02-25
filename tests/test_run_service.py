@@ -215,6 +215,9 @@ def check_service_health(logger: logging.Logger, config_path: str) -> tuple[bool
             if response.status_code == 200:
                 metrics['successful_checks'] += 1
                 logger.info(f"Health check passed (response time: {metrics['response_time']:.2f}s)")
+            elif response.status_code == 425:
+                logger.debug('Too early to check health. Waiting 10 seconds...')
+                time.sleep(10)
             else:
                 logger.error(f"Health check failed - Status: {response.status_code}")
                 return False, metrics
