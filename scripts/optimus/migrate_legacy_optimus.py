@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from operate.quickstart.run_service import QuickstartConfig
 from operate.operate_types import Chain
 from operate.quickstart.utils import print_section, print_title
-from scripts.utils import validate_config_params
+from scripts.utils import validate_config_params, handle_missing_rpcs
 
 OPTIMUS_PATH = Path(__file__).parent.parent.parent / ".optimus"
 OPERATE_HOME = Path(__file__).parent.parent.parent / ".operate"
@@ -33,19 +33,12 @@ def parse_optimus_config() -> OptimusConfig:
         "tenderly_access_key",
         "tenderly_account_slug", 
         "tenderly_project_slug",
-        "coingecko_api_key",
-        "optimism_rpc",
-        "base_rpc",
-        "mode_rpc"
+        "coingecko_api_key"
     ]
     validate_config_params(config, required_params)
     
     # Map RPC endpoints from source config to new format
-    rpc_mapping = {
-        Chain.OPTIMISTIC.value : config.get("optimism_rpc"),
-        Chain.BASE.value: config.get("base_rpc"),
-        Chain.MODE.value: config.get("mode_rpc")
-    }
+    rpc_mapping = handle_missing_rpcs(config)
     
     use_staking = config.get("use_staking", False)
     staking_program_id = "optimus_alpha" if use_staking else "no_staking"
