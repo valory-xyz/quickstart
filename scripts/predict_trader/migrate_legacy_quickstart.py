@@ -15,14 +15,17 @@ from operate.cli import OperateApp
 from operate.constants import (
     KEYS_JSON,
     OPERATE,
+    ZERO_ADDRESS,
 )
 from operate.keys import Key
+from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import Service
-from operate.quickstart.utils  import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils  import ask_yes_or_no, CHAIN_TO_METADATA, print_section, print_title
 from operate.quickstart.run_service import NO_STAKING_PROGRAM_ID
+from operate.utils.gnosis import get_asset_balance, get_assets_balances
 
 TRADER_RUNNER_PATH = Path(__file__).parent.parent.parent / ".trader_runner"
 OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
@@ -209,7 +212,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData) -> Service:
         "rpc": trader_data.rpc,
         "agent_id": int(trader_data.staking_variables["AGENT_ID"]),
         "use_staking": trader_data.staking_variables["USE_STAKING"],
-        "cost_of_bond": int(trader_data.staking_variables["MIN_STAKING_BOND_OLAS"]),
+        "cost_of_bond": max(1, int(trader_data.staking_variables["MIN_STAKING_BOND_OLAS"])),
     }
     service_manager = operate.service_manager()
     if len(service_manager.json) == 0:
@@ -281,7 +284,7 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         ocm.unstake(service_id=chain_config.chain_data.token, staking_contract=staking_contract)
         spinner.succeed("Service unstaked")
     else:
-        print(f"Service {chain_config.chain_data.token} is not staked or using no-staking program. Skipping unstaking.")
+        print(f"Service {chain_config.chain_data.token} is not staked. Skipping unstaking.")
 
     service_manager = operate.service_manager()
     if service_manager._get_on_chain_state(service=service, chain=service.home_chain) in (
@@ -331,6 +334,49 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.rawTransaction)
         ocm.ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
         spinner.succeed("Service transfered from master EOA to master safe")
+
+    assets_balances = get_assets_balances(
+        ledger_api=ocm.ledger_api,
+        asset_addresses={token[Chain.GNOSIS] for token in ERC20_TOKENS},
+        addresses={ocm.crypto.address}
+    )
+    for asset, balance in assets_balances[ocm.crypto.address].items():
+        if balance == 0:
+            continue
+
+        spinner = Halo(text=f"Transferring {balance} {asset} from master EOA to master safe...", spinner="dots").start()
+        erc20_contract = registry_contracts.erc20.get_instance(
+            ledger_api=ocm.ledger_api,
+            contract_address=asset,
+        )
+        tx = erc20_contract.functions.transfer(
+            wallet_manager.safes[Chain.GNOSIS],
+            balance,
+        ).build_transaction({
+            "from": ocm.crypto.address,
+            "nonce": ocm.ledger_api.api.eth.get_transaction_count(ocm.crypto.address),
+        })
+        signed_tx = ocm.ledger_api.api.eth.account.sign_transaction(tx, private_key=ocm.crypto.private_key)
+        tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.rawTransaction)
+        ocm.ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
+        spinner.succeed(f"{balance} {asset} transferred from master EOA to master safe.")
+
+    xdai_balance = get_asset_balance(
+        ledger_api=ocm.ledger_api,
+        asset_address=ZERO_ADDRESS,
+        address=ocm.crypto.address
+    )
+    gas_fund_requirements = CHAIN_TO_METADATA[Chain.GNOSIS.value]["gasFundReq"]
+    if xdai_balance > gas_fund_requirements:
+        transferable_amount = xdai_balance - gas_fund_requirements
+        spinner = Halo(text=f"Transferring {transferable_amount} xDAI from master EOA to master safe...", spinner="dots").start()
+        tx_hash = ocm.ledger_api.api.eth.send_transaction({
+            "from": ocm.crypto.address,
+            "to": wallet_manager.safes[Chain.GNOSIS],
+            "value": transferable_amount
+        })
+        ocm.ledger_api.api.eth.get_transaction(tx_hash)
+        spinner.succeed(f"{transferable_amount} XDAI transferred from master EOA to master safe.")
 
 
 def main() -> None:
