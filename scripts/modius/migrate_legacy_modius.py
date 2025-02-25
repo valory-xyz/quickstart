@@ -33,7 +33,8 @@ def parse_modius_config() -> ModiusConfig:
         "tenderly_access_key",
         "tenderly_account_slug", 
         "tenderly_project_slug",
-        "coingecko_api_key"
+        "coingecko_api_key",
+        "mode_rpc"
     ]
     validate_config_params(config, required_params)
     

@@ -5,11 +5,10 @@ from dataclasses import dataclass
 from operate.quickstart.run_service import QuickstartConfig
 from operate.operate_types import Chain
 from operate.quickstart.utils import print_section, print_title
-from scripts.utils import verify_password, validate_config_params
+from scripts.utils import validate_config_params
 
 OPTIMUS_PATH = Path(__file__).parent.parent.parent / ".optimus"
 OPERATE_HOME = Path(__file__).parent.parent.parent / ".operate"
-DATA_FILES = ("current_pool.json", "gas_costs.json", "assets.json")
 
 @dataclass
 class OptimusConfig:
@@ -34,7 +33,10 @@ def parse_optimus_config() -> OptimusConfig:
         "tenderly_access_key",
         "tenderly_account_slug", 
         "tenderly_project_slug",
-        "coingecko_api_key"
+        "coingecko_api_key",
+        "optimism_rpc",
+        "base_rpc",
+        "mode_rpc"
     ]
     validate_config_params(config, required_params)
     
@@ -44,20 +46,15 @@ def parse_optimus_config() -> OptimusConfig:
         Chain.BASE.value: config.get("base_rpc"),
         Chain.MODE.value: config.get("mode_rpc")
     }
-    # Remove any None values
-    rpc = {k: v for k, v in rpc_mapping.items() if v is not None}
-    
-    if not rpc:
-        raise ValueError("No valid RPC endpoints found in configuration")
     
     use_staking = config.get("use_staking", False)
     staking_program_id = "optimus_alpha" if use_staking else "no_staking"
     
     # Default to optimistic if available, otherwise first available chain
-    principal_chain = Chain.OPTIMISTIC.value if Chain.OPTIMISTIC.value in rpc else next(iter(rpc), Chain.OPTIMISTIC.value)
+    principal_chain = Chain.OPTIMISTIC.value if Chain.OPTIMISTIC.value in rpc_mapping else next(iter(rpc_mapping), Chain.OPTIMISTIC.value)
     
     return OptimusConfig(
-        rpc=rpc,
+        rpc=rpc_mapping,
         tenderly_access_key=config["tenderly_access_key"],
         tenderly_account_slug=config["tenderly_account_slug"],
         tenderly_project_slug=config["tenderly_project_slug"],

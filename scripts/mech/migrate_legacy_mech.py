@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from operate.quickstart.run_service import QuickstartConfig
 from operate.operate_types import Chain
 from operate.quickstart.utils import print_section, print_title
+from scripts.utils import validate_config_params
 
 MECH_PATH = Path(__file__).parent.parent.parent / ".mech_quickstart"
 OPERATE_HOME = Path(__file__).parent.parent.parent / ".operate"
@@ -58,6 +59,13 @@ def parse_mech_config() -> MechConfig:
     
     config_file = MECH_PATH / "local_config.json"
     config = json.loads(config_file.read_text())
+
+    # Validate required parameters
+    required_params = [
+        "gnosis_rpc",
+        "mech_type"
+    ]
+    validate_config_params(config, required_params)
     
     use_staking = config.get("use_staking", False)
     staking_program_id = "mech_marketplace" if use_staking else "no_staking"
