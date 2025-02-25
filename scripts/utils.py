@@ -19,7 +19,6 @@
 
 """This package contains utils for working with the staking contract."""
 
-import hashlib
 import json
 import sys
 from pathlib import Path
