@@ -302,7 +302,7 @@ If you just want to build the deployment without executing the service
 
 ## Participate on staking programs
 
-Follow these steps to enroll your agent into any staking program from this [list](ttps://govern.olas.network/contracts)
+Follow these steps to enroll your agent into any staking program from this [list](https://govern.olas.network/contracts)
 
 1. Choose no_staking the first time you execute `run_service.sh`
 2. Once the terminal asks funding a given account, stop the execution by hitting CTRL+C
