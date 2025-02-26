@@ -299,3 +299,13 @@ If you just want to build the deployment without executing the service
 ```bash
 ./run_service.sh <agent_config.json> --build-only
 ```
+
+## Participate on staking programs
+
+Follow these steps to enroll your agent into any staking program from this [list](ttps://govern.olas.network/contracts)
+
+1. Choose no_staking the first time you execute `run_service.sh`
+2. Once the terminal asks funding a given account, stop the execution by hitting CTRL+C
+3. Update the staking_program_id and principal_chain according to the file `.operate/local_config.json` based on [this mapping](https://github.com/valory-xyz/olas-operate-middleware/blob/7d791e5c3bfe2aae243fb7c780e3ce1441aa6867/operate/ledger/profiles.py#L80), you can see more details about each staking contract [here](https://govern.olas.network/contracts)
+4. Delete the folder .operate/services
+5. Restart the quickstart as usual
