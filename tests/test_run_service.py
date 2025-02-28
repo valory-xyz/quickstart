@@ -613,6 +613,7 @@ def get_base_config(config_path: str = "") -> dict:
     base_prompts = {
         r"Please input your password \(or press enter\)\:": base_config["TEST_PASSWORD"],
         r"Please confirm your password\:": base_config["TEST_PASSWORD"],
+        r"Enter local user account password \[hidden input\]\:": base_config["TEST_PASSWORD"],
         r"Enter your choice": base_config["STAKING_CHOICE"],
         r"Please input your backup owner \(leave empty to skip\)\:": base_config["BACKUP_WALLET"],
         r"Press enter to continue": "\n",
@@ -764,7 +765,7 @@ class BaseTestService:
     config_settings = None
     logger = None
     child = None
-    temp_dir = None
+    temp_dir = Path
     original_cwd = None
     temp_env = None
     _setup_complete = False
@@ -775,38 +776,7 @@ class BaseTestService:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         cls.log_file = Path(f'test_run_service_{timestamp}.log')
         cls.logger = setup_logging(cls.log_file)
-            
-        # Create temporary directory and store original path
-        cls.original_cwd = os.getcwd()
-        cls.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
-        cls.logger.info(f"Created temporary directory: {cls.temp_dir.name}")
         
-        # Define exclusion patterns
-        exclude_patterns = [
-            '.git',              # Git directory
-            '.pytest_cache',     # Pytest cache
-            '__pycache__',      # Python cache
-            '*.pyc',            # Python compiled files
-            'logs',             # Log files
-            '*.log',            # Log files
-            '.env'              # Environment files
-        ]
-        
-        def ignore_patterns(path, names):
-            return set(n for n in names if any(p in n or any(p.endswith(n) for p in exclude_patterns) for p in exclude_patterns))
-        
-        # Copy project files to temp directory
-        shutil.copytree(cls.original_cwd, cls.temp_dir.name, dirs_exist_ok=True, ignore=ignore_patterns)
-        
-        # Copy .git directory if it exists
-        git_dir = Path(cls.original_cwd) / '.git'
-        if git_dir.exists():
-            shutil.copytree(git_dir, Path(cls.temp_dir.name) / '.git', symlinks=True)    
-            
-        # Switch to temporary directory
-        os.chdir(cls.temp_dir.name)
-        cls.logger.info(f"Changed working directory to: {cls.temp_dir.name}")
-
         # Handle memeooorr config modifications if needed
         if "memeooorr" in cls.config_path.lower():
             temp_config_path = os.path.join(cls.temp_dir.name, 'configs', os.path.basename(cls.config_path))
@@ -904,12 +874,6 @@ class BaseTestService:
             except Exception as e:
                 cls.logger.error(f"Error stopping service: {str(e)}")
             
-            # Clean up resources
-            os.chdir(cls.original_cwd)
-            if cls.temp_dir:
-                temp_dir_path = cls.temp_dir.name
-                cleanup_directory(temp_dir_path, cls.logger)
-            cls.logger.info("Cleanup completed")
             cls._setup_complete = False
             
         except Exception as e:
@@ -991,7 +955,6 @@ class BaseTestService:
             cwd=stop_dir  # Explicitly set working directory for stop_service
         )
         process.expect(pexpect.EOF)
-        time.sleep(0)
 
     def test_health_check(self):
         """Test service health endpoint"""
@@ -1022,45 +985,44 @@ class TestAgentService:
     """Test class that runs tests for all configs."""
     
     logger = setup_logging(Path(f'test_run_service_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
+    temp_dir = None
+
+    def setup_class(self):
+        """Setup for class-level tests."""
+        # Create a temporary directory for stop_service
+        self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
+        
+        # Copy necessary files to temp directory
+        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True, 
+                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__', 
+                                                '*.pyc', 'logs', '*.log', '.env'))
+
+        os.chdir(self.temp_dir.name)
+        self.logger.info(f"Changed working directory to: {self.temp_dir.name}")
 
     @pytest.fixture(autouse=True)
     def setup(self, request):
         """Setup for each test case."""
         config_path = request.param
-        temp_dir = None
 
         try:
-            # Create a temporary directory for stop_service
-            temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
-            
-            # Copy necessary files to temp directory
-            shutil.copytree('.', temp_dir.name, dirs_exist_ok=True, 
-                            ignore=shutil.ignore_patterns('.git', '.pytest_cache', '__pycache__', 
-                                                    '*.pyc', 'logs', '*.log', '.env'))
-            
             # First ensure any existing service is stopped
-            if not ensure_service_stopped(config_path, temp_dir.name, self.logger):
+            if not ensure_service_stopped(config_path, self.temp_dir.name, self.logger):
                 raise RuntimeError("Failed to stop existing service")
-            
+
             self.test_class = type(
                 f'TestService_{Path(config_path).stem}',
                 (BaseTestService,),
-                {'config_path': config_path}
+                {'config_path': config_path, 'temp_dir': self.temp_dir}
             )
             self.test_class.setup_class()
+
             yield
             if self.test_class._setup_complete:
                 self.test_class.teardown_class()
                 
         finally:
-            # Clean up the temporary directory
-            if temp_dir:
-                temp_dir_path = temp_dir.name
-                try:
-                    temp_dir.cleanup()
-                except Exception:
-                    self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
-                    cleanup_directory(temp_dir_path, self.logger)
+            pass
 
     @pytest.mark.parametrize('setup', get_config_files(), indirect=True, ids=lambda x: Path(x).stem)
     def test_agent_full_suite(self, setup):
@@ -1072,6 +1034,18 @@ class TestAgentService:
         
         # Run shutdown logs test
         test_instance.test_shutdown_logs()
+
+    def teardown_class(self):
+        # Clean up the temporary directory
+        if self.temp_dir:
+            temp_dir_path = self.temp_dir.name
+            try:
+                self.logger.info("Cleaning up temporary directory...")
+                cleanup_directory(temp_dir_path, self.logger)
+            except Exception:
+                self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
+                cleanup_directory(temp_dir_path, self.logger)
+
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__, "-s", "--log-cli-level=INFO"])
