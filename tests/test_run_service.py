@@ -13,15 +13,15 @@ import tempfile
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from termcolor import colored
 from colorama import init
 from web3 import Web3
-from eth_account import Account
 import requests
 import docker
 from dotenv import load_dotenv
-from operate.constants import HEALTH_CHECK_URL
+from operate.cli import OperateApp
+from operate.constants import HEALTH_CHECK_URL, OPERATE
 from operate.operate_types import Chain, LedgerType
 
 
@@ -777,6 +777,7 @@ class BaseTestService:
     original_cwd = None
     temp_env = None
     _setup_complete = False
+    operate: OperateApp
 
     @classmethod
     def setup_class(cls):
@@ -853,6 +854,7 @@ class BaseTestService:
         # Load config specific settings
         cls.config_settings = get_config_specific_settings(cls.config_path)
         cls.logger.info(f"Loaded settings for config: {cls.config_path}")
+        cls.operate = OperateApp(logger=cls.logger, home=Path(cls.temp_dir.name) / OPERATE)
         
         # Start the service
         cls.start_service()
@@ -980,6 +982,7 @@ class BaseTestService:
                     container_name = service_config["container_name"]
                     raise Exception(f"{container_name} containers failed to start")
                     
+            cls.operate.password = os.getenv('TEST_PASSWORD', 'test_secret')
         except Exception as e:
             cls.logger.error(f"Service start failed: {str(e)}")
             raise
@@ -1011,26 +1014,36 @@ class BaseTestService:
             
     def test_shutdown_logs(self):
         """Test service shutdown logs"""
-        try:
-            self.logger.info("Testing shutdown logs...")
-            self.stop_service()
-            time.sleep(CONTAINER_STOP_WAIT)
-            
-            client = docker.from_env()
-            service_config = get_service_config(self.config_path)
-            container_name = service_config["container_name"]
-            
-            containers = client.containers.list(filters={"name": container_name})
-            assert len(containers) == 0, f"Containers with name {container_name} are still running"
-            assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
-        finally:
-            if self._setup_complete:
-                self.teardown_class()
+        self.logger.info("Testing shutdown logs...")
+        self.stop_service()
+        time.sleep(CONTAINER_STOP_WAIT)
+        
+        client = docker.from_env()
+        service_config = get_service_config(self.config_path)
+        container_name = service_config["container_name"]
+        
+        containers = client.containers.list(filters={"name": container_name})
+        assert len(containers) == 0, f"Containers with name {container_name} are still running"
+        assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
 
-class TestAgentService:
-    """Test class that runs tests for all configs."""
-    
-    logger = setup_logging(Path(f'test_run_service_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
+class TempDirMixin:
+    """Mixin to set up and clean up a temporary directory for tests."""
+    logger: logging.Logger
+    get_test_class: Callable[[str, str], BaseTestService]
+    temp_dir: tempfile.TemporaryDirectory
+
+    def setup_class(self):
+        """Setup for class-level tests."""
+        # Create a temporary directory for stop_service
+        self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
+        
+        # Copy necessary files to temp directory
+        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True, 
+                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__', 
+                                                '*.pyc', 'logs', '*.log', '.env'))
+
+        os.chdir(self.temp_dir.name)
+        self.logger.info(f"Changed working directory to: {self.temp_dir.name}")
 
     @pytest.fixture(autouse=True)
     def setup(self, request):
@@ -1050,12 +1063,8 @@ class TestAgentService:
             # First ensure any existing service is stopped
             if not ensure_service_stopped(config_path, temp_dir.name, self.logger):
                 raise RuntimeError("Failed to stop existing service")
-            
-            self.test_class = type(
-                f'TestService_{Path(config_path).stem}',
-                (BaseTestService,),
-                {'config_path': config_path}
-            )
+
+            self.test_class = self.get_test_class(config_path, self.temp_dir)
             self.test_class.setup_class()
             yield
             if self.test_class._setup_complete:
@@ -1070,6 +1079,27 @@ class TestAgentService:
                 except Exception:
                     self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
                     cleanup_directory(temp_dir_path, self.logger)
+
+    def teardown_class(self):
+        # Clean up the temporary directory
+        if self.temp_dir:
+            temp_dir_path = self.temp_dir.name
+            try:
+                self.logger.info("Cleaning up temporary directory...")
+                cleanup_directory(temp_dir_path, self.logger)
+            except Exception:
+                self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
+                cleanup_directory(temp_dir_path, self.logger)
+
+
+class TestAgentService(TempDirMixin):
+    """Test class that runs tests for all configs."""
+    logger = setup_logging(Path(f'test_run_service_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
+    get_test_class = lambda _, config_path, temp_dir: type(
+        f'TestService_{Path(config_path).stem}',
+        (BaseTestService,),
+        {'config_path': config_path, 'temp_dir': temp_dir}
+    )
 
     @pytest.mark.parametrize('setup', get_config_files(), indirect=True, ids=lambda x: Path(x).stem)
     def test_agent_full_suite(self, setup):

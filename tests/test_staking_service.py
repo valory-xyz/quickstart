@@ -6,32 +6,26 @@ import os
 import json
 import time
 import pytest
-import tempfile
-import shutil
-import typing as t
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import List, Dict
 import requests
-import docker
 from operate.services.protocol import StakingState
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain, LedgerType
 from operate.wallet.master import MasterWalletManager
 # Import from existing test script
 from test_run_service import (
-    cleanup_directory,
+    TempDirMixin,
     create_funding_handler,
     create_token_funding_handler,
     get_config_specific_settings,
     setup_logging,
     get_config_files,
-    get_service_config,
-    ensure_service_stopped,
     BaseTestService,
     STARTUP_WAIT,
-    CONTAINER_STOP_WAIT
 )
 
 def get_included_test_configs() -> List[str]:
@@ -98,126 +92,6 @@ class StakingOptionParser:
         return str(selected['number'])
 
 
-class StakingStatusChecker:
-    """Simplified checker for verifying staking status."""
-    
-    def __init__(self, config_path: str, logger: logging.Logger):
-        """Initialize checker with config and logger."""
-        self.logger = logger
-        self.config_path = Path(config_path)
-        
-        # Load config
-        with open(self.config_path) as f:
-            self.config = json.load(f)
-        
-        # Setup chain
-        self.chain_name = self.config.get("home_chain", "gnosis")
-        self.chain = Chain[self.chain_name.upper()]
-        
-        # Setup wallet
-        operate_dir = Path(os.getcwd()) / ".operate"
-        keys_dir = operate_dir / "keys"
-        
-        if not keys_dir.exists():
-            raise RuntimeError(f"Keys directory not found at {keys_dir}")
-        
-        # Get RPC URL from local config
-        rpc_url = self._get_rpc_url(operate_dir)
-        
-        # Initialize wallet and ledger
-        self.wallet_manager = MasterWalletManager(
-            path=keys_dir,
-            password=os.getenv("MASTER_WALLET_PASSWORD", "DUMMY_PWD"),
-            logger=self.logger
-        ).setup()
-        
-        self.master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
-        self.ledger_api = self.master_wallet.ledger_api(chain=self.chain, rpc=rpc_url)
-        
-        # Initialize staking contract
-        self.staking_contract = StakingTokenContract.from_dir(
-            str(DATA_DIR / "contracts" / "staking_token")
-        )
-    
-    def _get_rpc_url(self, operate_dir: Path) -> Optional[str]:
-        """Get RPC URL from local config."""
-        try:
-            with open(operate_dir / "local_config.json") as f:
-                local_config = json.load(f)
-                return local_config.get("rpc", {}).get(self.chain_name)
-        except Exception as e:
-            self.logger.error(f"Failed to load RPC URL: {e}")
-            return None
-            
-    def check_staking_status(self, service_id: int, staking_address: str) -> bool:
-        """Check if service is properly staked."""
-        try:
-            # Get staking state using ledger API
-            state = StakingState(
-                self.staking_contract.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_address,
-                )
-                .functions.getStakingState(service_id)
-                .call()
-            )
-            
-            self.logger.info(f"Staking state for service {service_id}: {state}")
-            return state == StakingState.STAKED
-            
-        except Exception as e:
-            self.logger.error(f"Failed to check staking status: {e}")
-            return False
-
-    def verify_service_staking(self) -> bool:
-        """Verify staking status for the current service."""
-        try:
-            # Get runtime config
-            services_dir = Path(os.getcwd()) / ".operate" / "services"
-            runtime_config = None
-            
-            for service_dir in services_dir.iterdir():
-                config_file = service_dir / "config.json"
-                if config_file.exists():
-                    with open(config_file) as f:
-                        runtime_config = json.load(f)
-                    break
-            
-            if not runtime_config:
-                self.logger.error("No runtime config found")
-                return False
-            
-            # Get chain data
-            chain_name = runtime_config.get("home_chain", "gnosis")
-            chain_data = runtime_config.get("chain_configs", {}).get(chain_name, {}).get("chain_data", {})
-            
-            # Get service token and staking program
-            service_token = chain_data.get("token")
-            staking_program_id = chain_data.get("user_params", {}).get("staking_program_id")
-            
-            if not service_token:
-                self.logger.error("Service token not found")
-                return False
-                
-            if not staking_program_id or staking_program_id == "no_staking":
-                self.logger.info("Service does not require staking")
-                return True
-            
-            # Get staking contract address
-            staking_address = self.config.get("staking_programs", {}).get(staking_program_id)
-            if not staking_address:
-                self.logger.error(f"Staking contract not found for program: {staking_program_id}")
-                return False
-            
-            # Check staking status
-            self.logger.info(f"Checking staking for token {service_token} on program {staking_program_id}")
-            return self.check_staking_status(service_token, staking_address)
-            
-        except Exception as e:
-            self.logger.error(f"Error verifying service staking: {e}")
-            return False
-        
-        
 class StakingBaseTestService(BaseTestService):
     """Extended base test service with staking-specific configuration."""
 
@@ -252,8 +126,17 @@ class StakingBaseTestService(BaseTestService):
             bool: True if staking verification passes, False otherwise
         """
         try:
-            checker = StakingStatusChecker(self.config_path, self.logger)
-            return checker.verify_service_staking()
+            manager = self.operate.service_manager()
+            service = manager.json[0]
+            service = manager.load(service_config_id=service["service_config_id"])
+            chain_config = service.chain_configs[service.home_chain]
+            sftxb = manager.get_eth_safe_tx_builder(
+                ledger_config=chain_config.ledger_config
+            )
+            return sftxb.staking_status(
+                service_id=chain_config.chain_data.token,
+                staking_contract=STAKING[Chain.from_string(service.home_chain)][chain_config.chain_data.user_params.staking_program_id]
+            ) == StakingState.STAKED
         except Exception as e:
             self.logger.error(f"Error in staking verification: {e}")
             return False    
@@ -303,37 +186,6 @@ class StakingBaseTestService(BaseTestService):
         
         # Now set setup complete
         cls._setup_complete = True
-
-    def assert_service_stopped(self):
-        """Assert that all service containers are stopped and removed."""
-        try:
-            self.logger.info("Verifying service is fully stopped...")
-            self.stop_service()
-            time.sleep(CONTAINER_STOP_WAIT)
-            
-            # Verify containers are stopped
-            client = docker.from_env()
-            service_config = get_service_config(self.config_path)
-            container_name = service_config["container_name"]
-            
-            # Check for any containers with this name
-            containers = client.containers.list(
-                all=True,  # Include stopped containers
-                filters={"name": container_name}
-            )
-            
-            if containers:
-                self.logger.error(f"Found {len(containers)} containers that should be stopped:")
-                for container in containers:
-                    self.logger.error(f"Container {container.name} - Status: {container.status}")
-                assert False, f"Service containers for {container_name} still exist"
-                
-            self.logger.info("Service successfully stopped and containers removed")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error checking stopped service: {str(e)}")
-            raise
 
     def fast_forward_time(self, seconds: int = 86400*3):
         """
@@ -507,57 +359,20 @@ class StakingBaseTestService(BaseTestService):
             raise
 
 
-class TestAgentStaking:
+class TestAgentStaking(TempDirMixin):
     """Test class for staking-specific tests."""
     
     logger = setup_logging(Path(f'test_staking_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
-
-    @pytest.fixture(autouse=True)
-    def setup(self, request):
-        """Setup with staking-specific configuration."""
-        # Set environment variable for wallet password
-        os.environ["MASTER_WALLET_PASSWORD"] = "DUMMY_PWD"
-        config_path = request.param
-        temp_dir = None
-
-        try:
-            temp_dir = tempfile.TemporaryDirectory(prefix='staking_test_')
-            shutil.copytree('.', temp_dir.name, dirs_exist_ok=True, 
-                          ignore=shutil.ignore_patterns('.git', '.pytest_cache', '__pycache__', 
-                                                      '*.pyc', 'logs', '*.log', '.env'))
-            
-            if not ensure_service_stopped(config_path, temp_dir.name, self.logger):
-                raise RuntimeError("Failed to stop existing service")
-            
-            # Create test class with staking-specific base
-            self.test_class = type(
-                f'TestStakingService_{Path(config_path).stem}',
-                (StakingBaseTestService,),  # Use our staking-specific base
-                {
-                    'config_path': config_path,
-                }
-            )
-            
-            self.test_class.setup_class()
-            yield
-            
-            if self.test_class._setup_complete:
-                self.test_class.teardown_class()
-                
-        finally:
-            if temp_dir:
-                temp_dir_path = temp_dir.name
-                try:
-                    temp_dir.cleanup()
-                except Exception:
-                    self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
-                    cleanup_directory(temp_dir_path, self.logger)
+    get_test_class = lambda _, config_path, temp_dir: type(
+        f'TestStakingService_{Path(config_path).stem}',
+        (StakingBaseTestService,),  # Use our staking-specific base
+        {'config_path': config_path, 'temp_dir': temp_dir}
+    )
 
     @pytest.mark.parametrize(
         'setup',
         get_included_test_configs(),
         indirect=True,
-        ids=lambda x: Path(x).stem
     )
     def test_agent_staking(self, setup):
         """Run staking-specific tests."""
@@ -570,7 +385,7 @@ class TestAgentStaking:
         assert test_instance.verify_staking(), "Staking verification failed after service running"
 
         # Stop the service and verify it's stopped
-        assert test_instance.assert_service_stopped(), "Service stoppage failed"
+        test_instance.test_shutdown_logs(), "Service stoppage failed"
 
         # Fast-forward ledger time by 72 hours
         assert test_instance.fast_forward_time(), "Fast-forwading time failed"
@@ -581,8 +396,5 @@ class TestAgentStaking:
         # Verify staking status after service is terminated and unstaked
         assert not test_instance.verify_staking(), "Staking verification failed after termination"
         
-        # Run shutdown logs test
-        test_instance.test_shutdown_logs()
-
 if __name__ == "__main__":
     pytest.main(["-v", __file__, "-s", "--log-cli-level=INFO"])
