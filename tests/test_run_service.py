@@ -13,15 +13,15 @@ import tempfile
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from termcolor import colored
 from colorama import init
 from web3 import Web3
-from eth_account import Account
 import requests
 import docker
 from dotenv import load_dotenv
-from operate.constants import HEALTH_CHECK_URL
+from operate.cli import OperateApp
+from operate.constants import HEALTH_CHECK_URL, OPERATE
 from operate.operate_types import Chain, LedgerType
 
 
@@ -266,12 +266,22 @@ def get_token_config():
                 "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
                 "decimals": 6
             }
+        },
+        "gnosis":{
+            "USDC": {
+                "address": "0xd988097fb8612cc24eeC14542bC03424c656005f",
+                "decimals": 6
+            },
+            "OLAS": {
+                "address": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "decimals": 18
+            }
         }
     }
 
 def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for ERC20 tokens."""
-    pattern = r"\[(optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) (0x[a-fA-F0-9]{40}) has at least ([0-9.]+) ([A-Z]+)"
+    pattern = r"\[(optimistic|base|mode|gnosis)\].*Please make sure Master (?:EOA|Safe) (0x[a-fA-F0-9]{40}) has at least ([0-9.]+) ([A-Z]+)"
     match = re.search(pattern, output)
     if match:
         chain = match.group(1)
@@ -283,7 +293,8 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
         chain_map = {
             "optimistic": "optimism",
             "base": "base",
-            "mode": "mode"
+            "mode": "mode",
+            "gnosis":"gnosis"
         }
         chain_key = chain_map.get(chain, "mode")  # Default to mode if chain not found
         
@@ -387,10 +398,6 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, con
                     token_name = "ETH" if chain.ledger_type == LedgerType.ETHEREUM else "xDAI"
                     
                     logger.info(f"Successfully funded {required_amount} {token_name} to {wallet_type} {wallet_address}")
-
-                    if "optimus" in config_type.lower():
-                        logger.info("Adding additional delay for Optimus safe creation...")
-                        time.sleep(5)
 
                     new_balance = w3.eth.get_balance(wallet_address)
                     logger.info(f"New balance: {w3.from_wei(new_balance, 'ether')} {token_name}")
@@ -715,7 +722,9 @@ def get_config_specific_settings(config_path: str) -> dict:
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger)
+                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger),
+            r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+                lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
     return {"prompts": prompts}
@@ -769,6 +778,7 @@ class BaseTestService:
     original_cwd = None
     temp_env = None
     _setup_complete = False
+    operate: OperateApp
 
     @classmethod
     def setup_class(cls):
@@ -814,6 +824,7 @@ class BaseTestService:
         # Load config specific settings
         cls.config_settings = get_config_specific_settings(cls.config_path)
         cls.logger.info(f"Loaded settings for config: {cls.config_path}")
+        cls.operate = OperateApp(logger=cls.logger, home=Path(cls.temp_dir.name) / OPERATE)
         
         # Start the service
         cls.start_service()
@@ -935,6 +946,7 @@ class BaseTestService:
                     container_name = service_config["container_name"]
                     raise Exception(f"{container_name} containers failed to start")
                     
+            cls.operate.password = os.getenv('TEST_PASSWORD', 'test_secret')
         except Exception as e:
             cls.logger.error(f"Service start failed: {str(e)}")
             raise
@@ -965,27 +977,23 @@ class BaseTestService:
             
     def test_shutdown_logs(self):
         """Test service shutdown logs"""
-        try:
-            self.logger.info("Testing shutdown logs...")
-            self.stop_service()
-            time.sleep(CONTAINER_STOP_WAIT)
-            
-            client = docker.from_env()
-            service_config = get_service_config(self.config_path)
-            container_name = service_config["container_name"]
-            
-            containers = client.containers.list(filters={"name": container_name})
-            assert len(containers) == 0, f"Containers with name {container_name} are still running"
-            assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
-        finally:
-            if self._setup_complete:
-                self.teardown_class()
+        self.logger.info("Testing shutdown logs...")
+        self.stop_service()
+        time.sleep(CONTAINER_STOP_WAIT)
+        
+        client = docker.from_env()
+        service_config = get_service_config(self.config_path)
+        container_name = service_config["container_name"]
+        
+        containers = client.containers.list(filters={"name": container_name})
+        assert len(containers) == 0, f"Containers with name {container_name} are still running"
+        assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
 
-class TestAgentService:
-    """Test class that runs tests for all configs."""
-    
-    logger = setup_logging(Path(f'test_run_service_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
-    temp_dir = None
+class TempDirMixin:
+    """Mixin to set up and clean up a temporary directory for tests."""
+    logger: logging.Logger
+    get_test_class: Callable[[str, str], BaseTestService]
+    temp_dir: tempfile.TemporaryDirectory
 
     def setup_class(self):
         """Setup for class-level tests."""
@@ -1010,11 +1018,7 @@ class TestAgentService:
             if not ensure_service_stopped(config_path, self.temp_dir.name, self.logger):
                 raise RuntimeError("Failed to stop existing service")
 
-            self.test_class = type(
-                f'TestService_{Path(config_path).stem}',
-                (BaseTestService,),
-                {'config_path': config_path, 'temp_dir': self.temp_dir}
-            )
+            self.test_class = self.get_test_class(config_path, self.temp_dir)
             self.test_class.setup_class()
 
             yield
@@ -1023,6 +1027,27 @@ class TestAgentService:
                 
         finally:
             pass
+
+    def teardown_class(self):
+        # Clean up the temporary directory
+        if self.temp_dir:
+            temp_dir_path = self.temp_dir.name
+            try:
+                self.logger.info("Cleaning up temporary directory...")
+                cleanup_directory(temp_dir_path, self.logger)
+            except Exception:
+                self.logger.warning("Built-in cleanup failed, trying custom cleanup...")
+                cleanup_directory(temp_dir_path, self.logger)
+
+
+class TestAgentService(TempDirMixin):
+    """Test class that runs tests for all configs."""
+    logger = setup_logging(Path(f'test_run_service_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'))
+    get_test_class = lambda _, config_path, temp_dir: type(
+        f'TestService_{Path(config_path).stem}',
+        (BaseTestService,),
+        {'config_path': config_path, 'temp_dir': temp_dir}
+    )
 
     @pytest.mark.parametrize('setup', get_config_files(), indirect=True, ids=lambda x: Path(x).stem)
     def test_agent_full_suite(self, setup):
