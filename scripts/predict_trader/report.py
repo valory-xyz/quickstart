@@ -56,7 +56,7 @@ from operate.constants import (
 )
 from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain
-from operate.quickstart.run_service import load_local_config
+from operate.quickstart.run_service import load_local_config, NO_STAKING_PROGRAM_ID
 from scripts.utils import get_service_from_config
 
 SCRIPT_PATH = Path(__file__).resolve().parent
@@ -232,6 +232,7 @@ if __name__ == "__main__":
     service = get_service_from_config(template_path)
     chain_config = service.chain_configs["gnosis"]
     agent_address = service.keys[0].address
+    master_eoa = operator_wallet_data["address"]
     if "safes" in operator_wallet_data and "gnosis" in operator_wallet_data["safes"]:
         operator_address = operator_wallet_data["safes"]["gnosis"]
     else:
@@ -262,24 +263,29 @@ if __name__ == "__main__":
     try:
         w3 = Web3(HTTPProvider(rpc))
 
-        staking_token_address = STAKING[Chain.GNOSIS][config.staking_program_id]
-        staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
+        if config.staking_program_id is None or config.staking_program_id == NO_STAKING_PROGRAM_ID:
+            is_staked = False
+            staking_state = StakingState.UNSTAKED
+        else:
+            staking_token_address = STAKING[Chain.GNOSIS][config.staking_program_id]
+            staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
 
-        staking_token_abi = staking_token_data.get("abi", [])
-        staking_token_contract = w3.eth.contract(
-            address=staking_token_address, abi=staking_token_abi  # type: ignore
-        )
+            staking_token_abi = staking_token_data.get("abi", [])
+            staking_token_contract = w3.eth.contract(
+                address=staking_token_address, abi=staking_token_abi  # type: ignore
+            )
 
-        staking_state = StakingState(
-            staking_token_contract.functions.getStakingState(
-                service_id
-            ).call()
-        )
+            staking_state = StakingState(
+                staking_token_contract.functions.getStakingState(
+                    service_id
+                ).call()
+            )
 
-        is_staked = (
-            staking_state == StakingState.STAKED
-            or staking_state == StakingState.EVICTED
-        )
+            is_staked = (
+                staking_state == StakingState.STAKED
+                or staking_state == StakingState.EVICTED
+            )
+
         _print_status("Is service staked?", _color_bool(is_staked, "Yes", "No"))
         is_mm_staking = "mech_marketplace" in config.staking_program_id
         if is_staked:
@@ -437,12 +443,21 @@ if __name__ == "__main__":
     _print_status("xDAI Balance", wei_to_xdai(safe_xdai))
     _print_status("WxDAI Balance", wei_to_wxdai(safe_wxdai))
 
-    # Owner/Operator
+    # Master Safe - Agent Owner/Operator
     operator_xdai = get_balance(operator_address, rpc)
-    _print_subsection_header("Owner/Operator")
+    _print_subsection_header("Master Safe - Agent Owner/Operator")
     _print_status("Address", operator_address)
     _print_status(
         "xDAI Balance",
         f"{wei_to_xdai(operator_xdai)} {_warning_message(operator_xdai, OPERATOR_XDAI_BALANCE_THRESHOLD)}",
+    )
+
+    # Master EOA - Master Safe Owner
+    master_eoa_xdai = get_balance(master_eoa, rpc)
+    _print_subsection_header("Master EOA - Master Safe Owner")
+    _print_status("Address", master_eoa)
+    _print_status(
+        "xDAI Balance",
+        f"{wei_to_xdai(master_eoa_xdai)} {_warning_message(master_eoa_xdai, OPERATOR_XDAI_BALANCE_THRESHOLD)}",
     )
     print("")
