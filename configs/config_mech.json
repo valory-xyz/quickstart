@@ -39,10 +39,10 @@
             "provision_type": "computed"
         },
         "MECH_MARKETPLACE_ADDRESS": {
-            "name": "Mech marketplace address",
-            "description": "",
-            "value": "0x4554fE75c1f5576c1d7F765B2A036c199Adae329",
-            "provision_type": "fixed"
+            "name": "Mech Marketplace address",
+            "description": "The contract address of the mech marketplace, where your mech should be created. Supported addresses: 0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB or 0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
+            "value": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
+            "provision_type": "user"
         },
         "API_KEYS": {
             "name": "API keys",
