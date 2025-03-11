@@ -46,6 +46,7 @@ from scripts.predict_trader.trades import (
     wei_to_xdai,
 )
 from web3 import HTTPProvider, Web3
+from web3.exceptions import ContractLogicError
 
 from operate.constants import (
     OPERATE_HOME,
@@ -54,7 +55,8 @@ from operate.constants import (
     MECH_ACTIVITY_CHECKER_JSON_URL,
     MECH_CONTRACT_JSON_URL,
 )
-from operate.ledger.profiles import STAKING
+from operate.cli import OperateApp
+from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
 from scripts.utils import get_service_from_config
@@ -228,8 +230,9 @@ if __name__ == "__main__":
         operator_wallet_data = json.load(file)
 
     template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
-    config = load_local_config()
+    operate = OperateApp()
     service = get_service_from_config(template_path)
+    config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
     agent_address = service.keys[0].address
     if "safes" in operator_wallet_data and "gnosis" in operator_wallet_data["safes"]:
@@ -262,26 +265,33 @@ if __name__ == "__main__":
     try:
         w3 = Web3(HTTPProvider(rpc))
 
-        staking_token_address = STAKING[Chain.GNOSIS][config.staking_program_id]
-        staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
-
-        staking_token_abi = staking_token_data.get("abi", [])
-        staking_token_contract = w3.eth.contract(
-            address=staking_token_address, abi=staking_token_abi  # type: ignore
+        staking_token_address = get_staking_contract(
+            chain=Chain.GNOSIS.value,
+            staking_program_id=config.staking_program_id,
         )
+        if staking_token_address is None:
+            is_staked = False
+            staking_state = StakingState.UNSTAKED
+        else:
+            staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
 
-        staking_state = StakingState(
-            staking_token_contract.functions.getStakingState(
-                service_id
-            ).call()
-        )
+            staking_token_abi = staking_token_data.get("abi", [])
+            staking_token_contract = w3.eth.contract(
+                address=staking_token_address, abi=staking_token_abi  # type: ignore
+            )
 
-        is_staked = (
-            staking_state == StakingState.STAKED
-            or staking_state == StakingState.EVICTED
-        )
+            staking_state = StakingState(
+                staking_token_contract.functions.getStakingState(
+                    service_id
+                ).call()
+            )
+
+            is_staked = (
+                staking_state == StakingState.STAKED
+                or staking_state == StakingState.EVICTED
+            )
+
         _print_status("Is service staked?", _color_bool(is_staked, "Yes", "No"))
-        is_mm_staking = "mech_marketplace" in config.staking_program_id
         if is_staked:
             _print_status("Staking program", config.staking_program_id)  # type: ignore
         if staking_state == StakingState.STAKED:
@@ -311,14 +321,14 @@ if __name__ == "__main__":
                 abi=service_registry_token_utility_abi,
             )
 
-            if is_mm_staking:
+            try:
                 activity_checker_data = requests.get(MECH_CONTRACT_JSON_URL).json()
                 activity_checker_abi = activity_checker_data.get("abi", [])
                 mm_activity_checker_contract = w3.eth.contract(
                     address=activity_checker_address, abi=activity_checker_abi  # type: ignore
                 )
                 mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call()
-            else:
+            except ContractLogicError:
                 mech_contract_address = activity_checker_contract.functions.agentMech().call()
 
             mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
