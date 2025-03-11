@@ -58,7 +58,7 @@ from operate.constants import (
 from operate.cli import OperateApp
 from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import Chain
-from operate.quickstart.run_service import load_local_config
+from operate.quickstart.run_service import load_local_config, NO_STAKING_PROGRAM_ID
 from scripts.utils import get_service_from_config
 
 SCRIPT_PATH = Path(__file__).resolve().parent
@@ -235,6 +235,7 @@ if __name__ == "__main__":
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
     agent_address = service.keys[0].address
+    master_eoa = operator_wallet_data["address"]
     if "safes" in operator_wallet_data and "gnosis" in operator_wallet_data["safes"]:
         operator_address = operator_wallet_data["safes"]["gnosis"]
     else:
@@ -447,12 +448,21 @@ if __name__ == "__main__":
     _print_status("xDAI Balance", wei_to_xdai(safe_xdai))
     _print_status("WxDAI Balance", wei_to_wxdai(safe_wxdai))
 
-    # Owner/Operator
+    # Master Safe - Agent Owner/Operator
     operator_xdai = get_balance(operator_address, rpc)
-    _print_subsection_header("Owner/Operator")
+    _print_subsection_header("Master Safe - Agent Owner/Operator")
     _print_status("Address", operator_address)
     _print_status(
         "xDAI Balance",
         f"{wei_to_xdai(operator_xdai)} {_warning_message(operator_xdai, OPERATOR_XDAI_BALANCE_THRESHOLD)}",
+    )
+
+    # Master EOA - Master Safe Owner
+    master_eoa_xdai = get_balance(master_eoa, rpc)
+    _print_subsection_header("Master EOA - Master Safe Owner")
+    _print_status("Address", master_eoa)
+    _print_status(
+        "xDAI Balance",
+        f"{wei_to_xdai(master_eoa_xdai)} {_warning_message(master_eoa_xdai, OPERATOR_XDAI_BALANCE_THRESHOLD)}",
     )
     print("")
