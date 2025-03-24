@@ -51,5 +51,5 @@ def get_service_from_config(config_path: Path) -> Service:
     
     operate = OperateApp()
     manager = operate.service_manager()
-    configure_local_config(template)
+    configure_local_config(template, operate)
     return get_service(manager, template)

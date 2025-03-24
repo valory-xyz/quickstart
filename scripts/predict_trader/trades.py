@@ -31,6 +31,7 @@ from pathlib import Path
 from string import Template
 from typing import Any, Dict, Optional
 
+from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
 from scripts.predict_trader.mech_events import get_mech_requests
@@ -850,7 +851,10 @@ def get_mech_statistics(mech_requests: Dict[str, Any]) -> Dict[str, Dict[str, in
 if __name__ == "__main__":
     user_args = _parse_args()
 
-    config = load_local_config()
+    template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+    operate = OperateApp()
+    service = get_service_from_config(template_path)
+    config = load_local_config(operate, service.name)
     rpc = config.rpc[Chain.GNOSIS.value]
 
     mech_requests = get_mech_requests(
