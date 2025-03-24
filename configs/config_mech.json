@@ -1,9 +1,9 @@
 {
-    "name": "Mech",
-    "hash": "bafybeig544gw6i7ahlwj6d64djlwfltjuznz3p66kmwk4m6bzqtn2bjfbq",
+    "name": "Mech Predict",
+    "hash": "bafybeicgz3pyfzqna73nnn64t6p5mlp6j65eurvf2bux2rmpp4dmwdj2hm",
     "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-    "service_version": "v0.1.0",
+    "service_version": "v0.3.1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -80,8 +80,14 @@
             "value": "{\"openai-gpt-3.5-turbo-instruct\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-3.5-turbo\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-4\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\"}",
             "provision_type": "fixed"
         },
-        "GNOSIS_RPC_0": {
-            "name": "Gnosis RPC 0",
+        "ETHEREUM_LEDGER_RPC_0": {
+            "name": "Ethereum ledger RPC 0",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "GNOSIS_LEDGER_RPC_0": {
+            "name": "Gnosis ledger RPC 0",
             "description": "",
             "value": "",
             "provision_type": "computed"

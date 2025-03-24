@@ -2227,52 +2227,48 @@ nicer-shell = ["ipython"]
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.2.3"
+version = "0.2.6"
 description = ""
 optional = false
 python-versions = "<3.12,>=3.9"
-files = []
-develop = false
+files = [
+    {file = "olas_operate_middleware-0.2.6-py3-none-any.whl", hash = "sha256:7540018297b8a075b0b4852ac75dc791a13fadcf8d9ed463d0135ee696f6e961"},
+    {file = "olas_operate_middleware-0.2.6.tar.gz", hash = "sha256:babebc932dd081422d0c9ca70c59535fdfb19da117bc3cf20057ea548a62f52b"},
+]
 
 [package.dependencies]
 aiohttp = "3.9.5"
-clea = "==0.1.0rc4"
-cytoolz = "==0.12.3"
-deepdiff = "^8.0.1"
+clea = "0.1.0rc4"
+cytoolz = "0.12.3"
+deepdiff = ">=8.0.1,<9.0.0"
 docker = "6.1.2"
-eth-abi = "==5.1.0"
-eth-account = "==0.8.0"
-eth-hash = "==0.7.0"
-eth-keyfile = "==0.6.1"
-eth-keys = "==0.4.0"
-eth-rlp = "==0.3.0"
-eth-typing = "==3.5.2"
-eth-utils = "==2.3.1"
-fastapi = "==0.110.0"
-frozenlist = "==1.4.1"
-halo = "==0.0.31"
-hexbytes = "==0.3.1"
-ipfshttpclient = "==0.8.0a2"
-jsonschema = "==4.3.3"
-multidict = "==6.0.5"
-open-aea-cli-ipfs = "==1.64.0"
-open-aea-ledger-cosmos = "==1.64.0"
-open-aea-ledger-ethereum = "==1.64.0"
-open-aea-ledger-ethereum-flashbots = "==1.64.0"
-open-autonomy = "==0.19.4"
-psutil = "^5.9.8"
-pyinstaller = "^6.8.0"
+eth-abi = "5.1.0"
+eth-account = "0.8.0"
+eth-hash = "0.7.0"
+eth-keyfile = "0.6.1"
+eth-keys = "0.4.0"
+eth-rlp = "0.3.0"
+eth-typing = "3.5.2"
+eth-utils = "2.3.1"
+fastapi = "0.110.0"
+frozenlist = "1.4.1"
+halo = "0.0.31"
+hexbytes = "0.3.1"
+ipfshttpclient = "0.8.0a2"
+jsonschema = "4.3.3"
+multidict = "6.0.5"
+open-aea-cli-ipfs = "1.64.0"
+open-aea-ledger-cosmos = "1.64.0"
+open-aea-ledger-ethereum = "1.64.0"
+open-aea-ledger-ethereum-flashbots = "1.64.0"
+open-autonomy = "0.19.4"
+psutil = ">=5.9.8,<6.0.0"
+pyinstaller = ">=6.8.0,<7.0.0"
 requests-toolbelt = "1.0.0"
-starlette = "==0.36.3"
-twikit = "==2.2.0"
-uvicorn = "==0.27.0"
-web3 = "==6.1.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/valory-xyz/olas-operate-middleware.git"
-reference = "984cde4ee90e5b6089e439fea02b549bce82abdd"
-resolved_reference = "984cde4ee90e5b6089e439fea02b549bce82abdd"
+starlette = "0.36.3"
+twikit = "2.2.0"
+uvicorn = "0.27.0"
+web3 = "6.1.0"
 
 [[package]]
 name = "open-aea"
@@ -3965,4 +3961,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.12"
-content-hash = "18142ba84d1ae45fc192de1050bbcea33b262b9f866a91af4714bcef6f79a2e6"
+content-hash = "6966da113812877b60d82fe6a44a3c654508b57a85c869ad39d3ac43b768c01e"
