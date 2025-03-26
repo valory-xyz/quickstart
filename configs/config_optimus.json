@@ -1,9 +1,9 @@
 {
     "name": "Optimus",
-    "hash": "bafybeigqnpor6cuheucgake6a6fzbh2ula7qxrnwibkjjyjncevgekcyim",
+    "hash": "bafybeifgkbbm2gv6zccuzoajwttvlpmppxy6jx2ziy7qyvqo5ibmc7rtyi",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-    "service_version": "v0.18.1",
+    "service_version": "v0.3.4",
     "home_chain": "optimistic",
     "configurations": {
         "optimistic": {
@@ -131,7 +131,7 @@
         "SELECTED_STRATEGIES": {
             "name": "",
             "description": "",
-            "value": "[\"merkl_pools_search\",\"balancer_pools_search\"]",
+            "value": "[\"uniswap_pools_search\",\"balancer_pools_search\"]",
             "provision_type": "fixed"
         }
     }
