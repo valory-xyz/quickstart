@@ -131,7 +131,7 @@
         "SELECTED_STRATEGIES": {
             "name": "",
             "description": "",
-            "value": "[\"merkl_pools_search\",\"balancer_pools_search\"]",
+            "value": "[\"uniswap_pools_search\",\"balancer_pools_search\"]",
             "provision_type": "fixed"
         }
     }
