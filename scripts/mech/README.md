@@ -33,13 +33,13 @@ This is the IPFS hash of the metadata file of this Mech
 2.  Define your top level key value pairs
     | Name | Value Type | Description |
     | :--- | :---: | :--- |
-    | Name | str | Name of your mech |
-    | Description | str | Description of your mech |
+    | name | str | Name of your mech |
+    | description | str | Description of your mech |
     | inputFormat | str | Can leave it default |
     | outputFormat | str | Can leave it default |
     | image | str | Link to the imagerepresenting your mech |
     | tools | List | List of AI tools your mech supports |
-    | toolMetadata | Dict | Provides more info on sprecific tools |
+    | toolMetadata | Dict | Provides more info on specific tools |
 
 > [!IMPORTANT] \
 > Each tool mentioned in `tools` should have a corresponding `key` in the `toolsMetadata`.
@@ -48,8 +48,8 @@ This is the IPFS hash of the metadata file of this Mech
 
     | Name         | Value Type | Description                             |
     | :----------- | :--------: | :-------------------------------------- |
-    | Name         |    str     | Name of the AI tool                     |
-    | Description  |    str     | Description of the AI tool              |
+    | name         |    str     | Name of the AI tool                     |
+    | description  |    str     | Description of the AI tool              |
     | input        |    Dict    | Contains the input schema of the tool   |
     | output       |    Dict    | Contains the output schema of the tool  |
 
@@ -68,9 +68,9 @@ This is the IPFS hash of the metadata file of this Mech
 
     | Name      | Value Type | Description                                                   |
     | :-------- | :--------: | :------------------------------------------------------------ |
-    | requestId |    Dict    | Contains the request id and it's description                  |
-    | result    |    Dict    | Contains the result and it's description with an example      |
-    | prompt    |    Dict    | Contains the prompt used for the request and it's description |
+    | requestId |    Dict    | Contains the request id and its description                  |
+    | result    |    Dict    | Contains the result and its description with an example      |
+    | prompt    |    Dict    | Contains the prompt used for the request and its description |
 
 6. Use the following script to push the metadata file to IPFS and get its hash
 
