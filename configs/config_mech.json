@@ -60,7 +60,7 @@
             "name": "Metadata hash",
             "description": "",
             "value": "f01701220caa53607238e340da63b296acab232c18a48e954f0af6ff2b835b2d93f1962f0",
-            "provision_type": "fixed"
+            "provision_type": "user"
         },
         "MECH_TO_CONFIG": {
             "name": "Mech to config",
@@ -75,10 +75,10 @@
             "provision_type": "computed"
         },
         "TOOLS_TO_PACKAGE_HASH": {
-            "name": "Tools to package hash",
+            "name": "Tools to package mapping",
             "description": "Tools to package hash tracks services for each tool packages.",
             "value": "{\"openai-gpt-3.5-turbo-instruct\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-3.5-turbo\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-4\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\"}",
-            "provision_type": "fixed"
+            "provision_type": "user"
         },
         "ETHEREUM_LEDGER_RPC_0": {
             "name": "Ethereum ledger RPC 0",
