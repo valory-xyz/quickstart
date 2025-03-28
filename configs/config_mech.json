@@ -58,7 +58,7 @@
         },
         "METADATA_HASH": {
             "name": "Metadata hash",
-            "description": "",
+            "description": "The IPFS hash of the Mech metadata JSON",
             "value": "f01701220caa53607238e340da63b296acab232c18a48e954f0af6ff2b835b2d93f1962f0",
             "provision_type": "user"
         },
