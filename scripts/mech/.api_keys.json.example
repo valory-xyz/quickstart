@@ -1,0 +1,10 @@
+{
+    "openai": [
+        "YOUR_#1_KEY_HERE",
+        "YOUR_#2_KEY_HERE"
+    ],
+    "google_api_key": [
+        "YOUR_#1_KEY_HERE",
+        "YOUR_#2_KEY_HERE"
+    ]
+}

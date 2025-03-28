@@ -1,9 +1,9 @@
 {
-    "name": "Mech",
-    "hash": "bafybeig544gw6i7ahlwj6d64djlwfltjuznz3p66kmwk4m6bzqtn2bjfbq",
+    "name": "Mech Predict",
+    "hash": "bafybeihncvb4u3bg46ctpvdrmnqw4vknqyj7jrqpykjx6snxznvluaijuq",
     "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-    "service_version": "v0.1.0",
+    "service_version": "v0.3.2",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -39,10 +39,10 @@
             "provision_type": "computed"
         },
         "MECH_MARKETPLACE_ADDRESS": {
-            "name": "Mech marketplace address",
-            "description": "",
-            "value": "0x4554fE75c1f5576c1d7F765B2A036c199Adae329",
-            "provision_type": "fixed"
+            "name": "Mech Marketplace address",
+            "description": "The contract address of the mech marketplace, where your mech should be created. Supported addresses: 0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB or 0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
+            "value": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
+            "provision_type": "user"
         },
         "API_KEYS": {
             "name": "API keys",
@@ -58,9 +58,9 @@
         },
         "METADATA_HASH": {
             "name": "Metadata hash",
-            "description": "",
+            "description": "The IPFS hash of the Mech metadata JSON",
             "value": "f01701220caa53607238e340da63b296acab232c18a48e954f0af6ff2b835b2d93f1962f0",
-            "provision_type": "fixed"
+            "provision_type": "user"
         },
         "MECH_TO_CONFIG": {
             "name": "Mech to config",
@@ -75,13 +75,19 @@
             "provision_type": "computed"
         },
         "TOOLS_TO_PACKAGE_HASH": {
-            "name": "Tools to package hash",
+            "name": "Tools to package mapping",
             "description": "Tools to package hash tracks services for each tool packages.",
             "value": "{\"openai-gpt-3.5-turbo-instruct\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-3.5-turbo\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-4\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\"}",
-            "provision_type": "fixed"
+            "provision_type": "user"
         },
-        "GNOSIS_RPC_0": {
-            "name": "Gnosis RPC 0",
+        "ETHEREUM_LEDGER_RPC_0": {
+            "name": "Ethereum ledger RPC 0",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "GNOSIS_LEDGER_RPC_0": {
+            "name": "Gnosis ledger RPC 0",
             "description": "",
             "value": "",
             "provision_type": "computed"

@@ -1,0 +1,47 @@
+{
+    "name": "Autonolas Mech Quickstart",
+    "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
+    "inputFormat": "ipfs-v0.1",
+    "outputFormat": "ipfs-v0.1",
+    "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
+    "tools": [
+        "claude-prediction-online"
+    ],
+    "toolMetadata": {
+        "claude-prediction-online": {
+            "name": "Claude Prediction Online",
+            "description": "Makes a prediction using Claude",
+            "input": {
+                "type": "text",
+                "description": "The text to make a prediction on"
+            },
+            "output": {
+                "type": "object",
+                "description": "A JSON object containing the prediction and confidence",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "requestId": {
+                            "type": "integer",
+                            "description": "Unique identifier for the request"
+                        },
+                        "result": {
+                            "type": "string",
+                            "description": "Result information in JSON format as a string",
+                            "example": "{\n  \"p_yes\": 0.6,\n  \"p_no\": 0.4,\n  \"confidence\": 0.8,\n  \"info_utility\": 0.6\n}"
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": "The prompt used to make the prediction."
+                        }
+                    },
+                    "required": [
+                        "requestId",
+                        "result",
+                        "prompt"
+                    ]
+                }
+            }
+        }
+    }
+}

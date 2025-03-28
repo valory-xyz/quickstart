@@ -53,3 +53,8 @@ def get_service_from_config(config_path: Path) -> Service:
     manager = operate.service_manager()
     configure_local_config(template, operate)
     return get_service(manager, template)
+
+
+def input_with_default_value(prompt: str, default_value: str) -> str:
+    user_input = input(f"{prompt} [{default_value}]: ")
+    return str(user_input) if user_input else default_value
