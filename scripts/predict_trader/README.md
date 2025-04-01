@@ -140,7 +140,7 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
 2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
 
     ```bash
-    poetry run python -m scripts.predict_trader.migrate_legacy_quickstart
+    poetry run python -m scripts.predict_trader.migrate_legacy_quickstart configs/config_predict_trader.json
     ```
 
 3. Follow the prompts to complete the migration process. The script will:

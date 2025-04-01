@@ -13,7 +13,7 @@ If you were previously using [optimus-quickstart](https://github.com/valory-xyz/
 2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
 
     ```bash
-    poetry run python -m scripts.optimus.migrate_legacy_optimus
+    poetry run python -m scripts.optimus.migrate_legacy_optimus configs/config_optimus.json
     ```
 
 3. Follow the prompts to complete the migration process. The script will:
