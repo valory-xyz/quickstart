@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from pathlib import Path
 import json
 import shutil
@@ -94,12 +95,28 @@ def copy_mech_to_operate():
             else:
                 shutil.copy2(item, target)
 
-def create_operate_config(mech_config: MechConfig):
+def create_operate_config(mech_config: MechConfig, service_template: dict):
     """Create new local_config.json for operate using QuickstartConfig."""
     print_section("Creating new operate configuration...")
     
+    for service_dir in (OPERATE_HOME / "services").iterdir():
+        config_path = service_dir / "config.json"
+        if not config_path.exists():
+            continue
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        
+        if config["name"] != "valory/mech_quickstart":
+            continue
+
+        config["name"] = service_template["name"]
+        config["hash"] = service_template["hash"]
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+
     qs_config = QuickstartConfig(
-        path=OPERATE_HOME / "local_config.json",
+        path=OPERATE_HOME / f"{service_template['name']}-quickstart-config.json",
         password_migrated=True,
         principal_chain=Chain.GNOSIS.value,
         rpc={Chain.GNOSIS.value: mech_config.rpc},
@@ -111,7 +128,7 @@ def create_operate_config(mech_config: MechConfig):
     )
     qs_config.store()
 
-def main():
+def main(config_path: Path):
     print_title("Mech Quickstart Migration")
     
     if not MECH_PATH.exists():
@@ -119,6 +136,9 @@ def main():
         return
     
     try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
         # Parse mech config first
         mech_config = parse_mech_config()
         
@@ -126,7 +146,7 @@ def main():
         copy_mech_to_operate()
         
         # Create new config
-        create_operate_config(mech_config)
+        create_operate_config(mech_config, config)
         
         print_section("Migration completed successfully!")
         
@@ -135,4 +155,11 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Migrate legacy quickstart to unified quickstart")
+    parser.add_argument(
+        dest="config_path",
+        type=Path,
+        help="Quickstart config file path",
+    )
+    args = parser.parse_args()
+    main(args.config_path)

@@ -115,7 +115,7 @@ If you were previously using [mech-quickstart](https://github.com/valory-xyz/mec
 2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
 
     ```bash
-    poetry run python -m scripts.mech.migrate_legacy_mech
+    poetry run python -m scripts.mech.migrate_legacy_mech configs/config_mech.json
     ```
 
 3. Follow the prompts to complete the migration process. The script will:
