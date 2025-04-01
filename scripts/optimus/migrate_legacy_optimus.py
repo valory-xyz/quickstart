@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from pathlib import Path
 import json
 import shutil
@@ -73,12 +74,24 @@ def copy_optimus_to_operate():
             else:
                 shutil.copy2(item, target)
 
-def create_operate_config(optimus_config: OptimusConfig):
+def create_operate_config(optimus_config: OptimusConfig, service_name: str):
     """Create new local_config.json for operate using QuickstartConfig."""
     print_section("Creating new operate configuration...")
     
+    for service_dir in (OPERATE_HOME / "services").iterdir():
+        config_path = service_dir / "config.json"
+        if not config_path.exists():
+            continue
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        
+        config["name"] = service_name
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+
     qs_config = QuickstartConfig(
-        path=OPERATE_HOME / "local_config.json",
+        path=OPERATE_HOME / f"{service_name}-quickstart-config.json",
         password_migrated=True,
         principal_chain=optimus_config.principal_chain,
         rpc=optimus_config.rpc,
@@ -92,7 +105,7 @@ def create_operate_config(optimus_config: OptimusConfig):
     )
     qs_config.store()
 
-def main():
+def main(config_path: Path) -> None:
     print_title("Optimus to Operate Migration")
     
     if not OPTIMUS_PATH.exists():
@@ -100,6 +113,9 @@ def main():
         return
     
     try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
         # Parse optimus config first
         optimus_config = parse_optimus_config()
         
@@ -107,7 +123,7 @@ def main():
         copy_optimus_to_operate()
         
         # Create new config
-        create_operate_config(optimus_config)
+        create_operate_config(optimus_config, config["name"])
         
         print_section("Migration completed successfully!")
         
@@ -116,4 +132,11 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Migrate legacy quickstart to unified quickstart")
+    parser.add_argument(
+        dest="config_path",
+        type=Path,
+        help="Quickstart config file path",
+    )
+    args = parser.parse_args()
+    main(args.config_path)
