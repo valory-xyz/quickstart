@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from dataclasses import dataclass
 import os
 from typing import TypedDict
@@ -133,7 +134,7 @@ def parse_trader_runner() -> TraderData:
     )
 
 
-def populate_operate(operate: OperateApp, trader_data: TraderData) -> Service:
+def populate_operate(operate: OperateApp, trader_data: TraderData, service_name: str) -> Service:
     print_section("Setting up Operate")
     operate.setup()
     if operate.user_account is None:
@@ -143,11 +144,11 @@ def populate_operate(operate: OperateApp, trader_data: TraderData) -> Service:
     else:
         operate.password = trader_data.password
 
-    qs_config_path = OPERATE_HOME / "local_config.json"
+    qs_config_path = OPERATE_HOME / f"{service_name}-quickstart-config.json"
     if not qs_config_path.exists():
         spinner = Halo(text="Creating quickstart config...", spinner="dots").start()
         qs_config = QuickstartConfig(
-            path=OPERATE_HOME / "local_config.json",
+            path=OPERATE_HOME / f"{service_name}-quickstart-config.json",
             password_migrated=True,
             principal_chain="gnosis",
             rpc={"gnosis": trader_data.rpc},
@@ -379,18 +380,28 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         spinner.succeed(f"{transferable_amount} XDAI transferred from master EOA to master safe.")
 
 
-def main() -> None:
+def main(config_path: Path) -> None:
     print_title("Predict Trader Quickstart Migration")
     if not TRADER_RUNNER_PATH.exists():
         print("No .trader_runner file found!")
         sys.exit(1)
     
+    with open(config_path, "r") as f:
+        config = json.load(f)
+
     trader_data = parse_trader_runner()
     operate = OperateApp(home=OPERATE_HOME)
-    service = populate_operate(operate, trader_data)
+    service = populate_operate(operate, trader_data, config["name"])
     migrate_to_master_safe(operate, trader_data, service)
     print_section("Migration complete!")
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser(description="Migrate legacy quickstart to unified quickstart")
+    parser.add_argument(
+        dest="config_path",
+        type=Path,
+        help="Quickstart config file path",
+    )
+    args = parser.parse_args()
+    main(args.config_path)
