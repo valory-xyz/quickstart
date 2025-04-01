@@ -13,7 +13,7 @@ If you were previously using [modius-quickstart](https://github.com/valory-xyz/m
 2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
 
     ```bash
-    poetry run python -m scripts.modius.migrate_legacy_modius
+    poetry run python -m scripts.modius.migrate_legacy_modius configs/config_modius.json
     ```
 
 3. Follow the prompts to complete the migration process. The script will:

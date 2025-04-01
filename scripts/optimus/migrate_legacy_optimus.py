@@ -86,6 +86,9 @@ def create_operate_config(optimus_config: OptimusConfig, service_name: str):
         with open(config_path, "r") as f:
             config = json.load(f)
         
+        if config["name"] != "valory/optimus":
+            continue
+
         config["name"] = service_name
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
