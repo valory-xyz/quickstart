@@ -53,7 +53,10 @@ IRRELEVANT_TOOLS = [
 QUERY_BATCH_SIZE = 1000
 DUST_THRESHOLD = 10000000000000
 INVALID_ANSWER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-FPMM_CREATOR = "0x89c5cc945dd550bcffb72fe42bff002429f46fec"
+FPMM_CREATORS = (
+    "0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec",
+    "0xFfc8029154ECD55ABED15BD428bA596E7D23f557"
+)
 DEFAULT_FROM_DATE = "1970-01-01T00:00:00"
 DEFAULT_TO_DATE = "2038-01-19T03:14:07"
 DEFAULT_FROM_TIMESTAMP = 0
@@ -331,32 +334,34 @@ def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
     url = f"https://gateway-arbitrum.network.thegraph.com/api/{subgraph_api_key}/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNcoBwatMR4yZq81pbbz"
 
     grouped_results = defaultdict(list)
-    creationTimestamp_gt = "0"
 
-    while True:
-        query = omen_xdai_trades_query.substitute(
-            creator=creator.lower(),
-            fpmm_creator=FPMM_CREATOR.lower(),
-            creationTimestamp_gte=int(from_timestamp),
-            creationTimestamp_lte=int(to_timestamp),
-            fpmm_creationTimestamp_gte=int(fpmm_from_timestamp),
-            fpmm_creationTimestamp_lte=int(fpmm_to_timestamp),
-            first=QUERY_BATCH_SIZE,
-            creationTimestamp_gt=creationTimestamp_gt,
-        )
-        content_json = _to_content(query)
-        res = requests.post(url, headers=headers, json=content_json)
-        result_json = res.json()
-        trades = result_json.get("data", {}).get("fpmmTrades", [])
+    for fpmm_creator in FPMM_CREATORS:
+        creationTimestamp_gt = "0"
 
-        if not trades:
-            break
+        while True:
+            query = omen_xdai_trades_query.substitute(
+                creator=creator.lower(),
+                fpmm_creator=fpmm_creator.lower(),
+                creationTimestamp_gte=int(from_timestamp),
+                creationTimestamp_lte=int(to_timestamp),
+                fpmm_creationTimestamp_gte=int(fpmm_from_timestamp),
+                fpmm_creationTimestamp_lte=int(fpmm_to_timestamp),
+                first=QUERY_BATCH_SIZE,
+                creationTimestamp_gt=creationTimestamp_gt,
+            )
+            content_json = _to_content(query)
+            res = requests.post(url, headers=headers, json=content_json)
+            result_json = res.json()
+            trades = result_json.get("data", {}).get("fpmmTrades", [])
 
-        for trade in trades:
-            fpmm_id = trade.get("fpmm", {}).get("id")
-            grouped_results[fpmm_id].append(trade)
+            if not trades:
+                break
 
-        creationTimestamp_gt = trades[len(trades) - 1]["creationTimestamp"]
+            for trade in trades:
+                fpmm_id = trade.get("fpmm", {}).get("id")
+                grouped_results[fpmm_id].append(trade)
+
+            creationTimestamp_gt = trades[len(trades) - 1]["creationTimestamp"]
 
     all_results = {
         "data": {
