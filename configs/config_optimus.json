@@ -1,9 +1,9 @@
 {
     "name": "Optimus",
-    "hash": "bafybeifgkbbm2gv6zccuzoajwttvlpmppxy6jx2ziy7qyvqo5ibmc7rtyi",
+    "hash": "bafybeiaatol6ujhey6wlijc3uk57k74bj4yqaehobpfrch7kjxnvghpqgy",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-    "service_version": "v0.3.4",
+    "service_version": "v0.3.6",
     "home_chain": "optimistic",
     "configurations": {
         "optimistic": {
@@ -86,6 +86,12 @@
             "value": "",
             "provision_type": "computed"
         },
+        "STORE_PATH": {
+            "name": "Store Path",
+            "description": "",
+            "value": "/data",
+            "provision_type": "fixed"
+        },
         "COINGECKO_API_KEY": {
             "name": "Coingecko API Key",
             "description": "Coingecko API Key will be used to fetch the prices of the tokens. Get your key at https://www.coingecko.com/en/api",
@@ -133,6 +139,12 @@
             "description": "",
             "value": "[\"uniswap_pools_search\",\"balancer_pools_search\"]",
             "provision_type": "fixed"
+        },
+        "GENAI_API_KEY": {
+            "name": "Gemini API Key",
+            "description": "Gemini api key to allow the agent to use Gemini",
+            "value": "",
+            "provision_type": "user"
         }
     }
 }
