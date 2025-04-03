@@ -86,6 +86,12 @@
             "value": "",
             "provision_type": "computed"
         },
+        "STORE_PATH": {
+            "name": "Store Path",
+            "description": "",
+            "value": "/data",
+            "provision_type": "fixed"
+        },
         "COINGECKO_API_KEY": {
             "name": "Coingecko API Key",
             "description": "Coingecko API Key will be used to fetch the prices of the tokens. Get your key at https://www.coingecko.com/en/api",
@@ -136,7 +142,7 @@
         },
         "GENAI_API_KEY": {
             "name": "Gemini API Key",
-            "description": "",
+            "description": "Gemini api key to allow the agent to use Gemini",
             "value": "",
             "provision_type": "user"
         }
