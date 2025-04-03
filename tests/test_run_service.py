@@ -71,7 +71,7 @@ def get_service_config(config_path: str) -> dict:
             "health_check_url": HEALTH_CHECK_URL,
         },
         # Memeooor service
-        "memeooorr": {
+        "agents.fun": {
             "container_name": "memeooorr",
             "health_check_url": HEALTH_CHECK_URL,
         }
@@ -358,7 +358,7 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
     
     return ""
 
-def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, config_type: str = "") -> str:
+def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for native tokens."""
     patterns = [
         r"Please make sure Master EOA (0x[a-fA-F0-9]{40}) has at least (\d+\.\d+) (?:ETH|xDAI)",
@@ -411,10 +411,10 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, con
     
     return ""
 
-def create_funding_handler(rpc_url: str, config_type: str):
+def create_funding_handler(rpc_url: str):
     """Create a funding handler with the specified RPC URL and config type."""
     def handler(output: str, logger: logging.Logger) -> str:
-        return handle_native_funding(output, logger, rpc_url, config_type)
+        return handle_native_funding(output, logger, rpc_url)
     return handler
 
 def create_token_funding_handler(rpc_url: str):
@@ -647,7 +647,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         prompts.update({
                 r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
                 r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                    lambda output, logger: create_funding_handler(test_config["RPC_URL"], "modius")(output, logger),
+                    lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger),
                 r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                     lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
@@ -681,7 +681,7 @@ def get_config_specific_settings(config_path: str) -> dict:
             r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
             r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
             r"\[(?:optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(get_chain_rpc(output, logger), "optimus")(output, logger),
+                lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
             r"\[(?:optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                 lambda output, logger: create_token_funding_handler(get_chain_rpc(output, logger))(output, logger)
         })
@@ -696,20 +696,20 @@ def get_config_specific_settings(config_path: str) -> dict:
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "mech")(output, logger)
+                lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
-    elif "memeooorr" in config_path.lower():
-        # Memeooorr specific settings
+    elif "agents.fun" in config_path.lower():
+        # Agents.fun specific settings
         test_config = {
             **base_config,  # Include base config
             "BASE_RPC_URL": os.getenv('BASE_RPC_URL'),
         }
-        # Add Memeooorr-specific prompts
+        # Add Agents.fun-specific prompts
         prompts.update({
             r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"], "memeooorr")(output, logger),
+                lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"])(output, logger),
         })    
         
     else:
@@ -722,7 +722,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
             r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
-                lambda output, logger: create_funding_handler(test_config["RPC_URL"], "predict_trader")(output, logger),
+                lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger),
             r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                 lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
@@ -787,8 +787,8 @@ class BaseTestService:
         cls.log_file = Path(f'test_run_service_{timestamp}.log')
         cls.logger = setup_logging(cls.log_file)
         
-        # Handle memeooorr config modifications if needed
-        if "memeooorr" in cls.config_path.lower():
+        # Handle agents.fun config modifications if needed
+        if "agents.fun" in cls.config_path.lower():
             temp_config_path = os.path.join(cls.temp_dir.name, 'configs', os.path.basename(cls.config_path))
             try:
                 with open(temp_config_path, 'r') as f:
@@ -812,10 +812,10 @@ class BaseTestService:
                 # Ensure file permissions are set correctly
                 os.chmod(temp_config_path, 0o666)
                 
-                cls.logger.info(f"Modified memeooorr config in temp dir: {temp_config_path}")
+                cls.logger.info(f"Modified agents.fun config in temp dir: {temp_config_path}")
                 
             except Exception as e:
-                cls.logger.error(f"Error modifying memeooorr config: {str(e)}")
+                cls.logger.error(f"Error modifying agents.fun config: {str(e)}")
                 raise
         
         # Setup environment
