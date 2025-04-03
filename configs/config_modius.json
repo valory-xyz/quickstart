@@ -101,6 +101,12 @@
             "description": "",
             "value": "[\"balancer_pools_search\",\"asset_lending\"]",
             "provision_type": "fixed"
+        },
+        "GENAI_API_KEY": {
+            "name": "Gemini API Key",
+            "description": "",
+            "value": "",
+            "provision_type": "user"
         }
     }
 }

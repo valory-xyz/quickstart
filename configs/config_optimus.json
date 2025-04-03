@@ -133,6 +133,12 @@
             "description": "",
             "value": "[\"uniswap_pools_search\",\"balancer_pools_search\"]",
             "provision_type": "fixed"
+        },
+        "GENAI_API_KEY": {
+            "name": "Gemini API Key",
+            "description": "",
+            "value": "",
+            "provision_type": "user"
         }
     }
 }
