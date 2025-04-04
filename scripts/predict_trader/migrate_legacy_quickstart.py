@@ -368,16 +368,33 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         address=ocm.crypto.address
     )
     gas_fund_requirements = CHAIN_TO_METADATA[Chain.GNOSIS.value]["gasFundReq"]
-    if xdai_balance > gas_fund_requirements:
-        transferable_amount = xdai_balance - gas_fund_requirements
-        spinner = Halo(text=f"Transferring {transferable_amount} xDAI from master EOA to master safe...", spinner="dots").start()
-        tx_hash = ocm.ledger_api.api.eth.send_transaction({
-            "from": ocm.crypto.address,
-            "to": wallet_manager.safes[Chain.GNOSIS],
-            "value": transferable_amount
-        })
-        ocm.ledger_api.api.eth.get_transaction(tx_hash)
-        spinner.succeed(f"{transferable_amount} XDAI transferred from master EOA to master safe.")
+    transferable_amount = xdai_balance - gas_fund_requirements
+    if transferable_amount <= 0:
+        return
+
+    master_wallet = service_manager.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+    ledger_api = master_wallet.ledger_api(Chain.GNOSIS, trader_data.rpc)
+    tx = ledger_api.get_transfer_transaction(
+        sender_address=master_wallet.crypto.address,
+        destination_address=wallet_manager.safes[Chain.GNOSIS],
+        amount=transferable_amount,
+        tx_fee=0,
+        tx_nonce="0x",
+        chain_id=Chain.GNOSIS.id,
+    )
+    tx = ledger_api.update_with_gas_estimate(transaction=tx)
+    tx["value"] -= tx["gas"] * tx["maxFeePerGas"]
+    if tx["value"] <= 0:
+        return
+
+    spinner = Halo(text=f'Transferring {tx["value"]} xDAI from master EOA to master safe...', spinner="dots").start()
+    tx_signed = master_wallet.crypto.sign_transaction(transaction=tx)
+    tx_digest = ledger_api.send_signed_transaction(
+        tx_signed=tx_signed,
+        raise_on_try=True,
+    )
+    ledger_api.api.eth.wait_for_transaction_receipt(tx_digest)
+    spinner.succeed(f'{tx["value"]} xDAI transferred from master EOA to master safe.')
 
 
 def main(config_path: Path) -> None:
