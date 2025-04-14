@@ -32,6 +32,7 @@ load_dotenv()
 STARTUP_WAIT = 10
 SERVICE_INIT_WAIT = 60
 CONTAINER_STOP_WAIT = 20
+require_extra_coins = False
 
 # Handle the distutils warning
 os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'stdlib'
@@ -375,6 +376,8 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str, con
             
             try:
                 w3 = Web3(Web3.HTTPProvider(rpc_url))
+                if require_extra_coins:  # TODO: Temp fix for mech
+                    required_amount *= 10
                 amount_wei = w3.to_wei(required_amount, 'ether')
                 amount_hex = hex(amount_wei)
                 
@@ -635,6 +638,8 @@ def get_config_specific_settings(config_path: str) -> dict:
     base = get_base_config(config_path)
     base_config = base["config"]
     prompts = base["prompts"].copy()
+    global require_extra_coins
+    require_extra_coins = False
     
     if "modius" in config_path.lower():
         # Modius specific settings
@@ -687,6 +692,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         })
 
     elif "mech" in config_path.lower():
+        require_extra_coins = True
         test_config = {
             **base_config,  
             "RPC_URL": os.getenv('GNOSIS_RPC_URL', '')
