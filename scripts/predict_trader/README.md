@@ -131,6 +131,8 @@ So, you can usually use `is_transitioning_fast` as a rule to check if an agent i
 
 If you were previously using [trader-quickstart](https://github.com/valory-xyz/trader-quickstart/tree/main) and want to migrate to the new unified [quickstart](https://github.com/valory-xyz/quickstart) repository, follow these steps:
 
+> Note: Please ensure to meet the [system requirements](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#system-requirements) of this new quickstart.
+
 1. Copy the `.trader_runner` folder from your trader-quickstart repository to the root of quickstart:
 
     ```bash

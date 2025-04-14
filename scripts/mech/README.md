@@ -106,6 +106,8 @@ This is the IPFS hash of the tools file of this Mech. This file contains a JSON 
 
 If you were previously using [mech-quickstart](https://github.com/valory-xyz/mech-quickstart) and want to migrate to the new unified [quickstart](https://github.com/valory-xyz/quickstart) repository, follow these steps:
 
+> Note: Please ensure to meet the [system requirements](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#system-requirements) of this new quickstart.
+
 1. Copy the `.mech_quickstart` folder from your mech-quickstart repository to the root of quickstart:
 
     ```bash

@@ -4,6 +4,8 @@
 
 If you were previously using [optimus-quickstart](https://github.com/valory-xyz/optimus-quickstart) and want to migrate to the new unified [quickstart](https://github.com/valory-xyz/quickstart) repository, follow these steps:
 
+> Note: Please ensure to meet the [system requirements](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#system-requirements) of this new quickstart.
+
 1. Copy the `.optimus` folder from your optimus-quickstart repository to the root of quickstart:
 
     ```bash
