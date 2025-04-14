@@ -1,9 +1,9 @@
 {
     "name": "Memeooorr",
-    "hash": "bafybeiexs3bkq6om7z5djknrfddm3wka5is4mdqkd33rr6qspwlannmnqy",
+    "hash": "bafybeidxfdlaeywhnhafix2yzrnbldk5cybwal53o6mtabnamnxmwtprea",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v0.4.1-alpha2",
+    "service_version": "v0.4.2-alpha1",
     "home_chain": "base",
     "configurations": {
         "base": {
