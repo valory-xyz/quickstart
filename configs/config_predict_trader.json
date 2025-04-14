@@ -74,6 +74,12 @@
             "value": "QmegaF7wxDsnJSQnK6JkLVzNc8qXYHuxDuVauX1U5rScm4",
             "provision_type": "fixed"
         },
+        "CREATOR_PER_SUBGRAPH": {
+            "name": "Creator per subgraph",
+            "description": "",
+            "value": "{\"omen_subgraph\":[\"0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec\"]}",
+            "provision_type": "fixed"
+        },
         "SUBGRAPH_API_KEY": {
             "name": "Subgraph API key",
             "description": "Subgraph API key can be obtained at https://thegraph.com/studio/apikeys/",
