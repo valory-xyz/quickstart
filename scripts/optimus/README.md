@@ -27,4 +27,6 @@ If you were previously using [optimus-quickstart](https://github.com/valory-xyz/
 
 4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your Optimus service.
 
+5. After you ensure that the agent runs fine with the new quickstart, please delete the `.optimus` folder(s) to avoid any private key leaks.
+
 
