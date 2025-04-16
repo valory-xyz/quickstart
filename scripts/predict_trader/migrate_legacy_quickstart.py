@@ -412,6 +412,12 @@ def main(config_path: Path) -> None:
     migrate_to_master_safe(operate, trader_data, service)
     print_section("Migration complete!")
 
+    if not trader_data.password:
+        print_title(
+            "Your password is very unsecure, please reset your password to a secure one using these steps:\n"
+            "https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#change-the-password-of-your-key-files"
+        )
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Migrate legacy quickstart to unified quickstart")
