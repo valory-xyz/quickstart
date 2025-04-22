@@ -329,7 +329,7 @@ if __name__ == "__main__":
                     address=activity_checker_address, abi=activity_checker_abi  # type: ignore
                 )
                 mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call()
-            except ContractLogicError:
+            except (ContractLogicError, ValueError):
                 mech_contract_address = activity_checker_contract.functions.agentMech().call()
 
             mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
