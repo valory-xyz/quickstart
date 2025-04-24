@@ -153,3 +153,5 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
    - Handle any necessary unstaking and transfers
 
 4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your trader service.
+
+5. After you ensure that the agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.

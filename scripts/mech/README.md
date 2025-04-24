@@ -128,3 +128,5 @@ If you were previously using [mech-quickstart](https://github.com/valory-xyz/mec
    - Handle any necessary transfers and settings
 
 4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your Mech service.
+
+5. After you ensure that the agent runs fine with the new quickstart, please delete the `.mech_quickstart` folder(s) to avoid any private key leaks.
