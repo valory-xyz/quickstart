@@ -44,6 +44,12 @@
             "value": "",
             "provision_type": "computed"
         },
+        "PRIORITY_MECH_ADDRESS": {
+            "name": "Priority Mech contract address",
+            "description": "This mech will be used at priority when using mech marketplace.",
+            "value": "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
+            "provision_type": "user"
+        },
         "MECH_REQUEST_PRICE": {
             "name": "Mech request price",
             "description": "",
