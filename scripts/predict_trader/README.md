@@ -126,3 +126,8 @@ This will return a JSON output with the following fields:
 | `is_transitioning_fast` | bool | `true` if `is_tm_healthy` is `true` and `seconds_since_last_transition` is less than twice the `reset_pause_duration`. `false` otherwise. |
 
 So, you can usually use `is_transitioning_fast` as a rule to check if an agent is healthly. To add a more strict check, you can also tune a threshold for the `seconds_since_last_transition` and rate of change of `period`, but that will require some monitoring to fine tune it.
+
+##### Using a differnt priority mech with the mech marketplace
+
+When running the agent for the first time, enter the mech address and service ID of your choice when asked for `Priority Mech contract address` and `Priority Mech service ID`.
+If you've already entered these values and want to change them later, follow this [guide](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#changing-entered-configuration)
