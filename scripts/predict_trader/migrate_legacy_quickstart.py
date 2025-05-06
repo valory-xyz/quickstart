@@ -20,7 +20,7 @@ from operate.constants import (
 )
 from operate.keys import Key
 from operate.ledger.profiles import ERC20_TOKENS
-from operate.operate_types import Chain, LedgerType, OnChainState
+from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
 from operate.quickstart.run_service import get_service, QuickstartConfig
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import Service
@@ -134,7 +134,7 @@ def parse_trader_runner() -> TraderData:
     )
 
 
-def populate_operate(operate: OperateApp, trader_data: TraderData, service_name: str) -> Service:
+def populate_operate(operate: OperateApp, trader_data: TraderData, service_template: ServiceTemplate) -> Service:
     print_section("Setting up Operate")
     operate.setup()
     if operate.user_account is None:
@@ -144,6 +144,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_name:
     else:
         operate.password = trader_data.password
 
+    service_name = service_template["name"]
     qs_config_path = OPERATE_HOME / f"{service_name}-quickstart-config.json"
     if not qs_config_path.exists():
         spinner = Halo(text="Creating quickstart config...", spinner="dots").start()
@@ -205,9 +206,6 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_name:
             json.dump(obj=agent_eoa, fp=f, indent=2)
         spinner.succeed("Agent EOA created")
 
-    with open(OPERATE_HOME.parent / "configs" / "config_predict_trader.json", "r") as config_file:
-        service_template = json.load(config_file)
-
     service_template["configurations"][Chain.GNOSIS.value] |= {
         "staking_program_id": trader_data.staking_variables["STAKING_PROGRAM"],
         "rpc": trader_data.rpc,
@@ -216,20 +214,28 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_name:
         "cost_of_bond": max(1, int(trader_data.staking_variables["MIN_STAKING_BOND_OLAS"])),
     }
     service_manager = operate.service_manager()
-    if len(service_manager.json) == 0:
-        spinner = Halo(text="Creating service...", spinner="dots").start()
-        service = get_service(service_manager, service_template)
+    for service_config in service_manager.json:
+        if service_config["name"] == service_name:
+            if not ask_yes_or_no(
+                f'A Service with the name "{service_name}" already exists! '
+                "Do you want to overwrite it?"
+            ):
+                return get_service(service_manager, service_template)
+            break
 
-        # overwrite service config with the migrated agent EOA and service safe
-        with open(service.path / KEYS_JSON, "w") as f:
-            json.dump(obj=[agent_eoa], fp=f, indent=2)
+    spinner = Halo(text="Creating service...", spinner="dots").start()
+    service = get_service(service_manager, service_template)
 
-        service.keys = [Key(**agent_eoa)]
-        service.chain_configs[Chain.GNOSIS.value].chain_data.token = trader_data.service_id
-        service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = trader_data.service_safe
-        service.store()
-        spinner.succeed("Service created")
-    
+    # overwrite service config with the migrated agent EOA and service safe
+    with open(service.path / KEYS_JSON, "w") as f:
+        json.dump(obj=[agent_eoa], fp=f, indent=2)
+
+    service.keys = [Key(**agent_eoa)]
+    service.chain_configs[Chain.GNOSIS.value].chain_data.token = trader_data.service_id
+    service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = trader_data.service_safe
+    service.store()
+    spinner.succeed("Service created")
+
     return get_service(service_manager, service_template)
 
 
@@ -408,7 +414,7 @@ def main(config_path: Path) -> None:
 
     trader_data = parse_trader_runner()
     operate = OperateApp(home=OPERATE_HOME)
-    service = populate_operate(operate, trader_data, config["name"])
+    service = populate_operate(operate, trader_data, config)
     migrate_to_master_safe(operate, trader_data, service)
     print_section("Migration complete!")
 
