@@ -126,3 +126,32 @@ This will return a JSON output with the following fields:
 | `is_transitioning_fast` | bool | `true` if `is_tm_healthy` is `true` and `seconds_since_last_transition` is less than twice the `reset_pause_duration`. `false` otherwise. |
 
 So, you can usually use `is_transitioning_fast` as a rule to check if an agent is healthly. To add a more strict check, you can also tune a threshold for the `seconds_since_last_transition` and rate of change of `period`, but that will require some monitoring to fine tune it.
+
+## Migrate from trader-quickstart
+
+If you were previously using [trader-quickstart](https://github.com/valory-xyz/trader-quickstart/tree/main) and want to migrate to the new unified [quickstart](https://github.com/valory-xyz/quickstart) repository, follow these steps:
+
+> Note: Please ensure to meet the [system requirements](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#system-requirements) of this new quickstart.
+
+1. Copy the `.trader_runner` folder from your trader-quickstart repository to the root of quickstart:
+
+    ```bash
+    cp -r /path/to/trader-quickstart/.trader_runner /path/to/quickstart/
+    ```
+
+2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
+
+    ```bash
+    poetry install
+    poetry run python -m scripts.predict_trader.migrate_legacy_quickstart configs/config_predict_trader.json
+    ```
+
+3. Follow the prompts to complete the migration process. The script will:
+   - Parse your existing configuration
+   - Set up the new operate environment
+   - Migrate your service to the master safe
+   - Handle any necessary unstaking and transfers
+
+4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your trader service.
+
+5. After you ensure that the agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.
