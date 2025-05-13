@@ -1,6 +1,6 @@
 {
     "name": "Optimus",
-    "hash": "bafybeiaatol6ujhey6wlijc3uk57k74bj4yqaehobpfrch7kjxnvghpqgy",
+    "hash": "bafybeienicyxffuxlwcacwr3qfj4ijvaih4opziogwncs2japau6vzh4bu",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
     "service_version": "v0.3.6",
@@ -17,38 +17,6 @@
                     "safe": 15000000000000000
                 },
                 "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85": {
-                    "agent": 0,
-                    "safe": 40000000
-                }
-            }
-        },
-        "base": {
-            "agent_id": 40,
-            "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-            "threshold": 1,
-            "use_mech_marketplace": false,
-            "fund_requirements": {
-                "0x0000000000000000000000000000000000000000": {
-                    "agent": 5000000000000000,
-                    "safe": 15000000000000000
-                },
-                "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": {
-                    "agent": 0,
-                    "safe": 40000000
-                }
-            }
-        },
-        "mode": {
-            "agent_id": 40,
-            "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-            "threshold": 1,
-            "use_mech_marketplace": false,
-            "fund_requirements": {
-                "0x0000000000000000000000000000000000000000": {
-                    "agent": 5000000000000000,
-                    "safe": 15000000000000000
-                },
-                "0xd988097fb8612cc24eeC14542bC03424c656005f": {
                     "agent": 0,
                     "safe": 40000000
                 }
@@ -119,13 +87,13 @@
         "ALLOWED_CHAINS": {
             "name": "",
             "description": "",
-            "value": "[\"optimism\",\"mode\",\"base\"]",
+            "value": "[\"optimism\"]",
             "provision_type": "fixed"
         },
         "TARGET_INVESTMENT_CHAINS": {
             "name": "",
             "description": "",
-            "value": "[\"optimism\",\"mode\",\"base\"]",
+            "value": "[\"optimism\"]",
             "provision_type": "fixed"
         },
         "INITIAL_ASSETS": {
