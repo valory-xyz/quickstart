@@ -58,7 +58,8 @@ from operate.constants import (
 from operate.cli import OperateApp
 from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import Chain
-from operate.quickstart.run_service import load_local_config, NO_STAKING_PROGRAM_ID
+from operate.quickstart.run_service import load_local_config
+from operate.quickstart.utils import print_title
 from scripts.utils import get_service_from_config
 
 SCRIPT_PATH = Path(__file__).resolve().parent
@@ -254,17 +255,16 @@ if __name__ == "__main__":
         rpc, safe_address, trades_json, mech_statistics
     )
 
-    print("")
-    print("==============")
-    print("Service report")
-    print("==============")
-
-    # Performance
-    _print_section_header("Performance")
-    _print_subsection_header("Staking")
-
     try:
         w3 = Web3(HTTPProvider(rpc))
+        current_block_number = w3.eth.block_number
+
+        print("")
+        print_title(f"\nService report on block number {current_block_number}\n")
+
+        # Performance
+        _print_section_header(f"Performance")
+        _print_subsection_header("Staking")
 
         staking_token_address = get_staking_contract(
             chain=Chain.GNOSIS.value,
@@ -284,7 +284,7 @@ if __name__ == "__main__":
             staking_state = StakingState(
                 staking_token_contract.functions.getStakingState(
                     service_id
-                ).call()
+                ).call(block_identifier=current_block_number)
             )
 
             is_staked = (
@@ -302,7 +302,7 @@ if __name__ == "__main__":
 
         if is_staked:
 
-            activity_checker_address = staking_token_contract.functions.activityChecker().call()
+            activity_checker_address = staking_token_contract.functions.activityChecker().call(block_identifier=current_block_number)
             activity_checker_data = requests.get(MECH_ACTIVITY_CHECKER_JSON_URL).json()
 
             activity_checker_abi = activity_checker_data.get("abi", [])
@@ -312,7 +312,7 @@ if __name__ == "__main__":
 
             service_registry_token_utility_data = requests.get(SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL).json()
             service_registry_token_utility_contract_address = (
-                staking_token_contract.functions.serviceRegistryTokenUtility().call()
+                staking_token_contract.functions.serviceRegistryTokenUtility().call(block_identifier=current_block_number)
             )
             service_registry_token_utility_abi = (
                 service_registry_token_utility_data.get("abi", [])
@@ -328,9 +328,9 @@ if __name__ == "__main__":
                 mm_activity_checker_contract = w3.eth.contract(
                     address=activity_checker_address, abi=activity_checker_abi  # type: ignore
                 )
-                mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call()
+                mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call(block_identifier=current_block_number)
             except (ContractLogicError, ValueError):
-                mech_contract_address = activity_checker_contract.functions.agentMech().call()
+                mech_contract_address = activity_checker_contract.functions.agentMech().call(block_identifier=current_block_number)
 
             mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
 
@@ -343,14 +343,14 @@ if __name__ == "__main__":
             security_deposit = (
                 service_registry_token_utility_contract.functions.getOperatorBalance(
                     operator_address, service_id
-                ).call()
+                ).call(block_identifier=current_block_number)
             )
-            agent_id = int(staking_token_contract.functions.getAgentIds().call()[0])
+            agent_id = int(staking_token_contract.functions.getAgentIds().call(block_identifier=current_block_number)[0])
             agent_bond = service_registry_token_utility_contract.functions.getAgentBond(
                 service_id, agent_id
-            ).call()
+            ).call(block_identifier=current_block_number)
             min_staking_deposit = (
-                staking_token_contract.functions.minStakingDeposit().call()
+                staking_token_contract.functions.minStakingDeposit().call(block_identifier=current_block_number)
             )
 
             # In the setting 1 agent instance as of now: minOwnerBond = minStakingDeposit
@@ -366,28 +366,28 @@ if __name__ == "__main__":
 
             service_info = staking_token_contract.functions.mapServiceInfo(
                 service_id
-            ).call()
+            ).call(block_identifier=current_block_number)
             rewards = service_info[3]
             _print_status("Accrued rewards", f"{wei_to_olas(rewards)}")
 
             liveness_ratio = (
-                activity_checker_contract.functions.livenessRatio().call()
+                activity_checker_contract.functions.livenessRatio().call(block_identifier=current_block_number)
             )
             mech_requests_24h_threshold = math.ceil(
                 (liveness_ratio * 60 * 60 * 24) / 10**18
             )
 
             next_checkpoint_ts = (
-                staking_token_contract.functions.getNextRewardCheckpointTimestamp().call()
+                staking_token_contract.functions.getNextRewardCheckpointTimestamp().call(block_identifier=current_block_number)
             )
             liveness_period = (
-                staking_token_contract.functions.livenessPeriod().call()
+                staking_token_contract.functions.livenessPeriod().call(block_identifier=current_block_number)
             )
             last_checkpoint_ts = next_checkpoint_ts - liveness_period
 
-            mech_request_count = mech_contract.functions.getRequestsCount(safe_address).call()
+            mech_request_count = mech_contract.functions.getRequestsCount(safe_address).call(block_identifier=current_block_number)
             mech_request_count_on_last_checkpoint = (
-                staking_token_contract.functions.getServiceInfo(service_id).call()
+                staking_token_contract.functions.getServiceInfo(service_id).call(block_identifier=current_block_number)
             )[2][1]
             mech_requests_since_last_cp = mech_request_count - mech_request_count_on_last_checkpoint
             # mech_requests_current_epoch = _get_mech_requests_count(
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 
     # Agent
     agent_status = _get_agent_status()
-    agent_xdai = get_balance(agent_address, rpc)
+    agent_xdai = get_balance(agent_address, rpc, block_identifier=current_block_number)
     _print_subsection_header("Agent")
     _print_status("Status (on this machine)", agent_status)
     _print_status("Address", agent_address)
@@ -439,8 +439,8 @@ if __name__ == "__main__":
     )
 
     # Safe
-    safe_xdai = get_balance(safe_address, rpc)
-    safe_wxdai = get_token_balance(safe_address, trades.WXDAI_CONTRACT_ADDRESS, rpc)
+    safe_xdai = get_balance(safe_address, rpc, block_identifier=current_block_number)
+    safe_wxdai = get_token_balance(safe_address, trades.WXDAI_CONTRACT_ADDRESS, rpc, block_identifier=current_block_number)
     _print_subsection_header(
         f"Safe {_warning_message(safe_xdai + safe_wxdai, SAFE_BALANCE_THRESHOLD)}"
     )
@@ -449,7 +449,7 @@ if __name__ == "__main__":
     _print_status("WxDAI Balance", wei_to_wxdai(safe_wxdai))
 
     # Master Safe - Agent Owner/Operator
-    operator_xdai = get_balance(operator_address, rpc)
+    operator_xdai = get_balance(operator_address, rpc, block_identifier=current_block_number)
     _print_subsection_header("Master Safe - Agent Owner/Operator")
     _print_status("Address", operator_address)
     _print_status(
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     )
 
     # Master EOA - Master Safe Owner
-    master_eoa_xdai = get_balance(master_eoa, rpc)
+    master_eoa_xdai = get_balance(master_eoa, rpc, block_identifier=current_block_number)
     _print_subsection_header("Master EOA - Master Safe Owner")
     _print_status("Address", master_eoa)
     _print_status(
