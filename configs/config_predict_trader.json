@@ -50,6 +50,12 @@
             "value": "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
             "provision_type": "user"
         },
+        "PRIORITY_MECH_SERVICE_ID": {
+            "name": "Priority Mech service ID",
+            "description": "This mech of this service will be used at priority when using mech marketplace.",
+            "value": "975",
+            "provision_type": "user"
+        },
         "MECH_REQUEST_PRICE": {
             "name": "Mech request price",
             "description": "",
