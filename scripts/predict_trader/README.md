@@ -131,3 +131,32 @@ So, you can usually use `is_transitioning_fast` as a rule to check if an agent i
 
 When running the agent for the first time, enter the mech address and service ID of your choice when asked for `Priority Mech contract address` and `Priority Mech service ID`.
 If you've already entered these values and want to change them later, follow this [guide](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#changing-entered-configuration)
+
+## Migrate from trader-quickstart
+
+If you were previously using [trader-quickstart](https://github.com/valory-xyz/trader-quickstart/tree/main) and want to migrate to the new unified [quickstart](https://github.com/valory-xyz/quickstart) repository, follow these steps:
+
+> Note: Please ensure to meet the [system requirements](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#system-requirements) of this new quickstart.
+
+1. Copy the `.trader_runner` folder from your trader-quickstart repository to the root of quickstart:
+
+    ```bash
+    cp -r /path/to/trader-quickstart/.trader_runner /path/to/quickstart/
+    ```
+
+2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
+
+    ```bash
+    poetry install
+    poetry run python -m scripts.predict_trader.migrate_legacy_quickstart configs/config_predict_trader.json
+    ```
+
+3. Follow the prompts to complete the migration process. The script will:
+   - Parse your existing configuration
+   - Set up the new operate environment
+   - Migrate your service to the master safe
+   - Handle any necessary unstaking and transfers
+
+4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your trader service.
+
+5. After you ensure that the agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.

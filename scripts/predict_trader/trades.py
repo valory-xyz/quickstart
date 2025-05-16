@@ -205,13 +205,13 @@ STATS_TABLE_COLS = list(MarketState) + ["TOTAL"]
 STATS_TABLE_ROWS = list(MarketAttribute)
 
 
-def get_balance(address: str, rpc_url: str) -> int:
+def get_balance(address: str, rpc_url: str, block_identifier: str = "latest") -> int:
     """Get the native xDAI balance of an address in wei."""
     headers = {"Content-Type": "application/json"}
     data = {
         "jsonrpc": "2.0",
         "method": "eth_getBalance",
-        "params": [address, "latest"],
+        "params": [address, block_identifier],
         "id": 1,
     }
     response = requests.post(rpc_url, headers=headers, json=data)
@@ -219,7 +219,7 @@ def get_balance(address: str, rpc_url: str) -> int:
 
 
 def get_token_balance(
-    gnosis_address: str, token_contract_address: str, rpc_url: str
+    gnosis_address: str, token_contract_address: str, rpc_url: str, block_identifier: str = "latest"
 ) -> int:
     """Get the token balance of an address in wei."""
     function_selector = "70a08231"  # function selector for balanceOf(address)
@@ -231,7 +231,7 @@ def get_token_balance(
     payload = {
         "jsonrpc": "2.0",
         "method": "eth_call",
-        "params": [{"to": token_contract_address, "data": data}, "latest"],
+        "params": [{"to": token_contract_address, "data": data}, block_identifier],
         "id": 1,
     }
     response = requests.post(rpc_url, json=payload)

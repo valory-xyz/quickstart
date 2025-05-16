@@ -282,13 +282,13 @@ def get_token_config():
 
 def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for ERC20 tokens."""
-    pattern = r"\[(optimistic|base|mode|gnosis)\].*Please make sure Master (?:EOA|Safe) (0x[a-fA-F0-9]{40}) has at least ([0-9.]+) ([A-Z]+)"
+    pattern = r"\[(optimistic|base|mode|gnosis)\].*Please transfer at least ([0-9.]+) ([A-Z]+) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})"
     match = re.search(pattern, output)
     if match:
         chain = match.group(1)
-        wallet_address = match.group(2)
-        required_amount = float(match.group(3))
-        token_symbol = match.group(4)
+        wallet_address = match.group(4)
+        required_amount = float(match.group(2))
+        token_symbol = match.group(3)
 
         # Map chain identifier to config key
         chain_map = {
@@ -362,16 +362,16 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
 def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for native tokens."""
     patterns = [
-        r"Please make sure Master EOA (0x[a-fA-F0-9]{40}) has at least (\d+\.\d+) (?:ETH|xDAI)",
-        r"Please make sure Master Safe (0x[a-fA-F0-9]{40}) has at least (\d+\.\d+) (?:ETH|xDAI)"
+        r"Please transfer at least (\d+\.\d+) (?:ETH|xDAI) to the Master EOA (0x[a-fA-F0-9]{40})",
+        r"Please transfer at least (\d+\.\d+) (?:ETH|xDAI) to the Master Safe (0x[a-fA-F0-9]{40})"
     ]
 
     
     for pattern in patterns:
         match = re.search(pattern, output)
         if match:
-            wallet_address = match.group(1)
-            required_amount = float(match.group(2))
+            wallet_address = match.group(2)
+            required_amount = float(match.group(1))
             wallet_type = "EOA" if "EOA" in pattern else "Safe"
             
             try:
@@ -651,9 +651,9 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Add Modius-specific prompts
         prompts.update({
                 r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
-                r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+                r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                     lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger),
-                r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+                r"Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
                     lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
         
@@ -690,9 +690,9 @@ def get_config_specific_settings(config_path: str) -> dict:
             r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODIUS_RPC_URL"],
             r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
             r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
-            r"\[(?:optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+            r"\[(?:optimistic|base|mode)\].*Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
-            r"\[(?:optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+            r"\[(?:optimistic|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
                 lambda output, logger: create_token_funding_handler(get_chain_rpc(output, logger))(output, logger)
         })
 
@@ -706,7 +706,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Add Mech-specific prompts
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
-            r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+            r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
@@ -719,7 +719,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Add Agents.fun-specific prompts
         prompts.update({
             r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
-            r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+            r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"])(output, logger),
         })    
         
@@ -732,9 +732,9 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Add PredictTrader-specific prompts
         prompts.update({
             r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
-            r"Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+            r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger),
-            r"Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+            r"Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
                 lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
