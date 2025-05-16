@@ -11,3 +11,6 @@ logs
 # Ignore all .pytest_cache directories anywhere in the project
 **/.pytest_cache/
 .pytest_cache/
+
+# Development
+.vscode/

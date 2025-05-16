@@ -1,9 +1,9 @@
 {
     "name": "Memeooorr",
-    "hash": "bafybeidxfdlaeywhnhafix2yzrnbldk5cybwal53o6mtabnamnxmwtprea",
+    "hash": "bafybeiaymgtbsxf6zyoedpgocdjqd5qfnyr3ugybwo7u3iqyiseti4bzke",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v0.4.2-alpha1",
+    "service_version": "v0.5.0-alpha5",
     "home_chain": "base",
     "configurations": {
         "base": {
@@ -50,40 +50,46 @@
             "value": "",
             "provision_type": "computed"
         },
-        "TWIKIT_USERNAME": {
-            "name": "Twitter username",
-            "description": "Twitter username of the agent",
-            "value": "username",
+        "TWEEPY_CONSUMER_API_KEY": {
+            "name": "Tweepy consumer API key",
+            "description": "Tweepy consumer API key to allow the agent to use Tweepy. How to get it: https://github.com/dvilelaf/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
             "provision_type": "user"
         },
-        "TWIKIT_EMAIL": {
-            "name": "Twitter email",
-            "description": "Twitter email of the agent",
-            "value": "email@mail.com",
+        "TWEEPY_CONSUMER_API_KEY_SECRET": {
+            "name": "Tweepy consumer API key secret",
+            "description": "Tweepy consumer API key secret to allow the agent to use Tweepy. How to get it: https://github.com/dvilelaf/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
             "provision_type": "user"
         },
-        "TWIKIT_PASSWORD": {
-            "name": "Twitter password",
-            "description": "Twitter password of the agent",
-            "value": "password",
+        "TWEEPY_ACCESS_TOKEN": {
+            "name": "Tweepy access token",
+            "description": "Tweepy access token to allow the agent to use Tweepy. How to get it: https://github.com/dvilelaf/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
             "provision_type": "user"
         },
-        "TWIKIT_COOKIES": {
-            "name": "Twitter cookies",
-            "description": "Stringified Twitter cookies of the agent",
-            "value": "{\"d_prefs\":\"...\",\"night_mode\":\"...\",\"kdt\":\"...\",\"dnt\":\"...\",\"lang\":\"...\"}",
+        "TWEEPY_ACCESS_TOKEN_SECRET": {
+            "name": "Tweepy access token secret",
+            "description": "Tweepy access token secret to allow the agent to use Tweepy. How to get it: https://github.com/dvilelaf/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "TWEEPY_BEARER_TOKEN": {
+            "name": "Tweepy bearer token",
+            "description": "Tweepy bearer token to allow the agent to use Tweepy. How to get it: https://github.com/dvilelaf/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
             "provision_type": "user"
         },
         "GENAI_API_KEY": {
             "name": "Gemini api key",
             "description": "Gemini api key to allow the agent to use Gemini",
-            "value": "api_key",
+            "value": "",
             "provision_type": "user"
         },
         "PERSONA": {
             "name": "Persona description",
             "description": "A persona to describe the personality of the agent",
-            "value": "persona",
+            "value": "",
             "provision_type": "user"
         },
         "FEEDBACK_PERIOD_HOURS": {
