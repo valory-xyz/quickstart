@@ -668,13 +668,18 @@ def get_config_specific_settings(config_path: str) -> dict:
 
         def get_chain_rpc(output: str, logger: logging.Logger) -> str:
             """Get RPC URL based on chain prefix in the output."""
-            if "[mode]" in output:
+            chain = sorted(  # get the last occurrence
+                ["[mode]", "[base]", "[optimistic]"],
+                reverse=True,
+                key=lambda x: output.find(x)
+            )[0]
+            if "[mode]" == chain:
                 logger.info("Using Mode RPC URL")
                 return test_config["MODIUS_RPC_URL"]
-            elif "[base]" in output:
+            elif "[base]" == chain:
                 logger.info("Using Base RPC URL")
                 return test_config["BASE_RPC_URL"]
-            elif "[optimistic]" in output:
+            elif "[optimistic]" == chain:
                 logger.info("Using Optimism RPC URL")
                 return test_config["OPTIMISM_RPC_URL"]
             else:
