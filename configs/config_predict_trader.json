@@ -83,7 +83,7 @@
         "TOOLS_ACCURACY_HASH": {
             "name": "Tools accuracy hash",
             "description": "",
-            "value": "QmXw515tCFwKiHWSpJWXSxUAQL5zSztqV3828qoKCJBe1Y",
+            "value": "QmSJ9CRvEjwsQCckMG9NXtxkQrtmmgnjpxfnTLoA1jQsUm",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
