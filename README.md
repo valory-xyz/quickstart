@@ -252,8 +252,9 @@ Now, open a Git Bash terminal and follow the instructions in the "[Run the scrip
 
 When executed for the first time, the `run_service.sh` script creates a number of blockchain accounts:
 
-- one EOA account will be used as the service owner and agent operator,
-- one EOA account will be used for the agent, and
+- one Master EOA account will be used to pay gas fees on behalf of the agent operator,
+- one Master [Safe](https://app.safe.global/), multisig owned by the Master EOA (and a backup wallet, if provided) to handle the funds and interact with the OLAS protocol,
+- one Agent EOA account will be used for the agent, and
 - one smart contract account corresponds to a [Safe](https://app.safe.global/) wallet with a single owner (the agent account).
 
 The addresses and private keys of the EOA accounts (plus some additional configuration) are stored within the folder `.operate`. In order to avoid losing your assets, back up this folder in a safe place, and do not publish or share its contents with unauthorized parties.
@@ -306,3 +307,70 @@ If you just want to build the deployment without executing the service
 ```bash
 ./run_service.sh <agent_config.json> --build-only
 ```
+
+## Guide for the service `config.json`
+
+This is the configuration file whose path is passed as an argument to the `./run_service.sh` and other commands.
+If you ever want to modify the config.json or create one of your own, follow this guide.
+The JSON file should have the following schema:
+
+### Top-level Fields
+
+| Field Name      | Type                | Description                                                                             |
+|-----------------|---------------------|-----------------------------------------------------------------------------------------|
+| name            | string              | Name of the agent/service. This name is used for caching, so don't modify it afterwards.|
+| hash            | string              | IPFS hash of the service package.                                                       |
+| description     | string              | Description of the agent/service.                                                       |
+| image           | string              | URL to an image representing the agent.                                                 |
+| service_version | string              | Version of the service.                                                                 |
+| home_chain      | string              | Name of the home blockchain network.                                                    |
+| configurations  | object              | Chain-specific configuration. See table below.                                          |
+| env_variables   | object              | Environment variables to be set for the agent. See table below.                         |
+
+---
+
+#### `configurations` Object
+
+| Field Name      | Type    | Description                                                                                   |
+|-----------------|---------|-----------------------------------------------------------------------------------------------|
+| [chain name]    | object  | Keyed by chain name (e.g., "gnosis"). Contains agent configuration for that chain. See below. |
+
+##### Example: `configurations.gnosis`
+
+| Field Name           | Type    | Description                                                                     |
+|----------------------|---------|---------------------------------------------------------------------------------|
+| agent_id             | integer | Agent ID of the registered agent package in OLAS registry.                      |
+| nft                  | string  | IPFS hash of the image of the NFT of this agent.                                |
+| threshold            | integer | It is deprecated now and will be removed in the future. Leave it `1` for now.   |
+| use_mech_marketplace | bool    | It is deprecated now and will be removed in the future. Leave it `true` for now.|
+| fund_requirements    | object  | Funding requirements for agent and safe. See table below.                       |
+
+###### `fund_requirements` Object
+
+| Field Name (Token Address) | Type     | Description                                         |
+|----------------------------|----------|-----------------------------------------------------|
+| agent                      | number   | Amount required for the agent (in wei).             |
+| safe                       | number   | Amount required for the safe (in wei).              |
+
+> Token address is `0x0000000000000000000000000000000000000000` for native currency like ETH, xDAI, etc.
+---
+
+#### `env_variables` Object
+
+| Field Name                  | Type    | Description                                                                                   |
+|-----------------------------|---------|-----------------------------------------------------------------------------------------------|
+| [variable name]             | object  | Keyed by variable name. Contains details for each environment variable. See below.            |
+
+##### Example: `env_variables.GNOSIS_LEDGER_RPC`
+
+| Field Name      | Type    | Description                                                      |
+|-----------------|---------|------------------------------------------------------------------|
+| name            | string  | Human-readable name of the variable.                             |
+| description     | string  | Description of the variable.                                     |
+| value           | string  | Default or user-provided value.                                  |
+| provision_type  | string  | How the variable is provided: "user", "computed", or "fixed".    |
+
+What happens when the `provision_type` is:
+- `user` - The quickstart will ask for this value from CLI at runtime, and save it to avoid asking again.
+- `fixed` - The `value` written in the config.json will be provided to the agent's environment variable, as is.
+- `computed` - These are for special environment variables that the quickstart will set for you, based on other configurations like staking program, priority mech, etc.
