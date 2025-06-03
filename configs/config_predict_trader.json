@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeif5dmcya5vimxqecypr6rndmdv7xa2tidnygieinajqci7s25yjc4",
+    "hash": "bafybeihe7r2a2vnbbqrzczlzjhhmzypxbre3gobupc65w4ea266hmk5efu",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.25.1",
+    "service_version": "v0.25.5",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -50,6 +50,12 @@
             "value": "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
             "provision_type": "user"
         },
+        "PRIORITY_MECH_SERVICE_ID": {
+            "name": "Priority Mech service ID",
+            "description": "This mech of this service will be used at priority when using mech marketplace.",
+            "value": "975",
+            "provision_type": "user"
+        },
         "MECH_REQUEST_PRICE": {
             "name": "Mech request price",
             "description": "",
@@ -77,7 +83,7 @@
         "TOOLS_ACCURACY_HASH": {
             "name": "Tools accuracy hash",
             "description": "",
-            "value": "QmXw515tCFwKiHWSpJWXSxUAQL5zSztqV3828qoKCJBe1Y",
+            "value": "QmSJ9CRvEjwsQCckMG9NXtxkQrtmmgnjpxfnTLoA1jQsUm",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
