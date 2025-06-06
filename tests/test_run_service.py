@@ -808,8 +808,8 @@ class BaseTestService:
                 
                 # Modify env variables - create new dict instead of modifying
                 if 'env_variables' in config_data:
-                    # Add TWIKIT_SKIP_CONNECTION
-                    config_data['env_variables']['TWIKIT_SKIP_CONNECTION'] = {
+                    # Add TWEEPY_SKIP_AUTH
+                    config_data['env_variables']['TWEEPY_SKIP_AUTH'] = {
                         "name": "Skip Twitter connection",
                         "description": "Skip Twitter connection for testing",
                         "value": "true",  
