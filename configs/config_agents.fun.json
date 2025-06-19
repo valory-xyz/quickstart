@@ -1,9 +1,9 @@
 {
     "name": "Memeooorr",
-    "hash": "bafybeidk6nrxghl3osveh54dug2gyy7cipnfuth4enltrc5mkwdne6qx74",
+    "hash": "bafybeicuhcobj6g5355h3eq3mwm55t2rc2krx4grgul7vayouj7fh7qy4i",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v0.6.0-alpha3",
+    "service_version": "v0.7.0-alpha5",
     "home_chain": "base",
     "configurations": {
         "base": {
@@ -107,7 +107,7 @@
         "RESET_PAUSE_DURATION": {
             "name": "Reset pause duration",
             "description": "",
-            "value": "1800",
+            "value": "300",
             "provision_type": "fixed"
         }
     }
