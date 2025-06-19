@@ -105,10 +105,10 @@
             "provision_type": "fixed"
         },
         "RESET_PAUSE_DURATION": {
-            "name": "Reset pause duration",
-            "description": "",
-            "value": "1800",
-            "provision_type": "fixed"
+          "name": "Reset pause duration",
+          "description": "",
+          "value": "300",
+          "provision_type": "fixed"
         }
     }
 }
