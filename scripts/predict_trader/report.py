@@ -373,15 +373,19 @@ if __name__ == "__main__":
             liveness_ratio = (
                 activity_checker_contract.functions.livenessRatio().call(block_identifier=current_block_number)
             )
+            current_timestamp = w3.eth.get_block(current_block_number).timestamp
+            last_ts_checkpoint = staking_token_contract.functions.tsCheckpoint().call(block_identifier=current_block_number)
+            liveness_period = (
+                staking_token_contract.functions.livenessPeriod().call(block_identifier=current_block_number)
+            )
             mech_requests_24h_threshold = math.ceil(
-                (liveness_ratio * 60 * 60 * 24) / 10**18
+                max(liveness_period, (current_timestamp - last_ts_checkpoint))
+                * liveness_ratio
+                / 10 ** 18
             )
 
             next_checkpoint_ts = (
                 staking_token_contract.functions.getNextRewardCheckpointTimestamp().call(block_identifier=current_block_number)
-            )
-            liveness_period = (
-                staking_token_contract.functions.livenessPeriod().call(block_identifier=current_block_number)
             )
             last_checkpoint_ts = next_checkpoint_ts - liveness_period
 
