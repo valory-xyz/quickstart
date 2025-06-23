@@ -389,7 +389,7 @@ if __name__ == "__main__":
             )
             last_checkpoint_ts = next_checkpoint_ts - liveness_period
 
-            mech_request_count = mech_contract.functions.getRequestsCount(safe_address).call(block_identifier=current_block_number)
+            mech_request_count = mech_contract.functions.mapRequestsCounts(safe_address).call(block_identifier=current_block_number)
             mech_request_count_on_last_checkpoint = (
                 staking_token_contract.functions.getServiceInfo(service_id).call(block_identifier=current_block_number)
             )[2][1]
