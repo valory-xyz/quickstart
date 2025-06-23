@@ -1,9 +1,9 @@
 {
     "name": "Mech Predict",
-    "hash": "bafybeihncvb4u3bg46ctpvdrmnqw4vknqyj7jrqpykjx6snxznvluaijuq",
+    "hash": "bafybeib2su75tcwowyv23c2xrcy6xzo7mfoo7fslryn5awjpzgyu7jb5d4",
     "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-    "service_version": "v0.3.2",
+    "service_version": "v0.8.1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
