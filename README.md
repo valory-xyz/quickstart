@@ -143,10 +143,11 @@ To stop your agent, use:
 
 ### Changing entered configuration
 
-If you entered any input when running an agent for the first time, and later want to change them, follow these steps:
-1. Find and open the `.operate/<agent_name>-quickstart-config.json`
-2. Edit your inputs under the `"user_provided_args"` object.
-3. Stop and Start the service again using the above commands as usual.
+If you entered any input when running an agent for the first time, and later want to change them, use the following script:
+
+```bash
+./reset_configs.sh <agent_config.json>
+```
 
 ### Claim accrued OLAS staking rewards
 
