@@ -97,6 +97,12 @@
             "description": "Type of mech to deploy (Native, Token, or Nevermined)",
             "value": "Native",
             "provision_type": "user"
+        },
+        "MECH_REQUEST_PRICE": {
+            "name": "Mech request price",
+            "description": "The price for requesting the mech's services in wei.",
+            "value": "10000000000000000",
+            "provision_type": "user"
         }
     }
 }
