@@ -332,27 +332,28 @@ if __name__ == "__main__":
             except (ContractLogicError, ValueError):
                 mech_contract_address = activity_checker_contract.functions.agentMech().call(block_identifier=current_block_number)
 
-            mech_contract_data = requests.get(MECH_CONTRACT_JSON_URL).json()
-            mech_contract_abi = mech_contract_data.get("abi", [])
-            mech_contract_abi.append({
-                "inputs": [
-                    {
-                    "internalType": "address",
-                    "name": "account",
-                    "type": "address"
-                    }
-                ],
-                "name": "getRequestCount",
-                "outputs": [
-                    {
-                    "internalType": "uint256",
-                    "name": "",
-                    "type": "uint256"
-                    }
-                ],
-                "stateMutability": "view",
-                "type": "function"
-            })
+            mech_contract_abi = [
+                {
+                    "inputs": [
+                        {
+                        "internalType": "address",
+                        "name": "account",
+                        "type": "address"
+                        }
+                    ],
+                    "name": function_name,
+                    "outputs": [
+                        {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+                for function_name in ("mapRequestsCounts", "mapRequestCounts")
+            ]
             mech_contract = w3.eth.contract(
                 address=mech_contract_address, abi=mech_contract_abi   # type: ignore
             )
