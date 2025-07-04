@@ -67,6 +67,26 @@ docker rm -f abci0 node0 trader_abci_0 trader_tm_0 &> /dev/null ||
   exit 1
 }
 
+# own the data directory (if required)
+# this is for migrating from an old version of the agents (using open-autonomy <0.19.9), which used to save these files as root
+# it can be removed after some time with the next major release of the quickstart
+if [ -d ".operate/services" ]; then
+    for service_dir in .operate/services/sc-*; do
+        if [ -d "$service_dir/persistent_data" ]; then
+            # Check if directory itself is owned by root
+            if [ "$(stat -c '%U' "$service_dir/persistent_data" 2>/dev/null || stat -f '%Su' "$service_dir/persistent_data" 2>/dev/null)" = "root" ]; then
+                echo "Changing ownership of $service_dir/persistent_data from root to current user. Please enter sudo password."
+                sudo chown -R $(id -u):$(id -g) "$service_dir/persistent_data"
+            fi
+            # Check if any files within persistent_data are owned by root
+            if find "$service_dir/persistent_data" -user root -print -quit | grep -q .; then
+                echo "Changing ownership of root-owned files in $service_dir/persistent_data to current user. Please enter sudo password"
+                sudo chown -R $(id -u):$(id -g) "$service_dir/persistent_data"
+            fi
+        fi
+    done
+fi
+
 # Install dependencies and run the agent througth the middleware
 poetry install --only main --no-cache
 poetry run python -m operate.cli quickstart $@

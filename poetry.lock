@@ -1369,22 +1369,22 @@ test = ["pytest (>=6)"]
 
 [[package]]
 name = "fastapi"
-version = "0.110.0"
+version = "0.110.3"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "fastapi-0.110.0-py3-none-any.whl", hash = "sha256:87a1f6fb632a218222c5984be540055346a8f5d8a68e8f6fb647b1dc9934de4b"},
-    {file = "fastapi-0.110.0.tar.gz", hash = "sha256:266775f0dcc95af9d3ef39bad55cff525329a931d5fd51930aadd4f428bf7ff3"},
+    {file = "fastapi-0.110.3-py3-none-any.whl", hash = "sha256:fd7600612f755e4050beb74001310b5a7e1796d149c2ee363124abdfa0289d32"},
+    {file = "fastapi-0.110.3.tar.gz", hash = "sha256:555700b0159379e94fdbfc6bb66a0f1c43f4cf7060f25239af3d84b63a656626"},
 ]
 
 [package.dependencies]
 pydantic = ">=1.7.4,<1.8 || >1.8,<1.8.1 || >1.8.1,<2.0.0 || >2.0.0,<2.0.1 || >2.0.1,<2.1.0 || >2.1.0,<3.0.0"
-starlette = ">=0.36.3,<0.37.0"
+starlette = ">=0.37.2,<0.38.0"
 typing-extensions = ">=4.8.0"
 
 [package.extras]
-all = ["email-validator (>=2.0.0)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)", "jinja2 (>=2.11.2)", "orjson (>=3.2.1)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.7)", "pyyaml (>=5.3.1)", "ujson (>=4.0.1,!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0)", "uvicorn[standard] (>=0.12.0)"]
+all = ["email_validator (>=2.0.0)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)", "jinja2 (>=2.11.2)", "orjson (>=3.2.1)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.7)", "pyyaml (>=5.3.1)", "ujson (>=4.0.1,!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
 name = "filetype"
@@ -2024,11 +2024,8 @@ files = [
     {file = "lxml-5.4.0-cp36-cp36m-win_amd64.whl", hash = "sha256:7ce1a171ec325192c6a636b64c94418e71a1964f56d002cc28122fceff0b6121"},
     {file = "lxml-5.4.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:795f61bcaf8770e1b37eec24edf9771b307df3af74d1d6f27d812e15a9ff3872"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_12_i686.manylinux2010_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:29f451a4b614a7b5b6c2e043d7b64a15bd8304d7e767055e8ab68387a8cacf4e"},
-    {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:891f7f991a68d20c75cb13c5c9142b2a3f9eb161f1f12a9489c82172d1f133c0"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4aa412a82e460571fad592d0f93ce9935a20090029ba08eca05c614f99b0cc92"},
-    {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_28_aarch64.whl", hash = "sha256:ac7ba71f9561cd7d7b55e1ea5511543c0282e2b6450f122672a2694621d63b7e"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_28_x86_64.whl", hash = "sha256:c5d32f5284012deaccd37da1e2cd42f081feaa76981f0eaa474351b68df813c5"},
-    {file = "lxml-5.4.0-cp37-cp37m-musllinux_1_2_aarch64.whl", hash = "sha256:ce31158630a6ac85bddd6b830cffd46085ff90498b397bd0a259f59d27a12188"},
     {file = "lxml-5.4.0-cp37-cp37m-musllinux_1_2_x86_64.whl", hash = "sha256:31e63621e073e04697c1b2d23fcb89991790eef370ec37ce4d5d469f40924ed6"},
     {file = "lxml-5.4.0-cp37-cp37m-win32.whl", hash = "sha256:be2ba4c3c5b7900246a8f866580700ef0d538f2ca32535e991027bdaba944063"},
     {file = "lxml-5.4.0-cp37-cp37m-win_amd64.whl", hash = "sha256:09846782b1ef650b321484ad429217f5154da4d6e786636c38e434fa32e94e49"},
@@ -2313,13 +2310,13 @@ nicer-shell = ["ipython"]
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.6.1"
+version = "0.6.3"
 description = ""
 optional = false
 python-versions = "<3.12,>=3.9"
 files = [
-    {file = "olas_operate_middleware-0.6.1-py3-none-any.whl", hash = "sha256:10280581ce45394dbcc5e0f5c639889d15dcc6f4ec4945ba8e90ad0c1928c3c2"},
-    {file = "olas_operate_middleware-0.6.1.tar.gz", hash = "sha256:eded66f914a332051df16606235e12da54b037133bba191ab73c3f487a42cf8a"},
+    {file = "olas_operate_middleware-0.6.3-py3-none-any.whl", hash = "sha256:b83e96bc7e81c1ff1dd66df22447beedfa51581ebef9fc4d61026381cd0483ae"},
+    {file = "olas_operate_middleware-0.6.3.tar.gz", hash = "sha256:61a47cec034f025f1d4e0ecdc91ea24fceb00abc8a536a86c078aa630be2a2e9"},
 ]
 
 [package.dependencies]
@@ -2337,7 +2334,7 @@ eth-keys = "0.4.0"
 eth-rlp = "0.3.0"
 eth-typing = "3.5.2"
 eth-utils = "2.3.1"
-fastapi = "0.110.0"
+fastapi = "0.110.3"
 frozenlist = "1.4.1"
 halo = "0.0.31"
 hexbytes = "0.3.1"
@@ -2348,11 +2345,11 @@ open-aea-cli-ipfs = "1.65.0"
 open-aea-ledger-cosmos = "1.65.0"
 open-aea-ledger-ethereum = "1.65.0"
 open-aea-ledger-ethereum-flashbots = "1.65.0"
-open-autonomy = "0.19.8"
+open-autonomy = ">=0.19.11,<0.20.0"
 psutil = ">=5.9.8,<6.0.0"
 pyinstaller = ">=6.8.0,<7.0.0"
 requests-toolbelt = "1.0.0"
-starlette = "0.36.3"
+starlette = "0.37.2"
 twikit = "2.2.0"
 uvicorn = "0.27.0"
 web3 = "6.1.0"
@@ -2479,13 +2476,13 @@ open-aea-ledger-ethereum = ">=1.65.0,<1.66.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.19.8"
+version = "0.19.11"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "open_autonomy-0.19.8-py3-none-any.whl", hash = "sha256:561802ef6e5ca4487a669bb59c7cc8d395e95561c59e051466169bb896df36fd"},
-    {file = "open_autonomy-0.19.8.tar.gz", hash = "sha256:04d1c570c37c6edead57b2f573621d06953ee2f39db91d245e7b59a4e15c039b"},
+    {file = "open_autonomy-0.19.11-py3-none-any.whl", hash = "sha256:0bf7f7281457092a68995454e985781fb430cd6f01dac076d82d1f874e3417c1"},
+    {file = "open_autonomy-0.19.11.tar.gz", hash = "sha256:e45dec413ec1005484e315be1ff91914ec1630eb35150e32668beb52bd9b525b"},
 ]
 
 [package.dependencies]
@@ -2505,7 +2502,7 @@ python-dotenv = ">=0.14.5,<0.22.0"
 requests = ">=2.28.1,<2.31.2"
 requests-toolbelt = "1.0.0"
 texttable = "1.6.7"
-typing_extensions = ">=3.10.0.2"
+typing_extensions = ">=3.10.0.2,<=4.13.2"
 valory-docker-compose = "1.29.3"
 watchdog = ">=2.1.6"
 werkzeug = "2.0.3"
@@ -3555,13 +3552,13 @@ files = [
 
 [[package]]
 name = "starlette"
-version = "0.36.3"
+version = "0.37.2"
 description = "The little ASGI library that shines."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "starlette-0.36.3-py3-none-any.whl", hash = "sha256:13d429aa93a61dc40bf503e8c801db1f1bca3dc706b10ef2434a36123568f044"},
-    {file = "starlette-0.36.3.tar.gz", hash = "sha256:90a671733cfb35771d8cc605e0b679d23b992f8dcfad48cc60b38cb29aeb7080"},
+    {file = "starlette-0.37.2-py3-none-any.whl", hash = "sha256:6fe59f29268538e5d0d182f2791a479a0c64638e6935d1c6989e63fb2699c6ee"},
+    {file = "starlette-0.37.2.tar.gz", hash = "sha256:9af890290133b79fc3db55474ade20f6220a364a0402e0b556e7cd5e1e093823"},
 ]
 
 [package.dependencies]
@@ -3689,13 +3686,13 @@ pyotp = "*"
 
 [[package]]
 name = "typing-extensions"
-version = "4.14.0"
-description = "Backported and Experimental Type Hints for Python 3.9+"
+version = "4.13.2"
+description = "Backported and Experimental Type Hints for Python 3.8+"
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.8"
 files = [
-    {file = "typing_extensions-4.14.0-py3-none-any.whl", hash = "sha256:a1514509136dd0b477638fc68d6a91497af5076466ad0fa6c338e44e359944af"},
-    {file = "typing_extensions-4.14.0.tar.gz", hash = "sha256:8676b788e32f02ab42d9e7c61324048ae4c6d844a399eebace3d4979d75ceef4"},
+    {file = "typing_extensions-4.13.2-py3-none-any.whl", hash = "sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c"},
+    {file = "typing_extensions-4.13.2.tar.gz", hash = "sha256:e6c81219bd689f51865d9e372991c540bda33a0379d5573cddb9a3a23f7caaef"},
 ]
 
 [[package]]
@@ -4107,4 +4104,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.12"
-content-hash = "63555e51e270ae2996c8924693245a371a0710f8f306d73629a145b13dbc3d14"
+content-hash = "c6e8164c53c89b1d3b98575ba72de4d52cd1de78749a8cded6c61f4e7049cccc"
