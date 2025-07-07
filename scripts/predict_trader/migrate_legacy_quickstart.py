@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from dataclasses import dataclass
 import os
-from typing import TypedDict
+from typing import Optional, TypedDict
 from dotenv import load_dotenv
 from getpass import getpass
 from halo import Halo
@@ -28,8 +28,9 @@ from operate.quickstart.utils  import ask_yes_or_no, CHAIN_TO_METADATA, print_se
 from operate.quickstart.run_service import NO_STAKING_PROGRAM_ID
 from operate.utils.gnosis import get_asset_balance, get_assets_balances
 
-TRADER_RUNNER_PATH = Path(__file__).parent.parent.parent / ".trader_runner"
-OPERATE_HOME = Path(__file__).parent.parent.parent / OPERATE
+ROOT_PATH = Path(__file__).parent.parent.parent
+TRADER_RUNNER_PATH = ROOT_PATH / ".trader_runner"
+OPERATE_HOME = ROOT_PATH / OPERATE
 DATA_FILES = (
     "available_tools_store.json",
     "checkpoint.txt",
@@ -235,6 +236,26 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
     service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = trader_data.service_safe
     service.store()
     spinner.succeed("Service created")
+
+    old_mech_events_file = TRADER_RUNNER_PATH / "mech_events.json"
+    new_mech_events_file = ROOT_PATH / "data" / "mech_events.json"
+    if old_mech_events_file.exists() and (
+        not new_mech_events_file.exists() or
+        old_mech_events_file.stat().st_size > new_mech_events_file.stat().st_size
+    ):
+        spinner = Halo(text="Copying existing mech events...", spinner="dots").start()
+        try:
+            new_mech_events_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(old_mech_events_file, "r") as f:
+                mech_events = json.load(f)
+            with open(new_mech_events_file, "w") as f:
+                json.dump(obj=mech_events, fp=f, indent=2)
+            spinner.succeed("Mech events copied")
+        except Exception as e:
+            spinner.fail(f"Failed to copy mech events: {e}.")
+            print(
+                f"Please copy the file {old_mech_events_file} to {new_mech_events_file} manually."
+            )
 
     return get_service(service_manager, service_template)
 
