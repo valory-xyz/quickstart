@@ -22,6 +22,7 @@ from test_run_service import (
     create_funding_handler,
     create_token_funding_handler,
     get_config_specific_settings,
+    handle_env_var_prompt,
     setup_logging,
     get_config_files,
     BaseTestService,
@@ -287,7 +288,8 @@ class StakingBaseTestService(BaseTestService):
                 r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                     lambda output, logger: create_funding_handler(rpc_url)(output, logger),
                 r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
-                    lambda output, logger: create_token_funding_handler(rpc_url)(output, logger)
+                    lambda output, logger: create_token_funding_handler(rpc_url)(output, logger),
+                r"Please enter .*": lambda output, logger: handle_env_var_prompt(output, logger, self.config_path)
             }
             
             # Initialize success flag
