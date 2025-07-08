@@ -977,7 +977,22 @@ class BaseTestService:
             timeout=30,
             cwd=stop_dir  # Explicitly set working directory for stop_service
         )
-        process.expect(pexpect.EOF)
+        try:
+            while True:
+                patterns = list(cls.config_settings["prompts"].keys())
+                index = process.expect(patterns, timeout=600)
+                pattern = patterns[index]
+                
+                log_expect_match(process, pattern, index, cls.logger)
+                
+                response = cls.config_settings["prompts"][pattern]
+                if callable(response):
+                    output = process.before + process.after
+                    response = response(output, cls.logger)
+                
+                send_input_safely(process, response, cls.logger)
+        except pexpect.EOF:
+            cls.logger.info("Service stop completed")
 
     def test_health_check(self):
         """Test service health endpoint"""
