@@ -89,7 +89,7 @@ def handle_missing_rpcs(config: dict) -> dict:
     """
     
     required_rpcs = {
-        Chain.OPTIMISTIC.value: "optimism_rpc",
+        Chain.OPTIMISM.value: "optimism_rpc",
         Chain.BASE.value: "base_rpc",
         Chain.MODE.value: "mode_rpc"
     }
