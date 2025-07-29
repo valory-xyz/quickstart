@@ -285,9 +285,9 @@ class StakingBaseTestService(BaseTestService):
             prompts = {
                 r"Do you want to continue\? \(yes/no\):": "yes",
                 r"Enter local user account password \[hidden input\]:": os.getenv('TEST_PASSWORD', 'test_secret'),
-                r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
+                r"\[(?:gnosis|optimism|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                     lambda output, logger: create_funding_handler(rpc_url)(output, logger),
-                r"\[(?:gnosis|optimistic|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
+                r"\[(?:gnosis|optimism|base|mode)\].*Please make sure Master (?:EOA|Safe) .*has at least.*(?:USDC|OLAS)":
                     lambda output, logger: create_token_funding_handler(rpc_url)(output, logger),
                 r"Please enter .*": lambda output, logger: handle_env_var_prompt(output, logger, self.config_path)
             }

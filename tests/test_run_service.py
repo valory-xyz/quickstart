@@ -282,7 +282,7 @@ def get_token_config():
 
 def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> str:
     """Handle funding requirement using Tenderly API for ERC20 tokens."""
-    pattern = r"\[(optimistic|base|mode|gnosis)\].*Please transfer at least ([0-9.]+) ([A-Z]+) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})"
+    pattern = r"\[(optimism|base|mode|gnosis)\].*Please transfer at least ([0-9.]+) ([A-Z]+) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})"
     match = re.search(pattern, output)
     if match:
         chain = match.group(1)
@@ -290,20 +290,11 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
         required_amount = float(match.group(2))
         token_symbol = match.group(3)
 
-        # Map chain identifier to config key
-        chain_map = {
-            "optimistic": "optimism",
-            "base": "base",
-            "mode": "mode",
-            "gnosis":"gnosis"
-        }
-        chain_key = chain_map.get(chain, "mode")  # Default to mode if chain not found
-        
         token_configs = get_token_config()
-        if chain_key not in token_configs or token_symbol not in token_configs[chain_key]:
-            raise Exception(f"Token {token_symbol} not configured for chain {chain_key}")
+        if chain not in token_configs or token_symbol not in token_configs[chain]:
+            raise Exception(f"Token {token_symbol} not configured for chain {chain}")
             
-        token_config = token_configs[chain_key][token_symbol]
+        token_config = token_configs[chain][token_symbol]
         token_address = token_config["address"]
         decimals = token_config["decimals"]
         
@@ -319,7 +310,7 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
                 "id": "1"
             }
             
-            logger.info(f"Funding {required_amount} {token_symbol} on {chain_key} chain")
+            logger.info(f"Funding {required_amount} {token_symbol} on {chain} chain")
             response = requests.post(rpc_url, headers=headers, json=payload)
             
             if response.status_code == 200:
@@ -327,7 +318,7 @@ def handle_erc20_funding(output: str, logger: logging.Logger, rpc_url: str) -> s
                 if 'error' in result:
                     raise Exception(f"Tenderly API error: {result['error']}")
                     
-                logger.info(f"Successfully funded {required_amount} {token_symbol} to {wallet_address} on {chain_key} chain")
+                logger.info(f"Successfully funded {required_amount} {token_symbol} to {wallet_address} on {chain} chain")
                 
                 try:
                     w3 = Web3(Web3.HTTPProvider(rpc_url))
@@ -669,7 +660,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         def get_chain_rpc(output: str, logger: logging.Logger) -> str:
             """Get RPC URL based on chain prefix in the output."""
             chain = sorted(  # get the last occurrence
-                ["[mode]", "[base]", "[optimistic]"],
+                ["[mode]", "[base]", "[optimism]"],
                 reverse=True,
                 key=lambda x: output.find(x)
             )[0]
@@ -679,7 +670,7 @@ def get_config_specific_settings(config_path: str) -> dict:
             elif "[base]" == chain:
                 logger.info("Using Base RPC URL")
                 return test_config["BASE_RPC_URL"]
-            elif "[optimistic]" == chain:
+            elif "[optimism]" == chain:
                 logger.info("Using Optimism RPC URL")
                 return test_config["OPTIMISM_RPC_URL"]
             else:
@@ -690,9 +681,9 @@ def get_config_specific_settings(config_path: str) -> dict:
             r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODIUS_RPC_URL"],
             r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
             r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
-            r"\[(?:optimistic|base|mode)\].*Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
+            r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
-            r"\[(?:optimistic|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
+            r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
                 lambda output, logger: create_token_funding_handler(get_chain_rpc(output, logger))(output, logger)
         })
 
