@@ -22,9 +22,10 @@
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 from operate.cli import OperateApp
 from operate.constants import OPERATE_HOME
-from operate.quickstart.run_service import configure_local_config, get_service
+from operate.quickstart.run_service import ask_password_if_needed, configure_local_config, get_service
 from operate.services.service import Service
 from operate.operate_types import Chain
 
@@ -41,7 +42,7 @@ def get_subgraph_api_key() -> str:
     return subgraph_api_key 
 
 
-def get_service_from_config(config_path: Path) -> Service:
+def get_service_from_config(config_path: Path, operate: Optional[OperateApp] = None) -> Service:
     """Get service safe."""
     if not config_path.exists():
         print("No trader agent config found!")
@@ -50,7 +51,10 @@ def get_service_from_config(config_path: Path) -> Service:
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
     
-    operate = OperateApp()
+    if operate is None:
+        operate = OperateApp()
+        ask_password_if_needed(operate)
+
     manager = operate.service_manager()
     configure_local_config(template, operate)
     return get_service(manager, template)

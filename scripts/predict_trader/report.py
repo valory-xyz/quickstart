@@ -58,7 +58,7 @@ from operate.constants import (
 from operate.cli import OperateApp
 from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import Chain
-from operate.quickstart.run_service import load_local_config
+from operate.quickstart.run_service import ask_password_if_needed, load_local_config
 from operate.quickstart.utils import print_title
 from scripts.utils import get_service_from_config
 
@@ -232,7 +232,8 @@ if __name__ == "__main__":
 
     template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
     operate = OperateApp()
-    service = get_service_from_config(template_path)
+    ask_password_if_needed(operate)
+    service = get_service_from_config(template_path, operate)
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
     agent_address = service.keys[0].address
