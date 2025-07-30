@@ -44,8 +44,8 @@ def parse_optimus_config() -> OptimusConfig:
     use_staking = config.get("use_staking", False)
     staking_program_id = "optimus_alpha" if use_staking else "no_staking"
     
-    # Default to optimistic if available, otherwise first available chain
-    principal_chain = Chain.OPTIMISTIC.value if Chain.OPTIMISTIC.value in rpc_mapping else next(iter(rpc_mapping), Chain.OPTIMISTIC.value)
+    # Default to OPTIMISM if available, otherwise first available chain
+    principal_chain = Chain.OPTIMISM.value if "optimistic" in rpc_mapping else next(iter(rpc_mapping), Chain.OPTIMISM.value)
     
     return OptimusConfig(
         rpc=rpc_mapping,

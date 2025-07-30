@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from dataclasses import dataclass
 import os
-from typing import Optional, TypedDict
+from typing import TypedDict
 from dotenv import load_dotenv
 from getpass import getpass
 from halo import Halo
@@ -12,16 +12,16 @@ import sys
 from aea_ledger_ethereum import Account, EthereumCrypto, LocalAccount
 from autonomy.chain.config import ChainType
 from autonomy.chain.base import registry_contracts
+from autonomy.constants import DEFAULT_KEYS_FILE
 from operate.cli import OperateApp
 from operate.constants import (
-    KEYS_JSON,
     OPERATE,
     ZERO_ADDRESS,
 )
 from operate.keys import Key
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
-from operate.quickstart.run_service import get_service, QuickstartConfig
+from operate.quickstart.run_service import ask_password_if_needed, get_service, QuickstartConfig
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import Service
 from operate.quickstart.utils  import ask_yes_or_no, CHAIN_TO_METADATA, print_section, print_title
@@ -228,7 +228,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
     service = get_service(service_manager, service_template)
 
     # overwrite service config with the migrated agent EOA and service safe
-    with open(service.path / KEYS_JSON, "w") as f:
+    with open(service.path / DEFAULT_KEYS_FILE, "w") as f:
         json.dump(obj=[agent_eoa], fp=f, indent=2)
 
     service.keys = [Key(**agent_eoa)]
@@ -435,6 +435,7 @@ def main(config_path: Path) -> None:
 
     trader_data = parse_trader_runner()
     operate = OperateApp(home=OPERATE_HOME)
+    ask_password_if_needed(operate)
     service = populate_operate(operate, trader_data, config)
     migrate_to_master_safe(operate, trader_data, service)
     print_section("Migration complete!")
