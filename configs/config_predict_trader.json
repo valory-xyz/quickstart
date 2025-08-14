@@ -80,6 +80,12 @@
             "value": "true",
             "provision_type": "fixed"
         },
+        "ENABLE_POSITION_REVIEW": {
+            "name": "Enable position review",
+            "description": "",
+            "value": "false",
+            "provision_type": "fixed"
+        },
         "TRADING_STRATEGY": {
             "name": "Trading strategy",
             "description": "",
