@@ -95,7 +95,13 @@
         "TOOLS_ACCURACY_HASH": {
             "name": "Tools accuracy hash",
             "description": "",
-            "value": "QmSJ9CRvEjwsQCckMG9NXtxkQrtmmgnjpxfnTLoA1jQsUm",
+            "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
+            "provision_type": "fixed"
+        },
+        "ACC_INFO_FIELDS_REQUESTS":{
+            "name": "Accuracy info fields requests",
+            "description": "",
+            "value": "nr_responses",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
