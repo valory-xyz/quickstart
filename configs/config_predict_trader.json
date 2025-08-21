@@ -99,7 +99,7 @@
             "provision_type": "fixed"
         },
         "ACC_INFO_FIELDS_REQUESTS":{
-            "name": "Accuracy info fields requests",
+            "name": "Acc info fields requests",
             "description": "",
             "value": "nr_responses",
             "provision_type": "fixed"
