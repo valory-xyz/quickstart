@@ -266,7 +266,7 @@ You can gain access to the assets of your service as follows:
 2. Ensure that you have a hot wallet (e.g., [MetaMask](https://metamask.io/)) installed and set up in your browser.
 3. Import the Master EOA account using the private keystore file. In MetaMask, Open Accounts drop-down &#8594; select "Add account or hardware wallet" &#8594; "Private Key" &#8594; "Select Type: JSON File", choose the private keystore file of the Master EOA account (located in `.operate/wallets/ethereum.txt`), and enter the same password you use when running the quickstart scripts:
 
-<video src="https://github.com/user-attachments/assets/a28c59bf-25fb-49a9-b8a6-dfda3970311a" controls loop>Import Master EOA</video>
+<video src="https://github.com/user-attachments/assets/698ec86e-8dc5-4e25-8f0b-62c8a19a80f5" controls loop>Import Master EOA</video>
 
 Now, you have full access through the hot wallet to the Master EOA and you can transfer their assets to any other address. You can also manage the assets of the Master Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/wallets/ethereum.json`.
 
