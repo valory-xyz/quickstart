@@ -125,7 +125,7 @@ For example, inspect the state transitions using this command:
 
 This will output the different state transitions of your agent per period, for example:
 
-![Trader FSM transitions](images/trader_fsm_transitions.png)
+![Trader FSM transitions](scripts/predict_trader/images/trader_fsm_transitions.png)
 
 For more options on the above command run:
 
@@ -264,12 +264,13 @@ You can gain access to the assets of your service as follows:
 
 1. Ensure that your service is stopped by running `stop_service.sh`.
 2. Ensure that you have a hot wallet (e.g., [MetaMask](https://metamask.io/)) installed and set up in your browser.
-3. Import the two EOAs accounts using the private keys. In MetaMask, select "Add account or hardware wallet" &#8594; "Import account" &#8594; "Select Type: Private Key", and enter the private key of the owner/operator EOA account (located in `.operate/wallets/ethereum.txt`):
-    <img src="images/metamask_import_private_key.png" alt="MetaMask import private key" style="width: 80%;">
+3. Import the Master EOA account using the private keystore file. In MetaMask, Open Accounts drop-down &#8594; select "Add account or hardware wallet" &#8594; "Private Key" &#8594; "Select Type: JSON File", choose the private keystore file of the Master EOA account (located in `.operate/wallets/ethereum.txt`), and enter the same password you use when running the quickstart scripts:
 
-4. Repeat the same process with the agent EOA account (private key located in `.operate/keys`).
+<video src="https://github.com/user-attachments/assets/698ec86e-8dc5-4e25-8f0b-62c8a19a80f5" controls loop>Import Master EOA</video>
 
-Now, you have full access through the hot wallet to the EOAs addresses associated to your service and you can transfer their assets to any other address. You can also manage the assets of the service Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/services/sc-.../config.json` against the `"multisig"` field.
+Now, you have full access through the hot wallet to the Master EOA and you can transfer their assets to any other address. You can also manage the assets of the Master Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/wallets/ethereum.json`.
+
+To access the Agent EOA account, you can import it into your hot wallet in a similar way, using the private keys found in the files in `.operate/keys`. This time you'll need to open the Accounts drop-down in Metamask &#8594; select "Add account or hardware wallet" &#8594; "Private Key" &#8594; "Select Type: Private Key", then open those `.operate/keys` files with a text editor, copy the private key, and paste it into the Metamask private key text field. Then you can manage the agent's assets in the service Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/services/sc-.../config.json` against the `"multisig"` field.
 
 ## Terminate your on-chain service
 
