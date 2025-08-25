@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeibiqqxrlng5bxzisaualm3ngxdmxiycnxj5ie6j3wvuv5u2ucve3a",
+    "hash": "bafybeifhxeoar5hdwilmnzhy6jf664zqp5lgrzi6lpbkc4qmoqrr24ow4q",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.25.11.post1",
+    "service_version": "v0.26.1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -74,6 +74,18 @@
             "value": "",
             "provision_type": "computed"
         },
+        "USE_MULTI_BETS_MODE": {
+            "name": "Use multi bets mode",
+            "description": "",
+            "value": "true",
+            "provision_type": "fixed"
+        },
+        "ENABLE_POSITION_REVIEW": {
+            "name": "Enable position review",
+            "description": "",
+            "value": "false",
+            "provision_type": "fixed"
+        },
         "TRADING_STRATEGY": {
             "name": "Trading strategy",
             "description": "",
@@ -83,7 +95,13 @@
         "TOOLS_ACCURACY_HASH": {
             "name": "Tools accuracy hash",
             "description": "",
-            "value": "QmSJ9CRvEjwsQCckMG9NXtxkQrtmmgnjpxfnTLoA1jQsUm",
+            "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
+            "provision_type": "fixed"
+        },
+        "ACC_INFO_FIELDS_REQUESTS":{
+            "name": "Acc info fields requests",
+            "description": "",
+            "value": "nr_responses",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
