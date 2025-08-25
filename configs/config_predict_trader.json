@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeievvf3663md525u2khoxjlufgp6hsf6vf6kah4xqckksj5nmtkg5q",
+    "hash": "bafybeibiqqxrlng5bxzisaualm3ngxdmxiycnxj5ie6j3wvuv5u2ucve3a",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.25.8",
+    "service_version": "v0.25.11.post1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -127,6 +127,12 @@
             "description": "",
             "value": "https://gateway-arbitrum.network.thegraph.com/api/{SUBGRAPH_API_KEY}/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNcoBwatMR4yZq81pbbz",
             "provision_type": "computed"
+        },
+        "OPEN_AUTONOMY_TM_WRITE_TO_LOG": {
+            "name": "Open Autonomy TM Write to Log",
+            "description": "",
+            "value": "false",
+            "provision_type": "fixed"
         }
     }
 }
