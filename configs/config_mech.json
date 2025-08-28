@@ -80,12 +80,6 @@
             "value": "{\"openai-gpt-3.5-turbo-instruct\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-3.5-turbo\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\",\"openai-gpt-4\":\"bafybeigz5brshryms5awq5zscxsxibjymdofm55dw5o6ud7gtwmodm3vmq\"}",
             "provision_type": "user"
         },
-        "ETHEREUM_LEDGER_RPC_0": {
-            "name": "Ethereum ledger RPC 0",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
         "GNOSIS_LEDGER_RPC_0": {
             "name": "Gnosis ledger RPC 0",
             "description": "",
@@ -102,6 +96,12 @@
             "name": "Mech request price",
             "description": "The price for requesting the mech's services in wei.",
             "value": "10000000000000000",
+            "provision_type": "user"
+        },
+        "PROFIT_SPLIT_BALANCE": {
+            "name": "Mech split balance",
+            "description": "The balance we want to reach in order to trigger split balance.",
+            "value": "1000000000000000000",
             "provision_type": "user"
         }
     }
