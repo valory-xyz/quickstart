@@ -77,7 +77,13 @@
         "USE_MULTI_BETS_MODE": {
             "name": "Use multi bets mode",
             "description": "",
-            "value": "true",
+            "value": "false",
+            "provision_type": "fixed"
+        },
+        "BET_THRESHOLD": {
+            "name": "Bet threshold",
+            "description": "",
+            "value": "100000000000000000",
             "provision_type": "fixed"
         },
         "ENABLE_POSITION_REVIEW": {
