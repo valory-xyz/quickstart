@@ -48,6 +48,20 @@ jobs:
           # Start Docker service
           sudo systemctl start docker
 
+      - name: Check trader agent image existing
+        run: |
+          # reading trader hash from configs/config_predict_trader.json
+          TRADER_HASH=$(cat configs/config_predict_trader.json | jq -r '.hash')
+          # getting the trader json config from ipfs
+          TRADER_JSON_CONFIG=$(curl -s "https://gateway.autonolas.tech/ipfs/$TRADER_HASH/trader_pearl/service.yaml")
+          # checking if the trader json config contains the image
+          AGENT_IMAGE=$(echo "$TRADER_JSON_CONFIG" | grep "agent:" | awk '{print $2}')
+          AGENT_IMAGE=$(echo "$AGENT_IMAGE" | awk -F':' '{print $2}')
+          DOCKER_IMAGE="valory/oar-trader:$AGENT_IMAGE"
+
+          docker pull $DOCKER_IMAGE
+          echo "Successfully pulled image: $DOCKER_IMAGE"
+
       - id: find-agents
         run: |
           NAMES=$(ls configs/config_*.json | sed 's/configs\/config_//' | sed 's/\.json//' | jq -R -s -c 'split("\n")[:-1]')
