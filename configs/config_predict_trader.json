@@ -41,8 +41,8 @@
         "MECH_CONTRACT_ADDRESS": {
             "name": "Mech contract address",
             "description": "",
-            "value": "",
-            "provision_type": "computed"
+            "value": "0x0649F2aeE1b2a6fdcf00B308B58A795D7460c430",
+            "provision_type": "fixed"
         },
         "PRIORITY_MECH_ADDRESS": {
             "name": "Priority Mech contract address",
@@ -65,8 +65,8 @@
         "MECH_MARKETPLACE_CONFIG": {
             "name": "Mech marketplace config",
             "description": "",
-            "value": "",
-            "provision_type": "computed"
+            "value": "{\"mech_marketplace_address\":\"0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB\",\"priority_mech_address\":\"0x0649F2aeE1b2a6fdcf00B308B58A795D7460c430\",\"priority_mech_staking_instance_address\":\"0x998dEFafD094817EF329f6dc79c703f1CF18bC90\",\"priority_mech_service_id\":1722,\"requester_staking_instance_address\":\"0x168aED532a0CD8868c22Fc77937Af78b363652B1\",\"response_timeout\":300}",
+            "provision_type": "fixed"
         },
         "USE_MECH_MARKETPLACE": {
             "name": "Use mech marketplace",
