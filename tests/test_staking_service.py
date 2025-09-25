@@ -399,4 +399,4 @@ class TestAgentStaking(TempDirMixin):
         assert not test_instance.verify_staking(), "Staking verification failed after termination"
         
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "--log-cli-level=INFO"])
+    pytest.main(["-v", __file__, "-s", "--log-cli-level=DEBUG"])
