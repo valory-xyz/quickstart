@@ -144,6 +144,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
+        sudo apt-get upgrade -y
         sudo apt-get install -y git
         
     - name: Clean Python cache
@@ -176,6 +177,7 @@ jobs:
         python -m pip install --upgrade pip
         poetry env use python3.10
         poetry install --no-interaction
+        poetry run pip install --upgrade packaging
 
     - name: Run test
       run: poetry run pytest -v tests/test_staking_service.py -s --log-cli-level=INFO
