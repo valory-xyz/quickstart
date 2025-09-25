@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeigwo7k53ayyblcx7yvwe2yfpndq763fm3cko62qkstok3ogskdoj4",
+    "hash": "bafybeieaf7quf4m3qcqyjjql4p722tpqfdackqbipclp5ms444spexauv4",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.27.0",
+    "service_version": "v0.27.1",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -98,7 +98,7 @@
             "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
             "provision_type": "fixed"
         },
-        "ACC_INFO_FIELDS_REQUESTS":{
+        "ACC_INFO_FIELDS_REQUESTS": {
             "name": "Acc info fields requests",
             "description": "",
             "value": "nr_responses",
@@ -150,6 +150,12 @@
             "name": "Trades subgraph URL",
             "description": "",
             "value": "https://gateway-arbitrum.network.thegraph.com/api/{SUBGRAPH_API_KEY}/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNcoBwatMR4yZq81pbbz",
+            "provision_type": "computed"
+        },
+        "GNOSIS_STAKING_SUBGRAPH_URL": {
+            "name": "Gnosis staking subgraph URL",
+            "description": "",
+            "value": "https://gateway-arbitrum.network.thegraph.com/api/{SUBGRAPH_API_KEY}/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e",
             "provision_type": "computed"
         },
         "OPEN_AUTONOMY_TM_WRITE_TO_LOG": {
