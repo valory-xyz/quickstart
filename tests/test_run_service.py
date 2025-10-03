@@ -826,7 +826,7 @@ class BaseTestService:
         # Load config specific settings
         cls.config_settings = get_config_specific_settings(cls.config_path)
         cls.logger.info(f"Loaded settings for config: {cls.config_path}")
-        cls.operate = OperateApp(home=Path(cls.temp_dir.name) / OPERATE)
+        cls.operate = OperateApp(logger=cls.logger, home=Path(cls.temp_dir.name) / OPERATE)
         
         # Start the service
         cls.start_service()
