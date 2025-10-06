@@ -8,7 +8,7 @@
     "configurations": {
         "gnosis": {
             "agent_id": 37,
-            "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+            "nft": "bafybeiguk5i657q5bvyxzha66finzxpbaef4uvl6knjuwxlrs6cr7v33sa",
             "threshold": 1,
             "use_mech_marketplace": false,
             "fund_requirements": {
@@ -102,6 +102,12 @@
             "name": "Mech request price",
             "description": "The price for requesting the mech's services in wei.",
             "value": "10000000000000000",
+            "provision_type": "user"
+        },
+        "PROFIT_SPLIT_BALANCE": {
+            "name": "Mech split balance",
+            "description": "The balance we want to reach in order to trigger split balance.",
+            "value": "1000000000000000000",
             "provision_type": "user"
         }
     }

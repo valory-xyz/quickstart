@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeibiqqxrlng5bxzisaualm3ngxdmxiycnxj5ie6j3wvuv5u2ucve3a",
+    "hash": "bafybeigwo7k53ayyblcx7yvwe2yfpndq763fm3cko62qkstok3ogskdoj4",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.25.11.post1",
+    "service_version": "v0.27.0",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -74,6 +74,18 @@
             "value": "",
             "provision_type": "computed"
         },
+        "USE_MULTI_BETS_MODE": {
+            "name": "Use multi bets mode",
+            "description": "",
+            "value": "true",
+            "provision_type": "fixed"
+        },
+        "ENABLE_POSITION_REVIEW": {
+            "name": "Enable position review",
+            "description": "",
+            "value": "false",
+            "provision_type": "fixed"
+        },
         "TRADING_STRATEGY": {
             "name": "Trading strategy",
             "description": "",
@@ -83,7 +95,19 @@
         "TOOLS_ACCURACY_HASH": {
             "name": "Tools accuracy hash",
             "description": "",
-            "value": "QmSJ9CRvEjwsQCckMG9NXtxkQrtmmgnjpxfnTLoA1jQsUm",
+            "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
+            "provision_type": "fixed"
+        },
+        "ACC_INFO_FIELDS_REQUESTS":{
+            "name": "Acc info fields requests",
+            "description": "",
+            "value": "nr_responses",
+            "provision_type": "fixed"
+        },
+        "IRRELEVANT_TOOLS": {
+            "name": "Irrelevant tools",
+            "description": "",
+            "value": "[\"native-transfer\",\"prediction-online-lite\",\"claude-prediction-online-lite\",\"prediction-online-sme-lite\",\"prediction-request-reasoning-lite\",\"prediction-request-reasoning-claude-lite\",\"prediction-offline-sme\",\"deepmind-optimization\",\"deepmind-optimization-strong\",\"openai-gpt-3.5-turbo\",\"openai-gpt-3.5-turbo-instruct\",\"openai-gpt-4\",\"openai-text-davinci-002\",\"openai-text-davinci-003\",\"prediction-online-sum-url-content\",\"prediction-online-summarized-info\",\"stabilityai-stable-diffusion-512-v2-1\",\"stabilityai-stable-diffusion-768-v2-1\",\"stabilityai-stable-diffusion-v1-5\",\"stabilityai-stable-diffusion-xl-beta-v2-2-2\",\"prediction-url-cot-claude\",\"prediction-url-cot\"]",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
