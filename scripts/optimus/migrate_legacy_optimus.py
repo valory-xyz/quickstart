@@ -95,7 +95,6 @@ def create_operate_config(optimus_config: OptimusConfig, service_name: str):
 
     qs_config = QuickstartConfig(
         path=OPERATE_HOME / f"{service_name}-quickstart-config.json",
-        password_migrated=True,
         principal_chain=optimus_config.principal_chain,
         rpc=optimus_config.rpc,
         user_provided_args={
