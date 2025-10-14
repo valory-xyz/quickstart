@@ -22,9 +22,9 @@ If you were previously using [modius-quickstart](https://github.com/valory-xyz/m
 3. Follow the prompts to complete the migration process. The script will:
    - Parse your existing configuration
    - Set up the new operate environment
-   - Migrate your service configuration
+   - Migrate your AI agent configuration
    - Handle any necessary transfers and settings
 
-4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your Modius service.
+4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your Modius AI agent.
 
-5. After you ensure that the agent runs fine with the new quickstart, please delete the `.olas-modius` folder(s) to avoid any private key leaks.
+5. After you ensure that the AI agent runs fine with the new quickstart, please delete the `.olas-modius` folder(s) to avoid any private key leaks.

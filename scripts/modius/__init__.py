@@ -17,4 +17,4 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""This package contains useful scrips for the modius agent."""
+"""This package contains useful scrips for the modius AI agent."""

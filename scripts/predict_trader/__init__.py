@@ -17,4 +17,4 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""This package contains useful scrips for the predict trader agent."""
+"""This package contains useful scrips for the predict trader AI agent."""

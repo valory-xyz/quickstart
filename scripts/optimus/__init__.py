@@ -17,4 +17,4 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""This package contains useful scrips for the optimus agent."""
+"""This package contains useful scrips for the optimus AI agent."""
