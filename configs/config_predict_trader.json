@@ -1,6 +1,6 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeicav6czopdtsenpfsozub5pqcnfdbhy7ys2komiu7x2vviutp2ice",
+    "hash": "bafybeibn5qfzk7y7gfz6mycvp65bjwpb73nmpu6oq2mbirqwwvnl2fi5aq",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
     "service_version": "v0.27.2",
@@ -20,6 +20,12 @@
         }
     },
     "env_variables": {
+        "SAFE_CONTRACT_ADDRESSES": {
+            "name": "Safe contract addresses",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
@@ -98,7 +104,7 @@
             "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
             "provision_type": "fixed"
         },
-        "ACC_INFO_FIELDS_REQUESTS":{
+        "ACC_INFO_FIELDS_REQUESTS": {
             "name": "Acc info fields requests",
             "description": "",
             "value": "nr_responses",
