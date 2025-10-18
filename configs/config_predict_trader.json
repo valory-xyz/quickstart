@@ -20,6 +20,12 @@
         }
     },
     "env_variables": {
+        "RANDOMNESS_API_URL": {
+            "name": "Randomness URL",
+            "description": "Drand endpoint",
+            "value": "https://api.drand.sh/public/latest",
+            "provision_type": "fixed"
+        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
