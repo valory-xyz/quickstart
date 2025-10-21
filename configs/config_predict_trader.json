@@ -163,6 +163,12 @@
             "description": "",
             "value": "false",
             "provision_type": "fixed"
+        },
+        "MECH_INTERACTION_SLEEP_TIME": {
+            "name": "The sleep time after a failed mech interaction",
+            "description": "",
+            "value": "30",
+            "provision_type": "fixed"
         }
     }
 }
