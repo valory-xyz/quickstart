@@ -23,6 +23,7 @@ from test_run_service import (
     create_token_funding_handler,
     get_config_specific_settings,
     handle_env_var_prompt,
+    send_input_safely,
     setup_logging,
     get_config_files,
     BaseTestService,
@@ -336,9 +337,9 @@ class StakingBaseTestService(BaseTestService):
                     # Handle callable responses (for funding handlers)
                     if callable(response):
                         response = response(current_output, self.logger)
-                        
-                    process.sendline(response)
-                    
+
+                    send_input_safely(process, response, self.logger)
+
                 except pexpect.TIMEOUT:
                     self.logger.error("Timeout waiting for prompt")
                     return False
