@@ -1,9 +1,9 @@
 {
     "name": "Optimus",
-    "hash": "bafybeibmqrkxfnzzmqqbaiwrpdkjm4khbleguvyfi4jxpjkadhankiltcq",
+    "hash": "bafybeifwuv6ba2aw3vycfdsbkyhlw6ehzugasf56tbv65qv4emrvczogyy",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-    "service_version": "v0.4.6",
+    "service_version": "v0.5.0",
     "home_chain": "optimism",
     "configurations": {
         "optimism": {
@@ -13,49 +13,23 @@
             "use_mech_marketplace": false,
             "fund_requirements": {
                 "0x0000000000000000000000000000000000000000": {
-                    "agent": 5000000000000000,
-                    "safe": 15000000000000000
+                    "agent": 700000000000000,
+                    "safe": 0
                 },
                 "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85": {
                     "agent": 0,
-                    "safe": 40000000
-                }
-            }
-        },
-        "base": {
-            "agent_id": 40,
-            "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-            "threshold": 1,
-            "use_mech_marketplace": false,
-            "fund_requirements": {
-                "0x0000000000000000000000000000000000000000": {
-                    "agent": 5000000000000000,
-                    "safe": 15000000000000000
-                },
-                "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": {
-                    "agent": 0,
-                    "safe": 40000000
-                }
-            }
-        },
-        "mode": {
-            "agent_id": 40,
-            "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-            "threshold": 1,
-            "use_mech_marketplace": false,
-            "fund_requirements": {
-                "0x0000000000000000000000000000000000000000": {
-                    "agent": 5000000000000000,
-                    "safe": 15000000000000000
-                },
-                "0xd988097fb8612cc24eeC14542bC03424c656005f": {
-                    "agent": 0,
-                    "safe": 40000000
+                    "safe": 16000000
                 }
             }
         }
     },
     "env_variables": {
+        "OPTIMISM_LEDGER_RPC": {
+            "name": "Optimism ledger RPC",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
         "SAFE_CONTRACT_ADDRESSES": {
             "name": "Safe contract addresses",
             "description": "",
@@ -90,7 +64,7 @@
             "name": "Store Path",
             "description": "",
             "value": "/data",
-            "provision_type": "fixed"
+            "provision_type": "computed"
         },
         "COINGECKO_API_KEY": {
             "name": "Coingecko API Key",
@@ -101,43 +75,43 @@
         "STAKING_CHAIN": {
             "name": "",
             "description": "",
+            "value": "optimism",
+            "provision_type": "fixed"
+        },
+        "ACTIVITY_CHECKER_CONTRACT_ADDRESS": {
+            "name": "Staking activity checker contract address",
+            "description": "",
             "value": "",
             "provision_type": "computed"
         },
-        "STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS": {
-            "name": "",
+        "LOG_DIR": {
+            "name": "Log directory",
             "description": "",
-            "value": "0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68",
-            "provision_type": "fixed"
+            "value": "benchmarks/",
+            "provision_type": "computed"
         },
-        "MIN_SWAP_AMOUNT_THRESHOLD": {
-            "name": "Minimum Investment",
-            "description": "Minimum Investment amount is the minimum amount of USD on both USDC and ETH tokens that the agent will invest. Enter at least 15.",
-            "value": "15",
-            "provision_type": "fixed"
-        },
-        "ALLOWED_CHAINS": {
-            "name": "",
+        "RESET_PAUSE_DURATION": {
+            "name": "Reset pause duration",
             "description": "",
-            "value": "[\"optimism\",\"mode\",\"base\"]",
+            "value": "300",
             "provision_type": "fixed"
         },
         "TARGET_INVESTMENT_CHAINS": {
             "name": "",
             "description": "",
-            "value": "[\"optimism\",\"mode\",\"base\"]",
+            "value": "[\"base\"]",
             "provision_type": "fixed"
         },
         "INITIAL_ASSETS": {
             "name": "",
             "description": "",
-            "value": "{\"optimism\":{\"0x0000000000000000000000000000000000000000\":\"ETH\",\"0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85\":\"USDC\"}}",
+            "value": "{\"optimism\":{\"0x0000000000000000000000000000000000000000\":\"ETH\",\"0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85\":\"USDC\"},\"base\":{\"0x0000000000000000000000000000000000000000\":\"ETH\",\"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913\":\"USDC\"},\"mode\":{\"0x0000000000000000000000000000000000000000\":\"ETH\",\"0xd988097fb8612cc24eeC14542bC03424c656005f\":\"USDC\"}}",
             "provision_type": "fixed"
         },
-        "SELECTED_STRATEGIES": {
-            "name": "",
+        "INIT_FALLBACK_GAS": {
+            "name": "Init fallback gas",
             "description": "",
-            "value": "[\"uniswap_pools_search\",\"balancer_pools_search\"]",
+            "value": "250000",
             "provision_type": "fixed"
         },
         "GENAI_API_KEY": {
