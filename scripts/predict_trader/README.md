@@ -1,6 +1,6 @@
 # trader-quickstart
 
-A quickstart for the trader agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
+A quickstart for the trader AI agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
 
 ## Resource Requirements
 
@@ -8,7 +8,7 @@ A quickstart for the trader agent for AI prediction markets on Gnosis at https:/
 - You need an RPC for your agent instance. We currently recommend providers [Quicknode](https://www.quicknode.com/) and [Chainstack](https://www.chainstack.com/).
 - Some scripts may ask for a Subgraph API key that can be obtained at [The Graph](https://thegraph.com/studio/apikeys/).
 
-## Observe your agents
+## Observe your AI agents
 
 1. Use the `trades` command to display information about placed trades by a given address:
 
@@ -22,13 +22,13 @@ A quickstart for the trader agent for AI prediction markets on Gnosis at https:/
     poetry run python -m scripts.predict_trader.trades --creator YOUR_SAFE_ADDRESS --from-date 2023-08-15:03:50:00 --to-date 2023-08-20:13:45:00
     ```
 
-2. Use the `report` command to display a summary of the service status:
+2. Use the `report` command to display a summary of the AI agent status:
 
    ```bash
    poetry run python -m scripts.predict_trader.report
    ```
 
-3. Use this command to investigate your agent's logs:
+3. Use this command to investigate your agent instance's logs:
 
     ```bash
     ./analyse_logs.sh configs/config_predict_trader.json --agent=aea_0 --reset-db
@@ -54,25 +54,25 @@ A quickstart for the trader agent for AI prediction markets on Gnosis at https:/
 
 ## Advanced usage
 
-This chapter is for advanced users who want to further customize the trader agent's behaviour without changing the underlying trading logic.
+This chapter is for advanced users who want to further customize the trader AI agent's behaviour without changing the underlying trading logic.
 
 ##### Tool selection
 
 Sometimes, a mech tool might temporarily return invalid results.
-As a result, the service would end up performing mech calls without being able to use the response.
+As a result, the AI agent would end up performing mech calls without being able to use the response.
 Assuming that this tool has a large reward rate in the policy weights,
-the service might end up spending a considerable amount of xDAI before adjusting the tool's reward rate,
+the AI agent might end up spending a considerable amount of xDAI before adjusting the tool's reward rate,
 without making any progress.
 If a tool is temporarily misbehaving, you could set an environment variable as described below in order to exclude it.
 
 ##### Environment variables
 
-You may customize the agent's behaviour by setting these trader-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
+You may customize the AI agent's behaviour by setting these trader-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
 
 | Name | Type | Default Value | Description |
 | --- | --- | --- | --- |
-| `ON_CHAIN_SERVICE_ID` | `int` | `null` | The ID of the on-chain service. |
-| `OMEN_CREATORS` | `list` | `["0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec"]` | The addresses of the market creator(s) that the service will track. |
+| `ON_CHAIN_SERVICE_ID` | `int` | `null` | The ID of the on-chain AI agent. |
+| `OMEN_CREATORS` | `list` | `["0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec"]` | The addresses of the market creator(s) that the AI agent will track. |
 | `OPENING_MARGIN` | `int` | `300` | The markets opening before this margin will not be fetched. |
 | `LANGUAGES` | `list` | `["en_US"]` | Filter questions by languages. |
 | `SAMPLE_BETS_CLOSING_DAYS` | `int` | `10` | Sample the bets that are closed within this number of days. |
@@ -84,8 +84,8 @@ You may customize the agent's behaviour by setting these trader-specific environ
 | `POLICY_EPSILON` | `float` | `0.1` | Epsilon value for the e-Greedy policy for the tool selection based on tool accuracy. |
 | `DISABLE_TRADING` | `bool` | `false` | Whether to disable trading. |
 | `STOP_TRADING_IF_STAKING_KPI_MET` | `bool` | `true` | Whether to stop trading if the staking KPI is met. |
-| `AGENT_BALANCE_THRESHOLD` | `int` | `10000000000000000` | Balance threshold (wei) below which the agent will stop trading and a refill will be required. |
-| `REFILL_CHECK_INTERVAL` | `int` | `10` | Interval in seconds to check the agent balance, when waiting for a refill. |
+| `AGENT_BALANCE_THRESHOLD` | `int` | `10000000000000000` | Balance threshold (wei) below which the AI agent will stop trading and a refill will be required. |
+| `REFILL_CHECK_INTERVAL` | `int` | `10` | Interval in seconds to check the AI agent balance, when waiting for a refill. |
 | `FILE_HASH_TO_STRATEGIES_JSON` | `list` | `[["bafybeihufqu2ra7vud4h6g2nwahx7mvdido7ff6prwnib2tdlc4np7dw24",["bet_amount_per_threshold"]],["bafybeibxfp27rzrfnp7sxq62vwv32pdvrijxi7vzg7ihukkaka3bwzrgae",["kelly_criterion_no_conf"]]]` | A list of mapping from ipfs file hash to strategy names. |
 | `STRATEGIES_KWARGS` | `list` | `[["bet_kelly_fraction",1.0],["floor_balance",500000000000000000],["bet_amount_per_threshold",{"0.0":0,"0.1":0,"0.2":0,"0.3":0,"0.4":0,"0.5":0,"0.6":60000000000000000,"0.7":90000000000000000,"0.8":100000000000000000,"0.9":1000000000000000000,"1.0":10000000000000000000}]]` | A list of keyword arguments for the strategies. |
 | `USE_SUBGRAPH_FOR_REDEEMING` | `bool` | `true` | Whether to use the subgraph to check if a position is redeemed. |
@@ -106,9 +106,9 @@ To set `IRRELEVANT_TOOLS` for example, add the following lines under the `"env_v
 ...
 ```
 
-##### Checking agents' health
+##### Checking agent instance's health
 
-You may check the health of the agents by querying the `/healthcheck` endpoint. For example:
+You may check the health of the agent instance by querying the `/healthcheck` endpoint. For example:
 
 ```shell
 curl -sL localhost:8716/healthcheck | jq -C
@@ -125,11 +125,11 @@ This will return a JSON output with the following fields:
 | `rounds` | list | The last rounds (upto 25) in the FSM that happened including the current one. |
 | `is_transitioning_fast` | bool | `true` if `is_tm_healthy` is `true` and `seconds_since_last_transition` is less than twice the `reset_pause_duration`. `false` otherwise. |
 
-So, you can usually use `is_transitioning_fast` as a rule to check if an agent is healthly. To add a more strict check, you can also tune a threshold for the `seconds_since_last_transition` and rate of change of `period`, but that will require some monitoring to fine tune it.
+So, you can usually use `is_transitioning_fast` as a rule to check if an AI agent is healthy. To add a more strict check, you can also tune a threshold for the `seconds_since_last_transition` and rate of change of `period`, but that will require some monitoring to fine tune it.
 
-##### Using a differnt priority mech with the mech marketplace
+##### Using a different priority mech with the mech marketplace
 
-When running the agent for the first time, enter the mech address and service ID of your choice when asked for `Priority Mech contract address` and `Priority Mech service ID`.
+When running the AI agent for the first time, enter the mech address and AI agent ID of your choice when asked for `Priority Mech contract address` and `Priority Mech service ID`.
 If you've already entered these values and want to change them later, follow this [guide](https://github.com/valory-xyz/quickstart/?tab=readme-ov-file#changing-entered-configuration)
 
 ## Migrate from trader-quickstart
@@ -154,9 +154,9 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
 3. Follow the prompts to complete the migration process. The script will:
    - Parse your existing configuration
    - Set up the new operate environment
-   - Migrate your service to the master safe
+   - Migrate your AI agent to the master safe
    - Handle any necessary unstaking and transfers
 
-4. Once migration is complete, follow the instructions in the [Run the service](https://github.com/valory-xyz/quickstart#run-the-service) section to run your trader service.
+4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your trader AI agent.
 
-5. After you ensure that the agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.
+5. After you ensure that the AI agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.
