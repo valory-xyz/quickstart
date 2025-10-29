@@ -26,12 +26,6 @@
             "value": "",
             "provision_type": "computed"
         },
-        "MECH_WRAPPED_NATIVE_TOKEN_ADDRESS": {
-            "name": "Mech wrapped native token address",
-            "description": "",
-            "value": "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-            "provision_type": "fixed"
-        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
