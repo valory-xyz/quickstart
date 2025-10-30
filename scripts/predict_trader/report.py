@@ -360,7 +360,7 @@ if __name__ == "__main__":
             )
             try:
                 mech_request_count = mech_contract.functions.mapRequestsCounts(safe_address).call(block_identifier=current_block_number)
-            except (ABIFunctionNotFound, ValueError):
+            except (ContractLogicError, ABIFunctionNotFound, ValueError):
                 # Use mapRequestCounts for newer mechs
                 mech_request_count = mech_contract.functions.mapRequestCounts(safe_address).call(block_identifier=current_block_number)
 
