@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeicp7tzzvbg5t6d5hpt6skxpxjzgtbd5izj4qm6c5wn3kw7cc2r5g4",
+    "hash": "bafybeif3iiyrroczyiyd35kjufsuhwy2elnxffxywowoszqfjidcackseq",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.26.2",
+    "service_version": "v0.27.3",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -20,6 +20,12 @@
         }
     },
     "env_variables": {
+        "SAFE_CONTRACT_ADDRESSES": {
+            "name": "Safe contract addresses",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
@@ -98,7 +104,7 @@
             "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
             "provision_type": "fixed"
         },
-        "ACC_INFO_FIELDS_REQUESTS":{
+        "ACC_INFO_FIELDS_REQUESTS": {
             "name": "Acc info fields requests",
             "description": "",
             "value": "nr_responses",
@@ -156,6 +162,12 @@
             "name": "Open Autonomy TM Write to Log",
             "description": "",
             "value": "false",
+            "provision_type": "fixed"
+        },
+        "MECH_INTERACTION_SLEEP_TIME": {
+            "name": "The sleep time after a failed mech interaction",
+            "description": "",
+            "value": "30",
             "provision_type": "fixed"
         }
     }
