@@ -210,7 +210,7 @@ class StakingBaseTestService(BaseTestService):
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
                 "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODIUS_RPC_URL",
+                "mode": "MODE_RPC_URL",
                 "optimism": "OPTIMISM_RPC_URL", 
                 "base": "BASE_RPC_URL"
             }
@@ -267,7 +267,7 @@ class StakingBaseTestService(BaseTestService):
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
                 "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODIUS_RPC_URL",
+                "mode": "MODE_RPC_URL",
                 "optimism": "OPTIMISM_RPC_URL", 
                 "base": "BASE_RPC_URL"
             }
