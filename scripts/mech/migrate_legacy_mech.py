@@ -117,7 +117,6 @@ def create_operate_config(mech_config: MechConfig, service_template: dict):
 
     qs_config = QuickstartConfig(
         path=OPERATE_HOME / f"{service_template['name']}-quickstart-config.json",
-        password_migrated=True,
         principal_chain=Chain.GNOSIS.value,
         rpc={Chain.GNOSIS.value: mech_config.rpc},
         user_provided_args={

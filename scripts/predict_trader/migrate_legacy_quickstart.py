@@ -151,7 +151,6 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
         spinner = Halo(text="Creating quickstart config...", spinner="dots").start()
         qs_config = QuickstartConfig(
             path=OPERATE_HOME / f"{service_name}-quickstart-config.json",
-            password_migrated=True,
             principal_chain="gnosis",
             rpc={"gnosis": trader_data.rpc},
             user_provided_args={"SUBGRAPH_API_KEY": trader_data.subgraph_api_key},
