@@ -165,7 +165,6 @@ class StakingBaseTestService(BaseTestService):
         cls.wallet_manager = MasterWalletManager(
             path=keys_dir,
             password="DUMMY_PWD",  # Use env var in production
-            logger=cls.logger
         ).setup()
         
         # Create wallet if it doesn't exist
