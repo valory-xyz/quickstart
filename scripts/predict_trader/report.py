@@ -236,7 +236,7 @@ if __name__ == "__main__":
     service = get_service_from_config(template_path, operate)
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
-    agent_address = service.keys[0].address
+    agent_address = service.agent_addresses[0]
     master_eoa = operator_wallet_data["address"]
     if "safes" in operator_wallet_data and "gnosis" in operator_wallet_data["safes"]:
         operator_address = operator_wallet_data["safes"]["gnosis"]
