@@ -627,9 +627,9 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Optimus settings with multiple RPCs
         test_config = {
             **base_config,  # Include base config
-            "MODE_RPC_URL": os.getenv('MODE_RPC_URL'),
-            "OPTIMISM_RPC_URL": os.getenv('OPTIMISM_RPC_URL'),
-            "BASE_RPC_URL": os.getenv('BASE_RPC_URL'),
+            "MODE_RPC": os.getenv('MODE_RPC'),
+            "OPTIMISM_RPC": os.getenv('OPTIMISM_RPC'),
+            "BASE_RPC": os.getenv('BASE_RPC'),
         }
 
         def get_chain_rpc(output: str, logger: logging.Logger) -> str:
@@ -641,21 +641,21 @@ def get_config_specific_settings(config_path: str) -> dict:
             )[0]
             if "[mode]" == chain:
                 logger.info("Using Mode RPC URL")
-                return test_config["MODE_RPC_URL"]
+                return test_config["MODE_RPC"]
             elif "[base]" == chain:
                 logger.info("Using Base RPC URL")
-                return test_config["BASE_RPC_URL"]
+                return test_config["BASE_RPC"]
             elif "[optimism]" == chain:
                 logger.info("Using Optimism RPC URL")
-                return test_config["OPTIMISM_RPC_URL"]
+                return test_config["OPTIMISM_RPC"]
             else:
                 logger.info("Using Mode RPC URL as default")
-                return test_config["MODE_RPC_URL"]
+                return test_config["MODE_RPC"]
 
         prompts.update({
-            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODE_RPC_URL"],
-            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
-            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
+            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODE_RPC"],
+            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC"],
+            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC"],
             r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
             r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
@@ -666,7 +666,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         require_extra_coins = True
         test_config = {
             **base_config,  
-            "RPC_URL": os.getenv('GNOSIS_RPC_URL', '')
+            "RPC_URL": os.getenv('GNOSIS_RPC', '')
         }
 
         # Add Mech-specific prompts
@@ -680,7 +680,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         # Default PredictTrader settings
         test_config = {
             **base_config,  # Include base config
-            "RPC_URL": os.getenv('GNOSIS_RPC_URL', '')
+            "RPC_URL": os.getenv('GNOSIS_RPC', '')
         }
         # Add PredictTrader-specific prompts
         prompts.update({
@@ -757,7 +757,7 @@ class BaseTestService:
         # Load config specific settings
         cls.config_settings = get_config_specific_settings(cls.config_path)
         cls.logger.info(f"Loaded settings for config: {cls.config_path}")
-        cls.operate = OperateApp(logger=cls.logger, home=Path(cls.temp_dir.name) / OPERATE)
+        cls.operate = OperateApp(home=Path(cls.temp_dir.name) / OPERATE)
         
         # Start the service
         cls.start_service()

@@ -166,7 +166,6 @@ class StakingBaseTestService(BaseTestService):
         cls.wallet_manager = MasterWalletManager(
             path=keys_dir,
             password="DUMMY_PWD",  # Use env var in production
-            logger=cls.logger
         ).setup()
         
         # Create wallet if it doesn't exist
@@ -209,10 +208,10 @@ class StakingBaseTestService(BaseTestService):
             
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
-                "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODE_RPC_URL",
-                "optimism": "OPTIMISM_RPC_URL", 
-                "base": "BASE_RPC_URL"
+                "gnosis": "GNOSIS_RPC",
+                "mode": "MODE_RPC",
+                "optimism": "OPTIMISM_RPC", 
+                "base": "BASE_RPC"
             }
             
             env_var = rpc_mapping.get(chain_name)
@@ -266,10 +265,10 @@ class StakingBaseTestService(BaseTestService):
             
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
-                "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODE_RPC_URL",
-                "optimism": "OPTIMISM_RPC_URL", 
-                "base": "BASE_RPC_URL"
+                "gnosis": "GNOSIS_RPC",
+                "mode": "MODE_RPC",
+                "optimism": "OPTIMISM_RPC", 
+                "base": "BASE_RPC"
             }
             
             env_var = rpc_mapping.get(chain_name)
