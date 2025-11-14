@@ -57,10 +57,6 @@ def get_service_config(config_path: str) -> dict:
             "container_name": "optimus",
             "health_check_url": HEALTH_CHECK_URL,
         },
-        "modius": {
-            "container_name": "optimus", 
-            "health_check_url": HEALTH_CHECK_URL,
-        },
         # Traderpearl service and variants
         "traderpearl": {
             "container_name": "traderpearl",
@@ -71,11 +67,6 @@ def get_service_config(config_path: str) -> dict:
             "container_name": "mech",
             "health_check_url": HEALTH_CHECK_URL,
         },
-        # Memeooor service
-        "agents.fun": {
-            "container_name": "memeooorr",
-            "health_check_url": HEALTH_CHECK_URL,
-        }
     }
     
     # Additional name mappings
@@ -632,29 +623,13 @@ def get_config_specific_settings(config_path: str) -> dict:
     global require_extra_coins
     require_extra_coins = False
     
-    if "modius" in config_path.lower():
-        # Modius specific settings
-        test_config = {
-            **base_config,  # Include base config
-            "RPC_URL": os.getenv('MODIUS_RPC_URL'),
-        }
-
-        # Add Modius-specific prompts
-        prompts.update({
-                r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
-                r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
-                    lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger),
-                r"Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
-                    lambda output, logger: create_token_funding_handler(test_config["RPC_URL"])(output, logger)
-        })
-        
-    elif "optimus" in config_path.lower():
+    if "optimus" in config_path.lower():
         # Optimus settings with multiple RPCs
         test_config = {
             **base_config,  # Include base config
-            "MODIUS_RPC_URL": os.getenv('MODIUS_RPC_URL'),
-            "OPTIMISM_RPC_URL": os.getenv('OPTIMISM_RPC_URL'),
-            "BASE_RPC_URL": os.getenv('BASE_RPC_URL'),
+            "MODE_RPC": os.getenv('MODE_RPC'),
+            "OPTIMISM_RPC": os.getenv('OPTIMISM_RPC'),
+            "BASE_RPC": os.getenv('BASE_RPC'),
         }
 
         def get_chain_rpc(output: str, logger: logging.Logger) -> str:
@@ -666,21 +641,21 @@ def get_config_specific_settings(config_path: str) -> dict:
             )[0]
             if "[mode]" == chain:
                 logger.info("Using Mode RPC URL")
-                return test_config["MODIUS_RPC_URL"]
+                return test_config["MODE_RPC"]
             elif "[base]" == chain:
                 logger.info("Using Base RPC URL")
-                return test_config["BASE_RPC_URL"]
+                return test_config["BASE_RPC"]
             elif "[optimism]" == chain:
                 logger.info("Using Optimism RPC URL")
-                return test_config["OPTIMISM_RPC_URL"]
+                return test_config["OPTIMISM_RPC"]
             else:
                 logger.info("Using Mode RPC URL as default")
-                return test_config["MODIUS_RPC_URL"]
+                return test_config["MODE_RPC"]
 
         prompts.update({
-            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODIUS_RPC_URL"],
-            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC_URL"],
-            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
+            r"Enter a Mode RPC that supports eth_newFilter \[hidden input\]": test_config["MODE_RPC"],
+            r"Enter a Optimism RPC that supports eth_newFilter \[hidden input\]": test_config["OPTIMISM_RPC"],
+            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC"],
             r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
             r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
@@ -691,7 +666,7 @@ def get_config_specific_settings(config_path: str) -> dict:
         require_extra_coins = True
         test_config = {
             **base_config,  
-            "RPC_URL": os.getenv('GNOSIS_RPC_URL', '')
+            "RPC_URL": os.getenv('GNOSIS_RPC', '')
         }
 
         # Add Mech-specific prompts
@@ -701,24 +676,11 @@ def get_config_specific_settings(config_path: str) -> dict:
                 lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
-    elif "agents.fun" in config_path.lower():
-        # Agents.fun specific settings
-        test_config = {
-            **base_config,  # Include base config
-            "BASE_RPC_URL": os.getenv('BASE_RPC_URL'),
-        }
-        # Add Agents.fun-specific prompts
-        prompts.update({
-            r"Enter a Base RPC that supports eth_newFilter \[hidden input\]": test_config["BASE_RPC_URL"],
-            r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
-                lambda output, logger: create_funding_handler(test_config["BASE_RPC_URL"])(output, logger),
-        })    
-        
     else:
         # Default PredictTrader settings
         test_config = {
             **base_config,  # Include base config
-            "RPC_URL": os.getenv('GNOSIS_RPC_URL', '')
+            "RPC_URL": os.getenv('GNOSIS_RPC', '')
         }
         # Add PredictTrader-specific prompts
         prompts.update({
@@ -789,44 +751,13 @@ class BaseTestService:
         cls.log_file = Path(f'test_run_service_{timestamp}.log')
         cls.logger = setup_logging(cls.log_file)
         
-        # Handle agents.fun config modifications if needed
-        if "agents.fun" in cls.config_path.lower():
-            temp_config_path = os.path.join(cls.temp_dir.name, 'configs', os.path.basename(cls.config_path))
-            try:
-                with open(temp_config_path, 'r') as f:
-                    config_data = json.load(f)
-                
-                
-                # Modify env variables - create new dict instead of modifying
-                if 'env_variables' in config_data:
-                    # Add TWEEPY_SKIP_AUTH
-                    config_data['env_variables']['TWEEPY_SKIP_AUTH'] = {
-                        "name": "Skip Twitter connection",
-                        "description": "Skip Twitter connection for testing",
-                        "value": "true",  
-                        "provision_type": "fixed"
-                    }
-                
-                # Write modified config back with read/write permissions for all
-                with open(temp_config_path, 'w') as f:
-                    json.dump(config_data, f, indent=2)
-                
-                # Ensure file permissions are set correctly
-                os.chmod(temp_config_path, 0o666)
-                
-                cls.logger.info(f"Modified agents.fun config in temp dir: {temp_config_path}")
-                
-            except Exception as e:
-                cls.logger.error(f"Error modifying agents.fun config: {str(e)}")
-                raise
-        
         # Setup environment
         cls._setup_environment()
 
         # Load config specific settings
         cls.config_settings = get_config_specific_settings(cls.config_path)
         cls.logger.info(f"Loaded settings for config: {cls.config_path}")
-        cls.operate = OperateApp(logger=cls.logger, home=Path(cls.temp_dir.name) / OPERATE)
+        cls.operate = OperateApp(home=Path(cls.temp_dir.name) / OPERATE)
         
         # Start the service
         cls.start_service()

@@ -18,7 +18,7 @@ from operate.constants import (
     OPERATE,
     ZERO_ADDRESS,
 )
-from operate.keys import Key
+from operate.keys import KeysManager
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
 from operate.quickstart.run_service import ask_password_if_needed, get_service, QuickstartConfig
@@ -198,10 +198,9 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
         spinner.succeed("Master safe created")
 
     agent_eoa = decrypt_private_keys(trader_data.agent_eoa, trader_data.password)
-    agent_eoa_path = operate.keys_manager.path / agent_eoa["address"]
+    agent_eoa_path = KeysManager().path / agent_eoa["address"]
     if not agent_eoa_path.exists():
         spinner = Halo(text="Creating agent EOA...", spinner="dots").start()
-        operate.keys_manager.setup()
         with open(agent_eoa_path, "w") as f:
             json.dump(obj=agent_eoa, fp=f, indent=2)
         spinner.succeed("Agent EOA created")
@@ -230,7 +229,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
     with open(service.path / DEFAULT_KEYS_FILE, "w") as f:
         json.dump(obj=[agent_eoa], fp=f, indent=2)
 
-    service.keys = [Key(**agent_eoa)]
+    service.agent_addresses = [agent_eoa["address"]]
     service.chain_configs[Chain.GNOSIS.value].chain_data.token = trader_data.service_id
     service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = trader_data.service_safe
     service.store()

@@ -1,9 +1,9 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeicav6czopdtsenpfsozub5pqcnfdbhy7ys2komiu7x2vviutp2ice",
+    "hash": "bafybeif3iiyrroczyiyd35kjufsuhwy2elnxffxywowoszqfjidcackseq",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.27.2",
+    "service_version": "v0.27.3",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -20,6 +20,12 @@
         }
     },
     "env_variables": {
+        "SAFE_CONTRACT_ADDRESSES": {
+            "name": "Safe contract addresses",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
         "GNOSIS_LEDGER_RPC": {
             "name": "Gnosis ledger RPC",
             "description": "",
@@ -98,7 +104,7 @@
             "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
             "provision_type": "fixed"
         },
-        "ACC_INFO_FIELDS_REQUESTS":{
+        "ACC_INFO_FIELDS_REQUESTS": {
             "name": "Acc info fields requests",
             "description": "",
             "value": "nr_responses",
@@ -107,7 +113,7 @@
         "IRRELEVANT_TOOLS": {
             "name": "Irrelevant tools",
             "description": "",
-            "value": "[\"native-transfer\",\"prediction-online-lite\",\"claude-prediction-online-lite\",\"prediction-online-sme-lite\",\"prediction-request-reasoning-lite\",\"prediction-request-reasoning-claude-lite\",\"prediction-offline-sme\",\"deepmind-optimization\",\"deepmind-optimization-strong\",\"openai-gpt-3.5-turbo\",\"openai-gpt-3.5-turbo-instruct\",\"openai-gpt-4\",\"openai-text-davinci-002\",\"openai-text-davinci-003\",\"prediction-online-sum-url-content\",\"prediction-online-summarized-info\",\"stabilityai-stable-diffusion-512-v2-1\",\"stabilityai-stable-diffusion-768-v2-1\",\"stabilityai-stable-diffusion-v1-5\",\"stabilityai-stable-diffusion-xl-beta-v2-2-2\",\"prediction-url-cot-claude\",\"prediction-url-cot\"]",
+            "value": "[\"native-transfer\",\"prediction-online-lite\",\"claude-prediction-online-lite\",\"prediction-online-sme-lite\",\"prediction-request-reasoning-lite\",\"prediction-request-reasoning-claude-lite\",\"prediction-offline-sme\",\"deepmind-optimization\",\"deepmind-optimization-strong\",\"openai-gpt-3.5-turbo\",\"openai-gpt-3.5-turbo-instruct\",\"openai-gpt-4\",\"openai-text-davinci-002\",\"openai-text-davinci-003\",\"prediction-online-sum-url-content\",\"prediction-online-summarized-info\",\"stabilityai-stable-diffusion-512-v2-1\",\"stabilityai-stable-diffusion-768-v2-1\",\"stabilityai-stable-diffusion-v1-5\",\"stabilityai-stable-diffusion-xl-beta-v2-2-2\",\"prediction-url-cot-claude\",\"prediction-url-cot\",\"resolve-market-reasoning-gpt-4.1\",\"openai-gpt-4o-2024-08-06\"]",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
@@ -156,6 +162,12 @@
             "name": "Open Autonomy TM Write to Log",
             "description": "",
             "value": "false",
+            "provision_type": "fixed"
+        },
+        "MECH_INTERACTION_SLEEP_TIME": {
+            "name": "The sleep time after a failed mech interaction",
+            "description": "",
+            "value": "30",
             "provision_type": "fixed"
         }
     }

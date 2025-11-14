@@ -23,6 +23,7 @@ from test_run_service import (
     create_token_funding_handler,
     get_config_specific_settings,
     handle_env_var_prompt,
+    send_input_safely,
     setup_logging,
     get_config_files,
     BaseTestService,
@@ -165,7 +166,6 @@ class StakingBaseTestService(BaseTestService):
         cls.wallet_manager = MasterWalletManager(
             path=keys_dir,
             password="DUMMY_PWD",  # Use env var in production
-            logger=cls.logger
         ).setup()
         
         # Create wallet if it doesn't exist
@@ -208,10 +208,10 @@ class StakingBaseTestService(BaseTestService):
             
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
-                "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODIUS_RPC_URL",
-                "optimism": "OPTIMISM_RPC_URL", 
-                "base": "BASE_RPC_URL"
+                "gnosis": "GNOSIS_RPC",
+                "mode": "MODE_RPC",
+                "optimism": "OPTIMISM_RPC", 
+                "base": "BASE_RPC"
             }
             
             env_var = rpc_mapping.get(chain_name)
@@ -265,10 +265,10 @@ class StakingBaseTestService(BaseTestService):
             
             # Map chain names to environment variables for RPCs
             rpc_mapping = {
-                "gnosis": "GNOSIS_RPC_URL",
-                "mode": "MODIUS_RPC_URL",
-                "optimism": "OPTIMISM_RPC_URL", 
-                "base": "BASE_RPC_URL"
+                "gnosis": "GNOSIS_RPC",
+                "mode": "MODE_RPC",
+                "optimism": "OPTIMISM_RPC", 
+                "base": "BASE_RPC"
             }
             
             env_var = rpc_mapping.get(chain_name)
@@ -336,9 +336,9 @@ class StakingBaseTestService(BaseTestService):
                     # Handle callable responses (for funding handlers)
                     if callable(response):
                         response = response(current_output, self.logger)
-                        
-                    process.sendline(response)
-                    
+
+                    send_input_safely(process, response, self.logger)
+
                 except pexpect.TIMEOUT:
                     self.logger.error("Timeout waiting for prompt")
                     return False

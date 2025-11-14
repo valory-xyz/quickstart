@@ -236,7 +236,7 @@ if __name__ == "__main__":
     service = get_service_from_config(template_path, operate)
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
-    agent_address = service.keys[0].address
+    agent_address = service.agent_addresses[0]
     master_eoa = operator_wallet_data["address"]
     if "safes" in operator_wallet_data and "gnosis" in operator_wallet_data["safes"]:
         operator_address = operator_wallet_data["safes"]["gnosis"]
@@ -360,7 +360,7 @@ if __name__ == "__main__":
             )
             try:
                 mech_request_count = mech_contract.functions.mapRequestsCounts(safe_address).call(block_identifier=current_block_number)
-            except (ABIFunctionNotFound, ValueError):
+            except (ContractLogicError, ABIFunctionNotFound, ValueError):
                 # Use mapRequestCounts for newer mechs
                 mech_request_count = mech_contract.functions.mapRequestCounts(safe_address).call(block_identifier=current_block_number)
 
