@@ -169,6 +169,12 @@
             "description": "",
             "value": "30",
             "provision_type": "fixed"
+        },
+        "IS_AGENT_PERFORMANCE_SUMMARY_ENABLED": {
+            "name": "Is agent performance summary enabled",
+            "description": "",
+            "value": "false",
+            "provision_type": "fixed"
         }
     }
 }
