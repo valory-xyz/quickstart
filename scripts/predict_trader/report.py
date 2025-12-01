@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 import docker
+from psutil import pid_exists
 import requests
 import scripts.predict_trader.trades as trades
 from scripts.predict_trader.trades import (
@@ -49,6 +50,7 @@ from web3 import HTTPProvider, Web3
 from web3.exceptions import ABIFunctionNotFound, ContractLogicError
 
 from operate.constants import (
+    DEPLOYMENT_DIR,
     OPERATE_HOME,
     STAKING_TOKEN_INSTANCE_ABI_PATH,
     SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL,
@@ -71,6 +73,10 @@ TRADES_LOOKBACK_DAYS = 3
 MULTI_TRADE_LOOKBACK_DAYS = TRADES_LOOKBACK_DAYS
 SECONDS_PER_DAY = 60 * 60 * 24
 OUTPUT_WIDTH = 80
+
+
+operate = OperateApp()
+ask_password_if_needed(operate)
 
 
 class ColorCode:
@@ -209,6 +215,13 @@ def _get_agent_status() -> str:
             break
 
     is_running = trader_abci_container and trader_tm_container
+    if not is_running:
+        service = get_service_from_config(template_path, operate)
+        agent_pid_file = service.path / DEPLOYMENT_DIR / "agent.pid"
+        if agent_pid_file.exists():
+            agent_pid = agent_pid_file.read_text().strip()
+            is_running = pid_exists(int(agent_pid))
+
     return _color_bool(is_running, "Running", "Stopped")
 
 
@@ -231,8 +244,6 @@ if __name__ == "__main__":
         operator_wallet_data = json.load(file)
 
     template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
-    operate = OperateApp()
-    ask_password_if_needed(operate)
     service = get_service_from_config(template_path, operate)
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
@@ -258,7 +269,7 @@ if __name__ == "__main__":
 
     try:
         w3 = Web3(HTTPProvider(rpc))
-        current_block_number = w3.eth.block_number
+        current_block_number = str(w3.eth.block_number)
 
         print("")
         print_title(f"\nService report on block number {current_block_number}\n")

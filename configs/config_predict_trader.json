@@ -76,6 +76,12 @@
             "value": "",
             "provision_type": "computed"
         },
+        "STORE_PATH": {
+            "name": "Store Path",
+            "description": "",
+            "value": "/data",
+            "provision_type": "computed"
+        },
         "MECH_MARKETPLACE_CONFIG": {
             "name": "Mech marketplace config",
             "description": "",
