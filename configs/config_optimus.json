@@ -4,6 +4,14 @@
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
     "service_version": "v0.5.0",
+    "agent_release": {
+        "is_aea": true,
+        "repository": {
+            "owner": "valory-xyz",
+            "name": "optimus",
+            "version": "v0.5.0"
+        }
+    },
     "home_chain": "optimism",
     "configurations": {
         "optimism": {

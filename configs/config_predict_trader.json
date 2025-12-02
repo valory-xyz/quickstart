@@ -4,6 +4,14 @@
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
     "service_version": "v0.27.6",
+    "agent_release": {
+        "is_aea": true,
+        "repository": {
+            "owner": "valory-xyz",
+            "name": "trader",
+            "version": "v0.27.6"
+        }
+    },
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
@@ -66,6 +74,12 @@
             "name": "Mech request price",
             "description": "",
             "value": "",
+            "provision_type": "computed"
+        },
+        "STORE_PATH": {
+            "name": "Store Path",
+            "description": "",
+            "value": "/data",
             "provision_type": "computed"
         },
         "MECH_MARKETPLACE_CONFIG": {
