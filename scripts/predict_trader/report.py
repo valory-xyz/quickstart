@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
     try:
         w3 = Web3(HTTPProvider(rpc))
-        current_block_number = str(w3.eth.block_number)
+        current_block_number = w3.eth.block_number
 
         print("")
         print_title(f"\nService report on block number {current_block_number}\n")
