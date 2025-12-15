@@ -58,6 +58,8 @@ class StakingOptionParser:
             name = match.group(2).strip()
             slots_str = match.group(3)
             slots = float('inf') if slots_str == '∞' else int(slots_str)
+            if name.startswith("[DEPRECATED]"):
+                continue  # Skip deprecated options
             
             option = {
                 'number': number,
@@ -283,7 +285,7 @@ class StakingBaseTestService(BaseTestService):
             
             # Define expected prompts and responses
             prompts = {
-                r"Do you want to continue\? \(yes/no\):": "yes",
+                r"\(yes/no\):": "yes",
                 r"Enter local user account password \[hidden input\]:": os.getenv('TEST_PASSWORD', 'test_secret'),
                 r"\[(?:gnosis|optimism|base|mode)\].*Please make sure Master (EOA|Safe) .*has at least.*(?:ETH|xDAI)": 
                     lambda output, logger: create_funding_handler(rpc_url)(output, logger),
