@@ -189,6 +189,12 @@
             "description": "",
             "value": "false",
             "provision_type": "fixed"
+        },
+        "MECH_INTERACT_ROUND_TIMEOUT_SECONDS": {
+            "name": "Mech interact round timeout in seconds",
+            "description": "The timeout for the mech interact's rounds in seconds. It also translates to how much time we wait for a mech to respond before giving up.",
+            "value": "900",
+            "provision_type": "fixed"
         }
     }
 }
