@@ -1,15 +1,15 @@
 {
     "name": "Memeooorr",
-    "hash": "bafybeien6f3yzrn4e4vqoqsrddfwvr3i7ys7rft3h4ysp3il6qlhwm4hgq",
+    "hash": "bafybeigknu2la7cxkfbfbcp6gyjwq7bypoeebfc2u5cacdhuyjyhaxf2ga",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v2.0.1",
+    "service_version": "v2.0.2-rc4",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "meme-ooorr",
-            "version": "v2.0.1"
+            "version": "v2.0.2-rc4"
         }
     },
     "home_chain": "base",
@@ -27,6 +27,7 @@
             }
         }
     },
+    "allow_different_service_public_id": true,
     "env_variables": {
         "SAFE_CONTRACT_ADDRESSES": {
             "name": "Safe contract addresses",
