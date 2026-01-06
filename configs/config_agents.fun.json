@@ -125,12 +125,6 @@
             "value": "300",
             "provision_type": "fixed"
         },
-        "USE_X402": {
-            "name": "Use x402",
-            "description": "Enables feature of agents paying for api keys usage instead of asking users to manually provide them",
-            "value": "true",
-            "provision_type": "fixed"
-        },
         "LOG_DIR": {
             "name": "Log directory",
             "description": "",
