@@ -1,0 +1,135 @@
+{
+    "name": "Memeooorr",
+    "hash": "bafybeigknu2la7cxkfbfbcp6gyjwq7bypoeebfc2u5cacdhuyjyhaxf2ga",
+    "description": "Memeooorr @twitter_handle",
+    "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
+    "service_version": "v2.1.0",
+    "agent_release": {
+        "is_aea": true,
+        "repository": {
+            "owner": "valory-xyz",
+            "name": "meme-ooorr",
+            "version": "v2.1.0"
+        }
+    },
+    "home_chain": "base",
+    "configurations": {
+        "base": {
+            "agent_id": 43,
+            "nft": "bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
+            "threshold": 1,
+            "use_mech_marketplace": false,
+            "fund_requirements": {
+                "0x0000000000000000000000000000000000000000": {
+                    "agent": 325700000000000,
+                    "safe": 1628500000000000
+                }
+            }
+        }
+    },
+    "allow_different_service_public_id": true,
+    "env_variables": {
+        "SAFE_CONTRACT_ADDRESSES": {
+            "name": "Safe contract addresses",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "BASE_LEDGER_RPC": {
+            "name": "Base ledger RPC",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "CELO_LEDGER_RPC": {
+            "name": "Celo ledger RPC",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "STORE_PATH": {
+            "name": "Store Path",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "STAKING_TOKEN_CONTRACT_ADDRESS": {
+            "name": "Staking token contract address",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "ACTIVITY_CHECKER_CONTRACT_ADDRESS": {
+            "name": "Staking activity checker contract address",
+            "description": "",
+            "value": "",
+            "provision_type": "computed"
+        },
+        "TWEEPY_CONSUMER_API_KEY": {
+            "name": "Tweepy consumer API key",
+            "description": "Tweepy consumer API key to allow the agent to use Tweepy. How to get it: https://github.com/valory-xyz/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "TWEEPY_CONSUMER_API_KEY_SECRET": {
+            "name": "Tweepy consumer API key secret",
+            "description": "Tweepy consumer API key secret to allow the agent to use Tweepy. How to get it: https://github.com/valory-xyz/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "TWEEPY_ACCESS_TOKEN": {
+            "name": "Tweepy access token",
+            "description": "Tweepy access token to allow the agent to use Tweepy. How to get it: https://github.com/valory-xyz/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "TWEEPY_ACCESS_TOKEN_SECRET": {
+            "name": "Tweepy access token secret",
+            "description": "Tweepy access token secret to allow the agent to use Tweepy. How to get it: https://github.com/valory-xyz/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "TWEEPY_BEARER_TOKEN": {
+            "name": "Tweepy bearer token",
+            "description": "Tweepy bearer token to allow the agent to use Tweepy. How to get it: https://github.com/valory-xyz/meme-ooorr/blob/main/docs/twitter_dev_account.md",
+            "value": "",
+            "provision_type": "user"
+        },
+        "GENAI_API_KEY": {
+            "name": "Gemini api key",
+            "description": "Gemini api key to allow the agent to use Gemini",
+            "value": "",
+            "provision_type": "user"
+        },
+        "PERSONA": {
+            "name": "Persona description",
+            "description": "A persona to describe the personality of the agent",
+            "value": "",
+            "provision_type": "user"
+        },
+        "FEEDBACK_PERIOD_HOURS": {
+            "name": "Feedback period",
+            "description": "Amount of hours should the agent wait after sending a tweet and before analysing its responses",
+            "value": "1",
+            "provision_type": "fixed"
+        },
+        "MIN_FEEDBACK_REPLIES": {
+            "name": "Minimum feedback replies",
+            "description": "Minimum amount of replies to a tweet before Memeooorr analyses them",
+            "value": "10",
+            "provision_type": "fixed"
+        },
+        "RESET_PAUSE_DURATION": {
+            "name": "Reset pause duration",
+            "description": "",
+            "value": "300",
+            "provision_type": "fixed"
+        },
+        "LOG_DIR": {
+            "name": "Log directory",
+            "description": "",
+            "value": "benchmarks/",
+            "provision_type": "computed"
+        }
+    }
+}
