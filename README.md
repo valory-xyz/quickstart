@@ -39,6 +39,7 @@ where `ai_agent_config.json` is the path to your AI agent configuration file. Ch
 | Trader | `configs/config_predict_trader.json` | [Trader README](scripts/predict_trader/README.md) |
 | Mech | `configs/config_mech.json` | [Mech README](https://github.com/valory-xyz/mech) |
 | Optimus | `configs/config_optimus.json` | [Optimus README](https://github.com/valory-xyz/optimus) |
+| Agents.fun | `configs/config_agents.fun.json` | [Agents.fun README](https://github.com/valory-xyz/meme-ooorr) |
 
 ### For Non-Stakers
 
@@ -311,66 +312,4 @@ If you just want to build the deployment without executing the agent instance
 ## Guide for the AI agent `config.json`
 
 This is the configuration file whose path is passed as an argument to the `./run_service.sh` and other commands.
-If you ever want to modify the config.json or create one of your own, follow this guide.
-The JSON file should have the following schema:
-
-### Top-level Fields
-
-| Field Name      | Type                | Description                                                                             |
-|-----------------|---------------------|-----------------------------------------------------------------------------------------|
-| name            | string              | Name of the AI agent. This name is used for caching, so don't modify it afterwards.     |
-| hash            | string              | IPFS hash of the AI agent package.                                                      |
-| description     | string              | Description of the AI agent.                                                            |
-| image           | string              | URL to an image representing the agent blueprint.                                       |
-| service_version | string              | Version of the AI agent.                                                                |
-| home_chain      | string              | Name of the home blockchain network.                                                    |
-| configurations  | object              | Chain-specific configuration. See table below.                                          |
-| env_variables   | object              | Environment variables to be set for the AI agent. See table below.                      |
-
----
-
-#### `configurations` Object
-
-| Field Name      | Type    | Description                                                                                     |
-|-----------------|---------|-------------------------------------------------------------------------------------------------|
-| [chain name]    | object  | Keyed by chain name (e.g., "gnosis"). Contains AI agent configuration for that chain. See below.|
-
-##### Example: `configurations.gnosis`
-
-| Field Name           | Type    | Description                                                                     |
-|----------------------|---------|---------------------------------------------------------------------------------|
-| agent_id             | integer | Agent blueprint ID of the registered agent blueprint package in OLAS registry.  |
-| nft                  | string  | IPFS hash of the image of the NFT of this AI agent.                             |
-| threshold            | integer | It is deprecated now and will be removed in the future. Leave it `1` for now.   |
-| use_mech_marketplace | bool    | It is deprecated now and will be removed in the future. Leave it `true` for now.|
-| fund_requirements    | object  | Funding requirements for agent instances and AI agent safe. See table below.    |
-
-###### `fund_requirements` Object
-
-| Field Name (Token Address) | Type     | Description                                         |
-|----------------------------|----------|-----------------------------------------------------|
-| agent                      | number   | Amount required for the agent instances (in wei).   |
-| safe                       | number   | Amount required for the AI agent safe (in wei).     |
-
-> Token address is `0x0000000000000000000000000000000000000000` for native currency like ETH, xDAI, etc.
----
-
-#### `env_variables` Object
-
-| Field Name                  | Type    | Description                                                                                   |
-|-----------------------------|---------|-----------------------------------------------------------------------------------------------|
-| [variable name]             | object  | Keyed by variable name. Contains details for each environment variable. See below.            |
-
-##### Example: `env_variables.GNOSIS_LEDGER_RPC`
-
-| Field Name      | Type    | Description                                                      |
-|-----------------|---------|------------------------------------------------------------------|
-| name            | string  | Human-readable name of the variable.                             |
-| description     | string  | Description of the variable.                                     |
-| value           | string  | Default or user-provided value.                                  |
-| provision_type  | string  | How the variable is provided: "user", "computed", or "fixed".    |
-
-What happens when the `provision_type` is:
-- `user` - The quickstart will ask for this value from CLI at runtime, and save it to avoid asking again.
-- `fixed` - The `value` written in the config.json will be provided to the agent instance's environment variable, as is.
-- `computed` - These are for special environment variables that the quickstart will set for you, based on other configurations like staking program, priority mech, etc.
+Refer to the [CONTRIBUTING.md](CONTRIBUTING.md#guide-for-the-ai-agent-configjson) for the guide on creating or modifying the configs.
