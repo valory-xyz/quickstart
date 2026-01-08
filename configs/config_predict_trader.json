@@ -195,6 +195,12 @@
             "description": "The timeout for the mech interact's rounds in seconds. It also translates to how much time we wait for a mech to respond before giving up.",
             "value": "900",
             "provision_type": "fixed"
+        },
+        "PENALIZE_MECH_TIME_WINDOW": {
+            "name": "The penalization window for an unresponsive mech in seconds",
+            "description": "The penalization window for an unresponsive mech in seconds.",
+            "value": "7200",
+            "provision_type": "fixed"
         }
     }
 }
