@@ -22,6 +22,7 @@
 
 import json
 import os
+import traceback
 import requests
 import sys
 import time
@@ -29,13 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 from tqdm import tqdm
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar, Dict, Optional
 
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from web3.datastructures import AttributeDict
-
-from scripts.utils import get_subgraph_api_key
 
 
 SCRIPT_PATH = Path(__file__).resolve().parent
@@ -48,10 +47,7 @@ MECH_EVENTS_DB_VERSION = 3
 DEFAULT_MECH_FEE = 10000000000000000
 DEFAULT_FROM_TIMESTAMP = 0
 DEFAULT_TO_TIMESTAMP = 2147483647
-MECH_SUBGRAPH_URL_TEMPLATE = Template(
-    "https://gateway.thegraph.com/api/${subgraph_api_key}/subgraphs/id/4YGoX3iXUni1NBhWJS5xyKcntrAzssfytJK7PQxxQk5g"
-)
-MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/57238/mech/0.0.2"
+MECH_SUBGRAPH_URL_TEMPLATE = "https://subgraph.autonolas.tech/subgraphs/name/marketplace-gnosis-v1_0_0"
 SUBGRAPH_HEADERS = {
     "Accept": "application/json, multipart/mixed",
     "Content-Type": "application/json",
@@ -59,20 +55,30 @@ SUBGRAPH_HEADERS = {
 QUERY_BATCH_SIZE = 1000
 MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE = Template(
     """
-    query mech_events_subgraph_query($sender: Bytes, $id_gt: Bytes, $first: Int)  {
+    query mech_events_subgraph_query($sender: String, $id_gt: ID, $first: Int)  {
         ${subgraph_event_set_name}(
             where: {sender: $sender, id_gt: $id_gt}
             first: $first
             orderBy: id
             orderDirection: asc
-            ) {
+        ) {
             id
-            ipfsHash
-            requestId
-            sender
+            sender {
+                id
+            }
             transactionHash
             blockNumber
             blockTimestamp
+            
+            # Fetch from legacy mech request
+            mechRequest {
+                ipfsHash
+            }
+            
+            # Fetch from marketplace request
+            marketplaceRequest {
+                ipfsHashBytes
+            }
         }
     }
     """
@@ -85,7 +91,8 @@ class MechBaseEvent:  # pylint: disable=too-many-instance-attributes
     event_id: str
     sender: str
     transaction_hash: str
-    ipfs_hash: str
+    ipfs_hash: Optional[str]
+    ipfs_hash_bytes: Optional[str]
     block_number: int
     block_timestamp: int
     ipfs_link: str
@@ -98,32 +105,47 @@ class MechBaseEvent:  # pylint: disable=too-many-instance-attributes
         self,
         event_id: str,
         sender: str,
-        ipfs_hash: str,
         transaction_hash: str,
         block_number: int,
         block_timestamp: int,
+        ipfs_hash: Optional[str] = None,
+        ipfs_hash_bytes: Optional[str] = None,
     ):  # pylint: disable=too-many-arguments
         """Initializes the MechBaseEvent"""
         self.event_id = event_id
         self.sender = sender
         self.ipfs_hash = ipfs_hash
+        # Remove the "0x" prefix from the hex-encoded ipfs_hash_bytes, if present.
+        self.ipfs_hash_bytes = ipfs_hash_bytes[2:] if ipfs_hash_bytes else None
         self.transaction_hash = transaction_hash
         self.block_number = block_number
         self.block_timestamp = block_timestamp
         self.ipfs_link = ""
         self.ipfs_contents = {}
-        self._populate_ipfs_contents(ipfs_hash)
+        self._populate_ipfs_contents()
 
-    def _populate_ipfs_contents(self, data: str) -> None:
-        url = f"{IPFS_ADDRESS}{data}"
+    def _populate_ipfs_contents(self) -> None:
+        """Populate the IPFS contents."""
+        if self.ipfs_hash:
+            url = f"{IPFS_ADDRESS}{self.ipfs_hash}"
+        elif self.ipfs_hash_bytes:
+            url = f"{IPFS_ADDRESS}{CID_PREFIX}{self.ipfs_hash_bytes}"
+        else:
+            print(f"WARNING: No IPFS hash found for Mech event {self.event_name} with ID {self.event_id}.")
+            return
+
         for _url in [f"{url}/metadata.json", url]:
             try:
                 response = requests.get(_url)
                 response.raise_for_status()
                 self.ipfs_contents = response.json()
                 self.ipfs_link = _url
-            except Exception:  # pylint: disable=broad-except
+            except json.JSONDecodeError:
                 continue
+
+            except Exception:  # pylint: disable=broad-except
+                print(traceback.format_exc())
+                input(f"Press Enter to continue...")
 
 
 @dataclass
@@ -140,9 +162,10 @@ class MechRequest(MechBaseEvent):
         """Initializes the MechRequest"""
 
         super().__init__(
-            event_id=event["requestId"],
-            sender=event["sender"],
-            ipfs_hash=event["ipfsHash"],
+            event_id=event["id"],
+            sender=event["sender"]["id"],
+            ipfs_hash=event["mechRequest"]["ipfsHash"] if event["mechRequest"] else None,
+            ipfs_hash_bytes=event["marketplaceRequest"]["ipfsHashBytes"] if event["marketplaceRequest"] else None,
             transaction_hash=event["transactionHash"],
             block_number=int(event["blockNumber"]),
             block_timestamp=int(event["blockTimestamp"]),
@@ -194,19 +217,12 @@ def _write_mech_events_data_to_file(
         last_write_time = now
 
 
-def get_mech_subgraph_url() -> str:
-    """Get the mech subgraph's URL."""
-    subgraph_api_key = get_subgraph_api_key()
-    return MECH_SUBGRAPH_URL_TEMPLATE.substitute(subgraph_api_key=subgraph_api_key)
-
-
 def _query_mech_events_subgraph(
     sender: str, event_cls: type[MechBaseEvent]
 ) -> dict[str, Any]:
     """Query the subgraph."""
 
-    mech_subgraph_url = get_mech_subgraph_url()
-    transport = RequestsHTTPTransport(mech_subgraph_url)
+    transport = RequestsHTTPTransport(MECH_SUBGRAPH_URL_TEMPLATE)
     client = Client(transport=transport, fetch_schema_from_transport=True)
 
     subgraph_event_set_name = f"{event_cls.subgraph_event_name}s"
@@ -262,9 +278,9 @@ def _update_mech_events_db(
             desc="        Processing",
         ):
             if subgraph_event[
-                "requestId"
+                "id"
             ] not in stored_events or not stored_events.get(
-                subgraph_event["requestId"], {}
+                subgraph_event["id"], {}
             ).get(
                 "ipfs_contents"
             ):
@@ -285,8 +301,8 @@ def _update_mech_events_db(
             "You may attempt to rerun this script to retry synchronizing the database."
         )
         input("Press Enter to continue...")
-    except Exception as e:  # pylint: disable=broad-except
-        print(e)
+    except Exception:  # pylint: disable=broad-except
+        print(traceback.format_exc())
         print(
             "WARNING: An error occurred while updating the local Mech events database. "
             "Therefore, the Mech calls and costs might not be reflected accurately. "
