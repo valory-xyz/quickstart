@@ -1,15 +1,15 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeibw46xqqqpzfiw5if7aoknstlxc4bmraiqyj7v3w7a3kzcybpsbou",
+    "hash": "bafybeifjpfofi7xcttgfyruj2g47k7ko4yjua5cpa253okjn7fakmbnpkq",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.27.7",
+    "service_version": "v0.28.0",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "trader",
-            "version": "v0.27.7"
+            "version": "v0.28.0"
         }
     },
     "home_chain": "gnosis",
@@ -127,7 +127,7 @@
         "IRRELEVANT_TOOLS": {
             "name": "Irrelevant tools",
             "description": "",
-            "value": "[\"native-transfer\",\"prediction-online-lite\",\"claude-prediction-online-lite\",\"prediction-online-sme-lite\",\"prediction-request-reasoning-lite\",\"prediction-request-reasoning-claude-lite\",\"prediction-offline-sme\",\"deepmind-optimization\",\"deepmind-optimization-strong\",\"openai-gpt-3.5-turbo\",\"openai-gpt-3.5-turbo-instruct\",\"openai-gpt-4\",\"openai-text-davinci-002\",\"openai-text-davinci-003\",\"prediction-online-sum-url-content\",\"prediction-online-summarized-info\",\"stabilityai-stable-diffusion-512-v2-1\",\"stabilityai-stable-diffusion-768-v2-1\",\"stabilityai-stable-diffusion-v1-5\",\"stabilityai-stable-diffusion-xl-beta-v2-2-2\",\"prediction-url-cot-claude\",\"prediction-url-cot\",\"resolve-market-reasoning-gpt-4.1\",\"openai-gpt-4o-2024-08-06\"]",
+            "value": "[\"native-transfer\",\"prediction-online-lite\",\"claude-prediction-online-lite\",\"prediction-online-sme-lite\",\"prediction-request-reasoning-lite\",\"prediction-request-reasoning-claude-lite\",\"prediction-offline-sme\",\"deepmind-optimization\",\"deepmind-optimization-strong\",\"openai-gpt-3.5-turbo\",\"openai-gpt-3.5-turbo-instruct\",\"openai-gpt-4\",\"openai-text-davinci-002\",\"openai-text-davinci-003\",\"prediction-online-sum-url-content\",\"prediction-online-summarized-info\",\"stabilityai-stable-diffusion-512-v2-1\",\"stabilityai-stable-diffusion-768-v2-1\",\"stabilityai-stable-diffusion-v1-5\",\"stabilityai-stable-diffusion-xl-beta-v2-2-2\",\"prediction-url-cot-claude\",\"prediction-url-cot\",\"resolve-market-reasoning-gpt-4.1\",\"openai-gpt-4o-2024-08-06\",\"echo\",\"google_image_gen\",\"short_maker\",\"stabilityai-stable-diffusion-v1-6\",\"stabilityai-stable-diffusion-xl-1024-v1-0\"]",
             "provision_type": "fixed"
         },
         "CREATOR_PER_SUBGRAPH": {
@@ -188,6 +188,18 @@
             "name": "Is agent performance summary enabled",
             "description": "",
             "value": "false",
+            "provision_type": "fixed"
+        },
+        "MECH_INTERACT_ROUND_TIMEOUT_SECONDS": {
+            "name": "Mech interact round timeout in seconds",
+            "description": "The timeout for the mech interact's rounds in seconds. It also translates to how much time we wait for a mech to respond before giving up.",
+            "value": "900",
+            "provision_type": "fixed"
+        },
+        "PENALIZE_MECH_TIME_WINDOW": {
+            "name": "The penalization window for an unresponsive mech in seconds",
+            "description": "The penalization window for an unresponsive mech in seconds.",
+            "value": "7200",
             "provision_type": "fixed"
         }
     }
