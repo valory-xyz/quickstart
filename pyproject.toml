@@ -10,7 +10,7 @@ include = []
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-olas-operate-middleware = "0.14.1"
+olas-operate-middleware = { git = "https://github.com/valory-xyz/olas-operate-middleware.git", rev = "b1cce46751aba97701a154d82f260bfaa088bfaa" }
 tqdm = "^4.67.1"
 
 [tool.poetry.group.dev.dependencies]
