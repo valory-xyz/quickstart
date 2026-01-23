@@ -62,6 +62,7 @@ from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import Chain
 from operate.quickstart.run_service import ask_password_if_needed, load_local_config
 from operate.quickstart.utils import print_title
+from operate.services.service import Service
 from scripts.utils import get_service_from_config
 
 SCRIPT_PATH = Path(__file__).resolve().parent
@@ -202,7 +203,7 @@ def _warning_message(current_value: int, threshold: int = 0, message: str = "") 
     return ""
 
 
-def _get_agent_status() -> str:
+def _get_agent_status(service: Service) -> str:
     client = docker.from_env()
     trader_abci_container = None
     trader_tm_container = None
@@ -216,7 +217,6 @@ def _get_agent_status() -> str:
 
     is_running = trader_abci_container and trader_tm_container
     if not is_running:
-        service = get_service_from_config(template_path, operate)
         agent_pid_file = service.path / DEPLOYMENT_DIR / "agent.pid"
         if agent_pid_file.exists():
             agent_pid = agent_pid_file.read_text().strip()
@@ -270,6 +270,13 @@ if __name__ == "__main__":
     try:
         w3 = Web3(HTTPProvider(rpc))
         current_block_number = w3.eth.block_number
+
+        # check if RPC queries are supported with block number, else fall back to latest
+        try:
+            get_balance(safe_address, rpc, block_identifier=current_block_number)
+        except TypeError:
+            print("RPC does not support block number queries, falling back to latest block.")
+            current_block_number = "latest"
 
         print("")
         print_title(f"\nService report on block number {current_block_number}\n")
@@ -466,7 +473,7 @@ if __name__ == "__main__":
     _print_status("ID", str(service_id))
 
     # Agent
-    agent_status = _get_agent_status()
+    agent_status = _get_agent_status(service=service)
     agent_xdai = get_balance(agent_address, rpc, block_identifier=current_block_number)
     _print_subsection_header("Agent")
     _print_status("Status (on this machine)", agent_status)
