@@ -2167,13 +2167,13 @@ nicer-shell = ["ipython"]
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.14.2"
+version = "0.14.4"
 description = ""
 optional = false
 python-versions = "<3.12,>=3.10"
 files = [
-    {file = "olas_operate_middleware-0.14.2-py3-none-any.whl", hash = "sha256:242e2969f625f893507feb86231b3f44fe98e3a4fef1738cb3b7dd9005f12041"},
-    {file = "olas_operate_middleware-0.14.2.tar.gz", hash = "sha256:e9f4db14b3207d46141935ab1802481b47663a99c3b986224a200b0a9b62d26c"},
+    {file = "olas_operate_middleware-0.14.4-py3-none-any.whl", hash = "sha256:896de631590bedf4e324dcb820ee540ff04d84976db42c71b6b4250c6c0cd3dd"},
+    {file = "olas_operate_middleware-0.14.4.tar.gz", hash = "sha256:84be837c84847302331684f0a50522d5c90700fe9ee0fd6ea2f0e85d9a467ce1"},
 ]
 
 [package.dependencies]
@@ -2185,11 +2185,11 @@ deepdiff = ">=8.6.1,<9.0.0"
 fastapi = "0.110.3"
 halo = "0.0.31"
 multiaddr = "0.0.9"
-open-aea-cli-ipfs = ">=2.0.6,<3.0.0"
-open-aea-ledger-cosmos = ">=2.0.6,<3.0.0"
-open-aea-ledger-ethereum = ">=2.0.6,<3.0.0"
-open-aea-ledger-ethereum-flashbots = ">=2.0.6,<3.0.0"
-open-autonomy = ">=0.21.5,<0.22.0"
+open-aea-cli-ipfs = ">=2.0.8,<3.0.0"
+open-aea-ledger-cosmos = ">=2.0.8,<3.0.0"
+open-aea-ledger-ethereum = ">=2.0.8,<3.0.0"
+open-aea-ledger-ethereum-flashbots = ">=2.0.8,<3.0.0"
+open-autonomy = ">=0.21.8,<0.22.0"
 psutil = ">=5.9.8,<6.0.0"
 pyinstaller = ">=6.8.0,<7.0.0"
 requests-mock = ">=1.12.1,<2.0.0"
@@ -2197,18 +2197,18 @@ uvicorn = "0.27.0"
 
 [[package]]
 name = "open-aea"
-version = "2.0.7"
+version = "2.0.8"
 description = "Open Autonomous Economic Agent framework (without vendor lock-in)"
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "open_aea-2.0.7-py3-none-any.whl", hash = "sha256:b69182f270e3d9db245851363172fba3e36fb52829c9b49aa5a85c314cb71d26"},
-    {file = "open_aea-2.0.7-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:a4f0b8c3ab0b429ebe5ff14ea541af114878dae29243905f54c714d8f2899035"},
-    {file = "open_aea-2.0.7-py3-none-manylinux1_x86_64.whl", hash = "sha256:3fa7e04485bb46579adc03f72119232d030dfb84e3143a684bc75b4732fc1524"},
-    {file = "open_aea-2.0.7-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4ded8cb1524ebeeb3383a7ab13a1d09cad01a670c53bd7bd38c7096604d315af"},
-    {file = "open_aea-2.0.7-py3-none-win32.whl", hash = "sha256:85574fc4c8fdd4a57abc2d0a8f063a4b437621900b63838fc4876bee9d50b631"},
-    {file = "open_aea-2.0.7-py3-none-win_amd64.whl", hash = "sha256:b89728b127163c035eb4fad536b44015049bb7d80f6d63a144a99603f3e8c73c"},
-    {file = "open_aea-2.0.7.tar.gz", hash = "sha256:9e4c27895fb6222a2db886b76bd49e7de46d51e6bb70c0a5815f69d84b353682"},
+    {file = "open_aea-2.0.8-py3-none-any.whl", hash = "sha256:8d8395033bd262eb320301dee4ae54084045dad68125e2bb35ed9c4b1646dfc9"},
+    {file = "open_aea-2.0.8-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:a3ca629adcc403fdfdf34a5546c1f3609edbac5ebe0df9471669eb6ae03281a8"},
+    {file = "open_aea-2.0.8-py3-none-manylinux1_x86_64.whl", hash = "sha256:acdf9b25440ec75ac3bb4db5aeb24d31047ddb48063264ec69405c4ae344da35"},
+    {file = "open_aea-2.0.8-py3-none-manylinux2014_aarch64.whl", hash = "sha256:42c5ac4a4385ae1c15fb3d2076d2295a6b8fb78b82c2c84fdc198195b837700f"},
+    {file = "open_aea-2.0.8-py3-none-win32.whl", hash = "sha256:48f0a727317495be9517a406c84355a96583c3f831799460bead020558cb614d"},
+    {file = "open_aea-2.0.8-py3-none-win_amd64.whl", hash = "sha256:94a21eab8ab71c2d04baee8b0b57dfb0982eb984e5f8ed68689df3fd4fdfe9e9"},
+    {file = "open_aea-2.0.8.tar.gz", hash = "sha256:48a483ca3b9ca4d90883d83042ea2dd83d64eed8720b4c84ff66524a51a86a96"},
 ]
 
 [package.dependencies]
@@ -2236,13 +2236,13 @@ test-tools = ["click (>=8.1.0,<8.3.0)", "coverage (>=6.4.4,<8.0.0)", "jsonschema
 
 [[package]]
 name = "open-aea-cli-ipfs"
-version = "2.0.7"
+version = "2.0.8"
 description = "CLI extension for open AEA framework wrapping IPFS functionality."
 optional = false
 python-versions = "*"
 files = [
-    {file = "open_aea_cli_ipfs-2.0.7-py3-none-any.whl", hash = "sha256:f13049c06202fe70ed3ecbb5a2cf0a5f3fea73b856b9061e614ee9d27f385f91"},
-    {file = "open_aea_cli_ipfs-2.0.7.tar.gz", hash = "sha256:541553e41aed8c2008a838de44acae6b6b5e6064c01b69c29c34748e2f3b9f82"},
+    {file = "open_aea_cli_ipfs-2.0.8-py3-none-any.whl", hash = "sha256:39737923a253a09e97a6d012198d35e3f36ef58c16545beba8f8690f989d54df"},
+    {file = "open_aea_cli_ipfs-2.0.8.tar.gz", hash = "sha256:5ca9af9b2800ac873f1e2aa692d4e1c0bc39c789f5566043db73a6ba9bdbb837"},
 ]
 
 [package.dependencies]
@@ -2265,13 +2265,13 @@ web3 = ">=7,<8"
 
 [[package]]
 name = "open-aea-ledger-cosmos"
-version = "2.0.7"
+version = "2.0.8"
 description = "Python package wrapping the public and private key cryptography and ledger api of Cosmos."
 optional = false
 python-versions = "*"
 files = [
-    {file = "open_aea_ledger_cosmos-2.0.7-py3-none-any.whl", hash = "sha256:5f18f3a7b5c210e576b0b5d102425d0ced691b1ef9f3f567b8c04fb958150c05"},
-    {file = "open_aea_ledger_cosmos-2.0.7.tar.gz", hash = "sha256:22138cc9e706c7e2ed5257493fb739f87189e1f114051b622f137b2157945679"},
+    {file = "open_aea_ledger_cosmos-2.0.8-py3-none-any.whl", hash = "sha256:518e797aabc2962d2961ca40b8ce53eb970dde0dab903ba45f201e3fa65b73de"},
+    {file = "open_aea_ledger_cosmos-2.0.8.tar.gz", hash = "sha256:31fab5a601a228c8ae1b07517237344e81aad0ec750e51bf4ebe4ce8ffd0e9ab"},
 ]
 
 [package.dependencies]
@@ -2283,13 +2283,13 @@ pycryptodome = ">=3.10.1,<4.0.0"
 
 [[package]]
 name = "open-aea-ledger-ethereum"
-version = "2.0.7"
+version = "2.0.8"
 description = "Python package wrapping the public and private key cryptography and ledger api of Ethereum."
 optional = false
 python-versions = "*"
 files = [
-    {file = "open_aea_ledger_ethereum-2.0.7-py3-none-any.whl", hash = "sha256:efed7112e3f87dbc05429a864e4df6e335573750cf3ea57855c78f6de548d4e4"},
-    {file = "open_aea_ledger_ethereum-2.0.7.tar.gz", hash = "sha256:824dd9165775a1958348b39fcdc4b0b7d8ee48bccc342f538b8ce0e26ce50a53"},
+    {file = "open_aea_ledger_ethereum-2.0.8-py3-none-any.whl", hash = "sha256:e981865548bd66bf105fb62a18d5b4e7bc0880c1fbf4de763bf4f50cd835b8a0"},
+    {file = "open_aea_ledger_ethereum-2.0.8.tar.gz", hash = "sha256:cececd7841a8ae089750b7a222e306e159a6ba580c12d6c201fbd1562e90d4c3"},
 ]
 
 [package.dependencies]
@@ -2300,13 +2300,13 @@ web3 = ">=7.0.0,<8"
 
 [[package]]
 name = "open-aea-ledger-ethereum-flashbots"
-version = "2.0.7"
+version = "2.0.8"
 description = "Python package extending the default open-aea ethereum ledger plugin to add support for flashbots."
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "open_aea_ledger_ethereum_flashbots-2.0.7-py3-none-any.whl", hash = "sha256:0e8ff932824a153a726df53bc59a92e49a555b07523859d7094f8cb4589b5f32"},
-    {file = "open_aea_ledger_ethereum_flashbots-2.0.7.tar.gz", hash = "sha256:6c84756a7db8fb9fe759639ca5369a02d6c37ba0c8fb46e13c582b861f680f8e"},
+    {file = "open_aea_ledger_ethereum_flashbots-2.0.8-py3-none-any.whl", hash = "sha256:0c64548a3ac6ea9fa21b432d37b50d57d2b3294c75d298f831d67c9af8836d92"},
+    {file = "open_aea_ledger_ethereum_flashbots-2.0.8.tar.gz", hash = "sha256:938a16e6a2df0caa1ea247e2354ae3bdab5226aa630c93d8a81d81fa56bfe355"},
 ]
 
 [package.dependencies]
@@ -2315,13 +2315,13 @@ open-aea-ledger-ethereum = ">=2.0.0,<2.1.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.21.6"
+version = "0.21.8"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "open_autonomy-0.21.6-py3-none-any.whl", hash = "sha256:ef62f0e5255b6a2521046d0474eff12c2a2276493235ceb39920310e9390ff75"},
-    {file = "open_autonomy-0.21.6.tar.gz", hash = "sha256:868601106f2f07c019dd0f458ddce4d1bb81ad0984487cae4d9154465bacf092"},
+    {file = "open_autonomy-0.21.8-py3-none-any.whl", hash = "sha256:763cd5cc8ee8839a995ef82a19fc3a4a58510aa8a601df36c7cf4e3bfb77d12d"},
+    {file = "open_autonomy-0.21.8.tar.gz", hash = "sha256:4b18c2579f6cf4c2518ef32579c85447cc2624629db0a105e261200eb2b540e2"},
 ]
 
 [package.dependencies]
@@ -2334,8 +2334,8 @@ gql = "3.5.0"
 hexbytes = "*"
 jsonschema = ">=4.3.0,<4.4.0"
 multiaddr = "0.0.9"
-open-aea = {version = "2.0.7", extras = ["all"]}
-open-aea-cli-ipfs = "2.0.7"
+open-aea = {version = "2.0.8", extras = ["all"]}
+open-aea-cli-ipfs = "2.0.8"
 protobuf = ">=4.21.6,<4.25.0"
 pytest = "7.4.4"
 python-dotenv = ">=0.14.5,<0.22.0"
@@ -2347,8 +2347,8 @@ watchdog = ">=2.1.6"
 werkzeug = "2.0.3"
 
 [package.extras]
-all = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.0.7)", "pytest (>=7.0.0,<7.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
-cli = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.0.7)", "pytest (>=7.0.0,<7.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
+all = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.0.8)", "pytest (>=7.0.0,<7.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
+cli = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.0.8)", "pytest (>=7.0.0,<7.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
 
 [[package]]
 name = "orderly-set"
@@ -3946,4 +3946,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "98a55cf80328968122ad96414a4f174642b815b85d0649ea359ac689858ddb4a"
+content-hash = "b4b1985bd4a8426fd57cf9095905aa4d6f62d5065a2256bc11e0187c58b2d2e8"
