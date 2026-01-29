@@ -108,7 +108,7 @@ Once the command has completed, i.e. the AI agent is running, you can see the li
 ```bash
 docker logs $(docker ps --filter "name=<ai_agent_name>" --format "{{.Names}}" | grep "_abci" | head -n 1) --follow
 ```
-Replace `<ai_agent_name>` with the name of the AI agent. For example: `omenstrat`.
+Replace `<ai_agent_name>` with the name of the AI agent. For example: `trader`.
 
 You can also use this command to investigate your agent's logs:
 
