@@ -1,6 +1,6 @@
-# trader-quickstart
+# omenstrat-quickstart
 
-A quickstart for the trader AI agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
+A quickstart for the Omenstrat AI agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
 
 ## Resource Requirements
 
@@ -42,7 +42,7 @@ A quickstart for the trader AI agent for AI prediction markets on Gnosis at http
 
     This will output the different state transitions of your agent per period, for example:
 
-    ![Trader FSM transitions](images/trader_fsm_transitions.png)
+    ![Omenstrat FSM transitions](images/trader_fsm_transitions.png)
 
     For more options on the above command run:
 
@@ -54,7 +54,7 @@ A quickstart for the trader AI agent for AI prediction markets on Gnosis at http
 
 ## Advanced usage
 
-This chapter is for advanced users who want to further customize the trader AI agent's behaviour without changing the underlying trading logic.
+This chapter is for advanced users who want to further customize the Omenstrat AI agent's behaviour without changing the underlying trading logic.
 
 ##### Tool selection
 
@@ -67,7 +67,7 @@ If a tool is temporarily misbehaving, you could set an environment variable as d
 
 ##### Environment variables
 
-You may customize the AI agent's behaviour by setting these trader-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
+You may customize the AI agent's behaviour by setting these Omenstrat-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
 
 | Name | Type | Default Value | Description |
 | --- | --- | --- | --- |
@@ -157,6 +157,6 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
    - Migrate your AI agent to the master safe
    - Handle any necessary unstaking and transfers
 
-4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your trader AI agent.
+4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your Omenstrat AI agent.
 
 5. After you ensure that the AI agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.
