@@ -1,6 +1,6 @@
-# trader-quickstart
+# omenstrat-quickstart
 
-A quickstart for the trader AI agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
+A quickstart for the Omenstrat AI agent for AI prediction markets on Gnosis at https://github.com/valory-xyz/trader
 
 ## Resource Requirements
 
@@ -42,7 +42,7 @@ A quickstart for the trader AI agent for AI prediction markets on Gnosis at http
 
     This will output the different state transitions of your agent per period, for example:
 
-    ![Trader FSM transitions](images/trader_fsm_transitions.png)
+    ![Omenstrat FSM transitions](images/trader_fsm_transitions.png)
 
     For more options on the above command run:
 
@@ -54,7 +54,7 @@ A quickstart for the trader AI agent for AI prediction markets on Gnosis at http
 
 ## Advanced usage
 
-This chapter is for advanced users who want to further customize the trader AI agent's behaviour without changing the underlying trading logic.
+This chapter is for advanced users who want to further customize the Omenstrat AI agent's behaviour without changing the underlying trading logic.
 
 ##### Tool selection
 
@@ -67,7 +67,7 @@ If a tool is temporarily misbehaving, you could set an environment variable as d
 
 ##### Environment variables
 
-You may customize the AI agent's behaviour by setting these trader-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
+You may customize the AI agent's behaviour by setting these Omenstrat-specific environment variables in [the config file](../../configs/config_predict_trader.json) in the same way as others.
 
 | Name | Type | Default Value | Description |
 | --- | --- | --- | --- |
@@ -92,7 +92,7 @@ You may customize the AI agent's behaviour by setting these trader-specific envi
 | `USE_NEVERMINED` | `bool` | `false` | Whether to use Nevermined. |
 | `SUBSCRIPTION_PARAMS` | `list` | `[["base_url", "https://marketplace-api.gnosis.nevermined.app/api/v1/metadata/assets/ddo"],["did", "did:nv:01706149da2f9f3f67cf79ec86c37d63cec87fc148f5633b12bf6695653d5b3c"],["escrow_payment_condition_address", "0x31B2D187d674C9ACBD2b25f6EDce3d2Db2B7f446"],["lock_payment_condition_address", "0x2749DDEd394196835199471027713773736bffF2"],["transfer_nft_condition_address", "0x659fCA7436936e9fe8383831b65B8B442eFc8Ea8"],["token_address", "0x1b5DeaD7309b56ca7663b3301A503e077Be18cba"], ["order_address","0x72201948087aE83f8Eac22cf7A9f2139e4cFA829"], ["nft_amount", "100"], ["payment_token","0x0000000000000000000000000000000000000000"], ["order_address", "0x72201948087aE83f8Eac22cf7A9f2139e4cFA829"],["price", "1000000000000000000"]]` | Parameters for the Nevermined subscription. |
 
-The rest of the common environment variables are present in the [service.yaml](https://github.com/valory-xyz/trader/blob/v0.18.2/packages/valory/services/trader/service.yaml), which are customizable too.
+The rest of the common environment variables are present in the [service.yaml](https://github.com/valory-xyz/trader/blob/main/packages/valory/services/trader/service.yaml), which are customizable too.
 
 To set `IRRELEVANT_TOOLS` for example, add the following lines under the `"env_variables"` field in the [the config file](../../configs/config_predict_trader.json).
 ```
@@ -157,6 +157,6 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
    - Migrate your AI agent to the master safe
    - Handle any necessary unstaking and transfers
 
-4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your trader AI agent.
+4. Once migration is complete, follow the instructions in the [Run the AI agent](../../README.md#run-the-ai-agent) section to run your Omenstrat AI agent.
 
 5. After you ensure that the AI agent runs fine with the new quickstart, please delete the `.trader_runner` folder(s) to avoid any private key leaks.

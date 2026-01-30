@@ -36,7 +36,7 @@ where `ai_agent_config.json` is the path to your AI agent configuration file. Ch
 
 | AI agent | Config path | Docs |
 | --- | --- | --- |
-| Trader | `configs/config_predict_trader.json` | [Trader README](scripts/predict_trader/README.md) |
+| Omenstrat | `configs/config_predict_trader.json` | [Omenstrat README](scripts/predict_trader/README.md) |
 | Mech | `configs/config_mech.json` | [Mech README](https://github.com/valory-xyz/mech) |
 | Optimus | `configs/config_optimus.json` | [Optimus README](https://github.com/valory-xyz/optimus) |
 | Agents.fun | `configs/config_agents.fun.json` | [Agents.fun README](https://github.com/valory-xyz/meme-ooorr) |
@@ -124,7 +124,7 @@ For example, inspect the state transitions using this command:
 
 This will output the different state transitions of your AI agent per period, for example:
 
-![Trader FSM transitions](scripts/predict_trader/images/trader_fsm_transitions.png)
+![Omenstrat FSM transitions](scripts/predict_trader/images/trader_fsm_transitions.png)
 
 For more options on the above command run:
 
