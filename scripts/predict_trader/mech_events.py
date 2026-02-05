@@ -47,7 +47,7 @@ MECH_EVENTS_DB_VERSION = 3
 DEFAULT_MECH_FEE = 10000000000000000
 DEFAULT_FROM_TIMESTAMP = 0
 DEFAULT_TO_TIMESTAMP = 2147483647
-MECH_SUBGRAPH_URL_TEMPLATE = "https://subgraph.autonolas.tech/subgraphs/name/marketplace-gnosis-v1_0_0"
+MECH_SUBGRAPH_URL_TEMPLATE = "https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis"
 SUBGRAPH_HEADERS = {
     "Accept": "application/json, multipart/mixed",
     "Content-Type": "application/json",
