@@ -132,7 +132,7 @@ For more options on the above command run:
 ./analyse_logs.sh --help
 ```
 
-or take a look at the [command documentation](https://docs.autonolas.network/open-autonomy/advanced_reference/commands/autonomy_analyse/#autonomy-analyse-logs).
+or take a look at the [command documentation](https://stack.olas.network/open-autonomy/advanced_reference/commands/autonomy_analyse/#autonomy-analyse-logs).
 
 To stop your AI agent, use:
 
