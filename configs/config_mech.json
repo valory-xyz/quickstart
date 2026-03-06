@@ -1,15 +1,15 @@
 {
     "name": "Mech Predict",
-    "hash": "bafybeihrjvinvcljb3hqb6gucbadnnknszdw6742zd2oy2sz7k4vn25e5u",
+    "hash": "bafybeidecjut2vvzbb4weqnxwlqy2etyd7vzh6plrgsxhvwvwtws4q6fdm",
     "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-    "service_version": "v0.9.0",
+    "service_version": "v0.30.7",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "mech",
-            "version": "v0.9.0"
+            "version": "v0.30.7"
         }
     },
     "home_chain": "gnosis",
