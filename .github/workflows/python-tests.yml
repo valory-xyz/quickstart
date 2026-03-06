@@ -5,7 +5,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       agent_names: ${{ steps.find-agents.outputs.names }}
     steps:
@@ -56,7 +56,7 @@ jobs:
 
   test:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         agent: ${{ fromJson(needs.setup.outputs.agent_names) }}
@@ -126,7 +126,7 @@ jobs:
         done
 
   test-staking:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
       MODE_RPC: ${{ secrets.MODE_RPC }}
