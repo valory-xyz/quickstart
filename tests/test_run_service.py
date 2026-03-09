@@ -62,11 +62,6 @@ def get_service_config(config_path: str) -> dict:
             "container_name": "traderpearl",
             "health_check_url": HEALTH_CHECK_URL,
         },
-        # Mech service
-        "mech": {
-            "container_name": "mech",
-            "health_check_url": HEALTH_CHECK_URL,
-        },
         # Memeooor service
         "agents.fun": {
             "container_name": "memeooorr",
@@ -179,16 +174,6 @@ def check_docker_status(logger: logging.Logger, config_path: str) -> bool:
 def check_service_health(logger: logging.Logger, config_path: str) -> tuple[bool, dict]:
     """Enhanced service health check with metrics."""
     service_config = get_service_config(config_path)
-
-    if "mech" in config_path.lower():
-        logger.info("Bypassing health check for mech service because it's not supported")
-        return True, {
-            'response_time': 0,
-            'status_code': 200,
-            'error': None,
-            'successful_checks': 1,
-            'total_checks': 1
-        }
 
     health_check_url = service_config["health_check_url"]
     
@@ -363,8 +348,6 @@ def handle_native_funding(output: str, logger: logging.Logger, rpc_url: str) -> 
             
             try:
                 w3 = Web3(Web3.HTTPProvider(rpc_url))
-                if require_extra_coins:  # TODO: Temp fix for mech
-                    required_amount *= 10
                 amount_wei = w3.to_wei(required_amount, 'ether')
                 amount_hex = hex(amount_wei)
                 
@@ -665,20 +648,6 @@ def get_config_specific_settings(config_path: str) -> dict:
                 lambda output, logger: create_funding_handler(get_chain_rpc(output, logger))(output, logger),
             r"\[(?:optimism|base|mode)\].*Please transfer at least.*(?:USDC|OLAS) to the Master (?:EOA|Safe) (0x[a-fA-F0-9]{40})":
                 lambda output, logger: create_token_funding_handler(get_chain_rpc(output, logger))(output, logger)
-        })
-
-    elif "mech" in config_path.lower():
-        require_extra_coins = True
-        test_config = {
-            **base_config,  
-            "RPC_URL": os.getenv('GNOSIS_RPC', '')
-        }
-
-        # Add Mech-specific prompts
-        prompts.update({
-            r"eth_newFilter \[hidden input\]": test_config["RPC_URL"],
-            r"Please transfer at least.*(?:ETH|xDAI) to the Master (EOA|Safe) (0x[a-fA-F0-9]{40})": 
-                lambda output, logger: create_funding_handler(test_config["RPC_URL"])(output, logger)
         })
 
     elif "agents.fun" in config_path.lower():
