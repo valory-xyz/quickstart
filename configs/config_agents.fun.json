@@ -1,15 +1,15 @@
 {
     "name": "Memeooorr",
-    "hash": "bafybeigknu2la7cxkfbfbcp6gyjwq7bypoeebfc2u5cacdhuyjyhaxf2ga",
+    "hash": "bafybeicxzihgqbagihlxaywif2tle3xofo3k7dj5eqgl5kj73gat2abwta",
     "description": "Memeooorr @twitter_handle",
     "image": "https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu",
-    "service_version": "v2.1.0",
+    "service_version": "v2.4.0-rc2",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "meme-ooorr",
-            "version": "v2.1.0"
+            "version": "v2.4.0-rc2"
         }
     },
     "home_chain": "base",
