@@ -16,6 +16,12 @@ tqdm = "^4.67.1"
 [tool.poetry.group.dev.dependencies]
 pexpect = "^4.9.0"
 
+[tool.pytest.ini_options]
+markers = [
+	"e2e: end-to-end tests that may use real network/external systems",
+	"integration: integration tests that may use networked dependencies",
+]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

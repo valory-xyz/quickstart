@@ -24,6 +24,8 @@ from operate.cli import OperateApp
 from operate.constants import HEALTH_CHECK_URL, OPERATE
 from operate.operate_types import Chain, LedgerType
 
+pytestmark = pytest.mark.e2e
+
 
 # Initialize colorama and load environment
 init()
