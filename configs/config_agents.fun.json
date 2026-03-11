@@ -130,6 +130,12 @@
             "description": "",
             "value": "benchmarks/",
             "provision_type": "computed"
+        },
+        "DOCKER_IMAGE_AUTHOR": {
+            "name": "Docker image author",
+            "description": "Name of the author of the docker image that will run the agent",
+            "value": "valory",
+            "provision_type": "fixed"
         }
     }
 }
