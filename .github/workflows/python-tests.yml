@@ -71,10 +71,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.10
+    - name: Set up Python 3.14
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.14'
 
     - name: Install system dependencies
       run: |
@@ -109,7 +109,7 @@ jobs:
     - name: Install project dependencies
       run: |
         python -m pip install --upgrade pip
-        poetry env use python3.10
+        poetry env use python3.14
         poetry install --no-interaction
         poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
 
@@ -137,10 +137,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python 3.10
+    - name: Set up Python 3.14
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.14'
 
     - name: Install system dependencies
       run: |
@@ -175,7 +175,7 @@ jobs:
     - name: Install project dependencies
       run: |
         python -m pip install --upgrade pip
-        poetry env use python3.10
+        poetry env use python3.14
         poetry install --no-interaction
         poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
 
@@ -197,10 +197,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.14
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.14'
 
     - name: Install system dependencies
       run: |
@@ -227,7 +227,7 @@ jobs:
     - name: Install project dependencies
       run: |
         python -m pip install --upgrade pip
-        poetry env use python3.10
+        poetry env use python3.14
         poetry install --no-interaction
         poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
         poetry run pip install --upgrade pytest-cov

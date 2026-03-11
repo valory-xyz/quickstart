@@ -13,7 +13,7 @@ A quickstart to run OLAS AI agents
 
 Ensure your machine satisfies the requirements:
 
-- Python `==3.10`
+- Python `>=3.10,<3.15`
 - [Poetry](https://python-poetry.org/docs/) `>=1.8.3`
 - [Docker Compose](https://docs.docker.com/compose/install/)
 
@@ -211,10 +211,10 @@ Execute the following steps in a PowerShell terminal:
     winget install --id Git.Git -e --source winget
     ```
 
-2. Install Python 3.10:
+2. Install Python 3.14:
 
     ```bash
-    winget install Python.Python.3.10
+    winget install Python.Python.3.14
     ```
 
 3. Close and re-open the PowerShell terminal.
