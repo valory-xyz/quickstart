@@ -193,14 +193,18 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+      fail-fast: false
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.14
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
-        python-version: '3.14'
+        python-version: ${{ matrix.python-version }}
 
     - name: Install system dependencies
       run: |
@@ -227,7 +231,7 @@ jobs:
     - name: Install project dependencies
       run: |
         python -m pip install --upgrade pip
-        poetry env use python3.14
+        poetry env use python${{ matrix.python-version }}
         poetry install --no-interaction
         poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
         poetry run pip install --upgrade pytest-cov
@@ -246,5 +250,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: unit-test-coverage-xml
+        name: unit-test-coverage-xml-${{ matrix.python-version }}
         path: coverage-unit.xml
