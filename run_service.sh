@@ -46,8 +46,8 @@ else
     exit 1
 fi
 
-if ! [[ $($PYTHON_CMD --version) =~ ^(Python\ 3\.[8-9])|(Python\ 3\.10)|(Python\ 3\.11) ]]; then
-    echo "Python version >=3.8.0, <3.12.0 is required"
+if ! [[ $($PYTHON_CMD --version) =~ ^(Python\ 3\.10)|(Python\ 3\.11)|(Python\ 3\.12)|(Python\ 3\.13)|(Python\ 3\.14) ]]; then
+    echo "Python version >=3.10, <3.15 is required"
     exit 1
 fi
 echo "`$PYTHON_CMD --version` is compatible"

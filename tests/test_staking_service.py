@@ -30,6 +30,8 @@ from test_run_service import (
     STARTUP_WAIT,
 )
 
+pytestmark = pytest.mark.e2e
+
 def get_included_test_configs() -> List[str]:
     """Get list of configs to test for staking-enabled services."""
     included_agents = ["trader"]  # List of agents with staking enabled

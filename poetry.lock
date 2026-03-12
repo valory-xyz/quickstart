@@ -2343,14 +2343,14 @@ nicer-shell = ["ipython"]
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.15.1"
+version = "0.15.3"
 description = ""
 optional = false
 python-versions = "<3.15,>=3.10"
 groups = ["main"]
 files = [
-    {file = "olas_operate_middleware-0.15.1-py3-none-any.whl", hash = "sha256:dbf2fc6141bb91d70021d85e3210bebc3a2d79bed70f30d2f4ded8aa21dccc4a"},
-    {file = "olas_operate_middleware-0.15.1.tar.gz", hash = "sha256:9721c5d099ec2a492069c8f8dd7ef9264fdfbca589526f628b1b5fb909406025"},
+    {file = "olas_operate_middleware-0.15.3-py3-none-any.whl", hash = "sha256:a3e023fe914733b528f991f9749fb75207fa4ea211fc1efdcfb48544b3fe7828"},
+    {file = "olas_operate_middleware-0.15.3.tar.gz", hash = "sha256:b8e88b15b3bc18777ddfeebba5ef5aae02848d566cea91ee4b499f18bd27d199"},
 ]
 
 [package.dependencies]
@@ -2362,11 +2362,11 @@ deepdiff = ">=8.6.1,<9.0.0"
 fastapi = "0.110.3"
 halo = "0.0.31"
 multiaddr = "0.0.9"
-open-aea-cli-ipfs = ">=2.1.0rc6,<3.0.0"
-open-aea-ledger-cosmos = ">=2.1.0rc6,<3.0.0"
-open-aea-ledger-ethereum = ">=2.1.0rc6,<3.0.0"
-open-aea-ledger-ethereum-flashbots = ">=2.1.0rc6,<3.0.0"
-open-autonomy = ">=0.21.12rc4,<0.22.0"
+open-aea-cli-ipfs = ">=2.1.0,<3.0.0"
+open-aea-ledger-cosmos = ">=2.1.0,<3.0.0"
+open-aea-ledger-ethereum = ">=2.1.0,<3.0.0"
+open-aea-ledger-ethereum-flashbots = ">=2.1.0,<3.0.0"
+open-autonomy = ">=0.21.13,<0.22.0"
 psutil = ">=5.9.8,<6.0.0"
 pyinstaller = ">=6.8.0,<7.0.0"
 requests-mock = ">=1.12.1,<2.0.0"
@@ -2374,19 +2374,19 @@ uvicorn = "0.27.0"
 
 [[package]]
 name = "open-aea"
-version = "2.1.0rc6"
+version = "2.1.0"
 description = "Open Autonomous Economic Agent framework (without vendor lock-in)"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "open_aea-2.1.0rc6-py3-none-any.whl", hash = "sha256:b9163916b8c552e12f8ed2c83599af756bb9e10a05d22eb7b0aef15c21d4bec0"},
-    {file = "open_aea-2.1.0rc6-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:107afdff22b6250cfbf7c2dc1428c5cb5ec5f1c1a6e6691ed6011203f3262069"},
-    {file = "open_aea-2.1.0rc6-py3-none-manylinux1_x86_64.whl", hash = "sha256:44528a6f8288726c492433a37c7d2ec0fa824a752ecbe4237b0d1cfb5c68d04f"},
-    {file = "open_aea-2.1.0rc6-py3-none-manylinux2014_aarch64.whl", hash = "sha256:1fdf0f2f53140ccf627efc928e24d1da127122d0fb2ca95a535fd1cf4f60c668"},
-    {file = "open_aea-2.1.0rc6-py3-none-win32.whl", hash = "sha256:7c878df84c689d07fbc39a34e8802a99d458245f70d811c2106d7b72a5a988c4"},
-    {file = "open_aea-2.1.0rc6-py3-none-win_amd64.whl", hash = "sha256:47e3934d75a8e725d37623664e0d3e6677398bdf7ba9b28db8da234580c4d6cc"},
-    {file = "open_aea-2.1.0rc6.tar.gz", hash = "sha256:610ef9596e57d1079e2164454e904520ca972f0df12015919deecc2c14d24a8e"},
+    {file = "open_aea-2.1.0-py3-none-any.whl", hash = "sha256:265f12f47fff15b68cb8250772b662c07aea1ed83375d1026af5bba6b411b49b"},
+    {file = "open_aea-2.1.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:a36db8ac275efa75e177de4b9c27233a20615724aa02d6690e95cc9c45034c79"},
+    {file = "open_aea-2.1.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:f2f8ce89ae10d717d139af659d244b2978bf41fb6e0f2ebfd105ed7860fe1af6"},
+    {file = "open_aea-2.1.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:b6b90c8a06e0ca53d8a86d7880f207b3fc66c10020252feb6a3ea5c70bf901a9"},
+    {file = "open_aea-2.1.0-py3-none-win32.whl", hash = "sha256:c67fa0b77fe1195376078cd1bf2b64ec77b82505e83e610a6ae1ab884043dfea"},
+    {file = "open_aea-2.1.0-py3-none-win_amd64.whl", hash = "sha256:cace2e62682aa6f4bcf023306e878917b4008ab7a9d9f30c12adbbcc1da7900c"},
+    {file = "open_aea-2.1.0.tar.gz", hash = "sha256:b5a40bcc7fbc6a78ed9a42a1aea0855d736849f9327a1a417fa136a0ab195cae"},
 ]
 
 [package.dependencies]
@@ -2417,14 +2417,14 @@ test-tools = ["click (>=8.1.0,<8.4.0)", "coverage (>=6.4.4,<8.0.0)", "jsonschema
 
 [[package]]
 name = "open-aea-cli-ipfs"
-version = "2.1.0rc6"
+version = "2.1.0"
 description = "CLI extension for open AEA framework wrapping IPFS functionality."
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "open_aea_cli_ipfs-2.1.0rc6-py3-none-any.whl", hash = "sha256:f945982c5acff77d19e92383940ef06b87a9167844ab582db9edb39d3a7c5517"},
-    {file = "open_aea_cli_ipfs-2.1.0rc6.tar.gz", hash = "sha256:782837f033f5674c38408508a1b5755ec050f6dd96fbc60125103d6bfc5d0e0a"},
+    {file = "open_aea_cli_ipfs-2.1.0-py3-none-any.whl", hash = "sha256:dabebcf724f42990c4440ae0d45ef9e393a140c052cfd420298234a56b35e128"},
+    {file = "open_aea_cli_ipfs-2.1.0.tar.gz", hash = "sha256:b9a2c4d851a6b8ea7fd0d3b0b29623a3336712392dccd615da0acc710dc472d2"},
 ]
 
 [package.dependencies]
@@ -2501,14 +2501,14 @@ open-aea-ledger-ethereum = ">=2.1.0,<2.2.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.21.12rc5"
+version = "0.21.13"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "open_autonomy-0.21.12rc5-py3-none-any.whl", hash = "sha256:73a4fe395bd207c461f48ae927987d995c41a0a9ac24064b23aafa73c588e61a"},
-    {file = "open_autonomy-0.21.12rc5.tar.gz", hash = "sha256:68307b7773a663cd8f2c9234ad87ee1d200969e448b2c9477eaf5b82d58a5b72"},
+    {file = "open_autonomy-0.21.13-py3-none-any.whl", hash = "sha256:bbb495faeb2a88f47a6f31806af41ae173e19ad82633fcb7e87111ae9260c7fa"},
+    {file = "open_autonomy-0.21.13.tar.gz", hash = "sha256:eedc9bf38f8b07368a4259088afd3064ed459b16360c34b2d55f5b94f7ada5c9"},
 ]
 
 [package.dependencies]
@@ -2521,8 +2521,8 @@ gql = "3.5.0"
 hexbytes = "*"
 jsonschema = ">=4.3.0,<4.24.0"
 multiaddr = "0.0.9"
-open-aea = {version = "2.1.0rc6", extras = ["all"]}
-open-aea-cli-ipfs = "2.1.0rc6"
+open-aea = {version = "2.1.0", extras = ["all"]}
+open-aea-cli-ipfs = "2.1.0"
 protobuf = ">=5,<6"
 pytest = "8.4.2"
 python-dotenv = ">=0.14.5,<0.22.0"
@@ -2534,8 +2534,8 @@ watchdog = ">=2.1.6"
 werkzeug = ">=3.1.0,<4.0.0"
 
 [package.extras]
-all = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.1.0rc6)", "pytest (>=8.0.0,<8.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
-cli = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.1.0rc6)", "pytest (>=8.0.0,<8.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
+all = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.1.0)", "pytest (>=8.0.0,<8.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
+cli = ["click (>=8.1.0,<9)", "coverage (>=6.4.4,<8.0.0)", "open-aea-cli-ipfs (==2.1.0)", "pytest (>=8.0.0,<8.5.0)", "python-dotenv (>=0.14.5,<0.22.0)", "texttable (==1.6.7)"]
 
 [[package]]
 name = "orderly-set"
@@ -4422,4 +4422,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "48746afdef74f4f78358be7870b4392543d8e6565088d2a96a544e51a9f05852"
+content-hash = "a426212acd0c603bb8120af0603c9ae444660dd412e27eb9cc7af6100fee6c5c"

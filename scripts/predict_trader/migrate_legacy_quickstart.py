@@ -18,7 +18,6 @@ from operate.constants import (
     OPERATE,
     ZERO_ADDRESS,
 )
-from operate.keys import KeysManager
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
 from operate.quickstart.run_service import ask_password_if_needed, get_service, QuickstartConfig
@@ -198,7 +197,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
         spinner.succeed("Master safe created")
 
     agent_eoa = decrypt_private_keys(trader_data.agent_eoa, trader_data.password)
-    agent_eoa_path = KeysManager().path / agent_eoa["address"]
+    agent_eoa_path = operate.keys_manager.path / agent_eoa["address"]
     if not agent_eoa_path.exists():
         spinner = Halo(text="Creating agent EOA...", spinner="dots").start()
         with open(agent_eoa_path, "w") as f:

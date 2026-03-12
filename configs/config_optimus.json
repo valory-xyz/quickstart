@@ -1,15 +1,15 @@
 {
     "name": "Optimus",
-    "hash": "bafybeifwuv6ba2aw3vycfdsbkyhlw6ehzugasf56tbv65qv4emrvczogyy",
+    "hash": "bafybeigtnkikil2ndeplembc6svap5t6blslz626ut4swhigiqr36mkaf4",
     "description": "Optimus",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve",
-    "service_version": "v0.5.0",
+    "service_version": "v0.7.0-rc2",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "optimus",
-            "version": "v0.5.0"
+            "version": "v0.7.0-rc2"
         }
     },
     "home_chain": "optimism",
