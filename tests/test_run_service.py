@@ -560,13 +560,22 @@ def handle_env_var_prompt(output: str, logger: logging.Logger, config_path: str)
         with open(config_path, 'r') as f:
             config = json.load(f)
             
-        # Get prompt text after "Please enter"
-        prompt_match = re.search(r"Please enter (.*?)(?:\s*\[hidden input\])?[:.]?$", output.strip())
-        if not prompt_match:
+        # Parse the latest real input prompt line. This avoids matching banners like
+        # "Please enter the arguments that will be used by the service.".
+        prompt_pattern = re.compile(
+            r"^\s*Please enter\s+(.+?)(?:\s*\[hidden input\])?:\s*$"
+        )
+        prompt_text = None
+        for line in reversed(output.splitlines()):
+            prompt_match = prompt_pattern.match(line.strip())
+            if prompt_match:
+                prompt_text = prompt_match.group(1).strip()
+                break
+
+        if not prompt_text:
             logger.info("No prompt match found")
             return '\n'
-            
-        prompt_text = prompt_match.group(1).strip()
+
         logger.info(f"Looking for config value for: {prompt_text}")
         
         env_vars = config.get('env_variables', {})
@@ -599,7 +608,7 @@ def get_base_config(config_path: str = "") -> dict:
         r"Enter your choice": base_config["STAKING_CHOICE"],
         r"Please input your backup owner \(leave empty to skip\)\:": base_config["BACKUP_WALLET"],
         r"Press enter to continue": "\n",
-        r"Please enter .*": lambda output, logger: handle_env_var_prompt(output, logger, config_path)
+        r"Please enter .*(?:\[hidden input\])?:\s*$": lambda output, logger: handle_env_var_prompt(output, logger, config_path)
     }
 
     return {"config": base_config, "prompts": base_prompts}
