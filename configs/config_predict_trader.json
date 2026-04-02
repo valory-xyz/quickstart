@@ -1,15 +1,15 @@
 {
     "name": "Trader Agent",
-    "hash": "bafybeiapylikbz2uyrhmbflm2e47tasxksbemzlmocho2f5syv6khpwbyi",
+    "hash": "bafybeiawwee4k5sga223bwh7wsu5dnzubam2dtked6lioe7roegkxbouzm",
     "description": "Trader agent for omen prediction markets",
     "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "service_version": "v0.33.1",
+    "service_version": "v0.33.2",
     "agent_release": {
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
             "name": "trader",
-            "version": "v0.33.1"
+            "version": "v0.33.2"
         }
     },
     "home_chain": "gnosis",
