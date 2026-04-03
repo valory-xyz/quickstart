@@ -727,7 +727,7 @@ def test_migrate_to_master_safe_paths(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-                on_chain_states=[
+        on_chain_states=[
             migrate.OnChainState.ACTIVE_REGISTRATION,
             migrate.OnChainState.TERMINATED_BONDED,
         ],
@@ -799,7 +799,7 @@ def test_migrate_to_master_safe_cancelled_and_short_duration(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -811,7 +811,7 @@ def test_migrate_to_master_safe_cancelled_and_short_duration(
     operate2, trader_data2, service2, ocm2 = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -845,7 +845,7 @@ def test_migrate_to_master_safe_owner_mismatch_and_early_returns(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -882,7 +882,7 @@ def test_migrate_to_master_safe_transferable_amount_non_positive(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=1,
         tx_value_after_gas=0,
     )
@@ -918,7 +918,7 @@ def test_migrate_to_master_safe_transfer_tx_value_non_positive(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=100,
         tx_value_after_gas=0,
     )
@@ -956,7 +956,7 @@ def test_migrate_to_master_safe_uses_owner_contract_when_config_mismatch(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1046,7 +1046,7 @@ def test_migrate_to_master_safe_fallback_owner_status_error_keeps_config_contrac
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1124,7 +1124,7 @@ def test_migrate_to_master_safe_terminate_guard_when_owner_lookup_unavailable(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1187,7 +1187,7 @@ def test_migrate_to_master_safe_exits_when_owner_still_effective_staking_contrac
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1253,7 +1253,7 @@ def test_migrate_to_master_safe_handles_dict_erc20_tokens_shape(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1295,6 +1295,55 @@ def test_migrate_to_master_safe_handles_dict_erc20_tokens_shape(
     migrate.migrate_to_master_safe(operate, trader_data, service)
 
     assert captured["asset_addresses"] == {"0xolas", "0xusdc"}
+
+
+def test_migrate_to_master_safe_exits_when_owner_fetch_fails_before_transfer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Should abort with clear message when owner fetch fails before transfer block."""
+
+    _patch_halo(monkeypatch)
+    monkeypatch.setattr(migrate, "print_section", lambda *_a, **_k: None)
+
+    operate, trader_data, service, _ocm = _build_migrate_context(
+        tmp_path,
+        staking_status=migrate.StakingState.UNSTAKED,
+        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+        xdai_balance=0,
+        tx_value_after_gas=0,
+    )
+
+    owners = iter(["0xsafe", "0xsafe", RuntimeError("boom")])
+
+    def _get_service_owner(**_kwargs):
+        value = next(owners)
+        if isinstance(value, Exception):
+            raise value
+        return {"service_owner": value}
+
+    service_registry = SimpleNamespace(
+        get_service_owner=_get_service_owner,
+        get_instance=lambda **_kwargs: SimpleNamespace(
+            functions=SimpleNamespace(transferFrom=lambda *_args: None)
+        ),
+    )
+    erc20 = SimpleNamespace(get_instance=lambda **_kwargs: None)
+    monkeypatch.setattr(
+        migrate,
+        "registry_contracts",
+        SimpleNamespace(service_registry=service_registry, erc20=erc20),
+    )
+    monkeypatch.setattr(
+        migrate, "get_assets_balances", lambda **_kwargs: {"0xmaster": {}}
+    )
+    monkeypatch.setattr(migrate, "get_asset_balance", lambda **_kwargs: 0)
+    monkeypatch.setattr(
+        migrate, "CHAIN_TO_METADATA", {migrate.Chain.GNOSIS.value: {"gasFundReq": 100}}
+    )
+    monkeypatch.setattr(migrate, "ERC20_TOKENS", [{migrate.Chain.GNOSIS: "0xasset"}])
+
+    with pytest.raises(SystemExit):
+        migrate.migrate_to_master_safe(operate, trader_data, service)
 
 
 def test_main_success_and_insecure_password_notice(
