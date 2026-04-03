@@ -20,10 +20,19 @@ from operate.constants import (
 )
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
-from operate.quickstart.run_service import ask_password_if_needed, get_service, QuickstartConfig
+from operate.quickstart.run_service import (
+    ask_password_if_needed,
+    get_service,
+    QuickstartConfig,
+)
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import Service
-from operate.quickstart.utils  import ask_yes_or_no, CHAIN_TO_METADATA, print_section, print_title
+from operate.quickstart.utils import (
+    ask_yes_or_no,
+    CHAIN_TO_METADATA,
+    print_section,
+    print_title,
+)
 from operate.quickstart.run_service import NO_STAKING_PROGRAM_ID
 from operate.utils.gnosis import get_asset_balance, get_assets_balances
 
@@ -36,7 +45,7 @@ DATA_FILES = (
     "multi_bets.json",
     "policy_store_multi_bet_failure_adjusting.json",
     "policy_store.json",
-    "utilized_tools.json"
+    "utilized_tools.json",
 )
 
 
@@ -51,6 +60,7 @@ class StakingVariables(TypedDict):
     MECH_ACTIVITY_CHECKER_CONTRACT: str
     MIN_STAKING_BOND_OLAS: int
     MIN_STAKING_DEPOSIT_OLAS: int
+
 
 @dataclass
 class TraderData:
@@ -84,18 +94,20 @@ def decrypt_private_keys(eoa: Path, password: str) -> dict[str, str]:
 def parse_trader_runner() -> TraderData:
     load_dotenv(TRADER_RUNNER_PATH / ".env")
 
-    subgraph_api_key = os.getenv('SUBGRAPH_API_KEY')
+    subgraph_api_key = os.getenv("SUBGRAPH_API_KEY")
     staking_variables = {
-        "USE_STAKING": os.getenv('USE_STAKING').lower() == "true",
-        "STAKING_PROGRAM": os.getenv('STAKING_PROGRAM'),
-        "AGENT_ID": int(os.getenv('AGENT_ID')),
-        "CUSTOM_SERVICE_REGISTRY_ADDRESS": os.getenv('CUSTOM_SERVICE_REGISTRY_ADDRESS'),
-        "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS": os.getenv('CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS'),
-        "CUSTOM_OLAS_ADDRESS": os.getenv('CUSTOM_OLAS_ADDRESS'),
-        "CUSTOM_STAKING_ADDRESS": os.getenv('CUSTOM_STAKING_ADDRESS'),
-        "MECH_ACTIVITY_CHECKER_CONTRACT": os.getenv('MECH_ACTIVITY_CHECKER_CONTRACT'),
-        "MIN_STAKING_BOND_OLAS": int(os.getenv('MIN_STAKING_BOND_OLAS')),
-        "MIN_STAKING_DEPOSIT_OLAS": int(os.getenv('MIN_STAKING_DEPOSIT_OLAS'))
+        "USE_STAKING": os.getenv("USE_STAKING").lower() == "true",
+        "STAKING_PROGRAM": os.getenv("STAKING_PROGRAM"),
+        "AGENT_ID": int(os.getenv("AGENT_ID")),
+        "CUSTOM_SERVICE_REGISTRY_ADDRESS": os.getenv("CUSTOM_SERVICE_REGISTRY_ADDRESS"),
+        "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS": os.getenv(
+            "CUSTOM_SERVICE_REGISTRY_TOKEN_UTILITY_ADDRESS"
+        ),
+        "CUSTOM_OLAS_ADDRESS": os.getenv("CUSTOM_OLAS_ADDRESS"),
+        "CUSTOM_STAKING_ADDRESS": os.getenv("CUSTOM_STAKING_ADDRESS"),
+        "MECH_ACTIVITY_CHECKER_CONTRACT": os.getenv("MECH_ACTIVITY_CHECKER_CONTRACT"),
+        "MIN_STAKING_BOND_OLAS": int(os.getenv("MIN_STAKING_BOND_OLAS")),
+        "MIN_STAKING_DEPOSIT_OLAS": int(os.getenv("MIN_STAKING_DEPOSIT_OLAS")),
     }
 
     print_section("Parsing .trader_runner file")
@@ -134,7 +146,9 @@ def parse_trader_runner() -> TraderData:
     )
 
 
-def populate_operate(operate: OperateApp, trader_data: TraderData, service_template: ServiceTemplate) -> Service:
+def populate_operate(
+    operate: OperateApp, trader_data: TraderData, service_template: ServiceTemplate
+) -> Service:
     print_section("Setting up Operate")
     operate.setup()
     if operate.user_account is None:
@@ -153,7 +167,7 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
             principal_chain="gnosis",
             rpc={"gnosis": trader_data.rpc},
             user_provided_args={"SUBGRAPH_API_KEY": trader_data.subgraph_api_key},
-            staking_program_id = trader_data.staking_variables["STAKING_PROGRAM"],
+            staking_program_id=trader_data.staking_variables["STAKING_PROGRAM"],
         )
         qs_config.store()
         spinner.succeed("Quickstart config created")
@@ -187,7 +201,9 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
 
     master_wallet = operate.wallet_manager.load(LedgerType.ETHEREUM)
     if Chain.GNOSIS not in master_wallet.safes:
-        backup_owner=input("Please input your backup owner for the master safe (leave empty to skip): ")
+        backup_owner = input(
+            "Please input your backup owner for the master safe (leave empty to skip): "
+        )
         spinner = Halo(text="Creating master safe...", spinner="dots").start()
         master_wallet.create_safe(
             chain=Chain.GNOSIS,
@@ -209,7 +225,9 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
         "rpc": trader_data.rpc,
         "agent_id": int(trader_data.staking_variables["AGENT_ID"]),
         "use_staking": trader_data.staking_variables["USE_STAKING"],
-        "cost_of_bond": max(1, int(trader_data.staking_variables["MIN_STAKING_BOND_OLAS"])),
+        "cost_of_bond": max(
+            1, int(trader_data.staking_variables["MIN_STAKING_BOND_OLAS"])
+        ),
     }
     service_manager = operate.service_manager()
     for service_config in service_manager.json:
@@ -230,15 +248,17 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
 
     service.agent_addresses = [agent_eoa["address"]]
     service.chain_configs[Chain.GNOSIS.value].chain_data.token = trader_data.service_id
-    service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = trader_data.service_safe
+    service.chain_configs[
+        Chain.GNOSIS.value
+    ].chain_data.multisig = trader_data.service_safe
     service.store()
     spinner.succeed("Service created")
 
     old_mech_events_file = TRADER_RUNNER_PATH / "mech_events.json"
     new_mech_events_file = ROOT_PATH / "data" / "mech_events.json"
     if old_mech_events_file.exists() and (
-        not new_mech_events_file.exists() or
-        old_mech_events_file.stat().st_size > new_mech_events_file.stat().st_size
+        not new_mech_events_file.exists()
+        or old_mech_events_file.stat().st_size > new_mech_events_file.stat().st_size
     ):
         spinner = Halo(text="Copying existing mech events...", spinner="dots").start()
         try:
@@ -257,47 +277,90 @@ def populate_operate(operate: OperateApp, trader_data: TraderData, service_templ
     return get_service(service_manager, service_template)
 
 
-def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service: Service) -> None:
+def migrate_to_master_safe(
+    operate: OperateApp, trader_data: TraderData, service: Service
+) -> None:
     print_section("Migrating service to .operate")
     chain_config = service.chain_configs[service.home_chain]
     ledger_config = chain_config.ledger_config
     ocm = operate.service_manager().get_on_chain_manager(ledger_config=ledger_config)
     staking_contract = trader_data.staking_variables["CUSTOM_STAKING_ADDRESS"]
+    service_registry_address = trader_data.staking_variables[
+        "CUSTOM_SERVICE_REGISTRY_ADDRESS"
+    ]
+    staking_program = trader_data.staking_variables["STAKING_PROGRAM"]
     operate.service_manager().get_on_chain_manager(ledger_config=ledger_config)
     wallet_manager = operate.wallet_manager.load(LedgerType.ETHEREUM)
     os.environ["CUSTOM_CHAIN_RPC"] = os.environ["GNOSIS_CHAIN_RPC"] = trader_data.rpc
 
-    if (
-        trader_data.staking_variables['STAKING_PROGRAM'] != NO_STAKING_PROGRAM_ID and
-        ocm.staking_status(
+    service_owner = None
+    try:
+        service_owner = registry_contracts.service_registry.get_service_owner(
+            ledger_api=ocm.ledger_api,
+            contract_address=service_registry_address,
             service_id=chain_config.chain_data.token,
-            staking_contract=staking_contract,
-        ) != StakingState.UNSTAKED
+        )["service_owner"]
+    except Exception:  # pylint: disable=broad-except
+        print("Failed to fetch service owner.")
+        pass
+
+    effective_staking_contract = staking_contract
+    if (
+        service_owner is not None
+        and service_owner.lower() != staking_contract.lower()
+        and staking_program != NO_STAKING_PROGRAM_ID
     ):
+        try:
+            owner_contract_status = ocm.staking_status(
+                service_id=chain_config.chain_data.token,
+                staking_contract=service_owner,
+            )
+            if owner_contract_status in (StakingState.STAKED, StakingState.EVICTED):
+                effective_staking_contract = service_owner
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+    staking_status = ocm.staking_status(
+        service_id=chain_config.chain_data.token,
+        staking_contract=effective_staking_contract,
+    )
+
+    owner_is_staking_contract = (
+        service_owner is not None
+        and service_owner.lower() == effective_staking_contract.lower()
+    )
+    should_attempt_unstake = staking_program != NO_STAKING_PROGRAM_ID and (
+        staking_status != StakingState.UNSTAKED or owner_is_staking_contract
+    )
+
+    if should_attempt_unstake:
         if not ask_yes_or_no(
             f"Your service {chain_config.chain_data.token} will be unstaked "
-            f"from staking program {trader_data.staking_variables['STAKING_PROGRAM']} during this migration.\n"
+            f"from staking program {staking_program} during this migration.\n"
             "Do you want to continue?"
         ):
             print("Cancelled.")
             sys.exit(1)
 
-        spinner = Halo(text=f"Unstaking service {chain_config.chain_data.token}...", spinner="dots").start()
+        spinner = Halo(
+            text=f"Unstaking service {chain_config.chain_data.token}...", spinner="dots"
+        ).start()
         staking_manager = StakingManager(
-            key=wallet_manager.key_path,
-            chain_type=ChainType.GNOSIS,
-            password=operate.password,
+            chain=Chain.from_string(service.home_chain),
+            rpc=trader_data.rpc,
         )
-        ts_start = staking_manager.service_info(staking_contract, chain_config.chain_data.token)[3]
+        ts_start = staking_manager.service_info(
+            effective_staking_contract, chain_config.chain_data.token
+        )[3]
         minimum_staking_duration = staking_manager.staking_ctr.get_min_staking_duration(
             ledger_api=staking_manager.ledger_api,
-            contract_address=staking_contract,
+            contract_address=effective_staking_contract,
         ).get("data")
-        
+
         current_block = staking_manager.ledger_api.api.eth.get_block("latest")
         current_timestamp = current_block.timestamp
         staked_duration = current_timestamp - ts_start
-        
+
         if staked_duration < minimum_staking_duration:
             print(
                 f"Cannot unstake service {chain_config.chain_data.token}."
@@ -305,37 +368,78 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
             )
             spinner.fail("Failed to unstake service")
             sys.exit(1)
-        
-        ocm.unstake(service_id=chain_config.chain_data.token, staking_contract=staking_contract)
+
+        ocm.unstake(
+            service_id=chain_config.chain_data.token,
+            staking_contract=effective_staking_contract,
+        )
         spinner.succeed("Service unstaked")
     else:
-        print(f"Service {chain_config.chain_data.token} is not staked. Skipping unstaking.")
+        print(
+            f"Service {chain_config.chain_data.token} is not staked. Skipping unstaking."
+        )
+
+    service_owner = None
+    try:
+        service_owner = registry_contracts.service_registry.get_service_owner(
+            ledger_api=ocm.ledger_api,
+            contract_address=service_registry_address,
+            service_id=chain_config.chain_data.token,
+        )["service_owner"]
+    except Exception:  # pylint: disable=broad-except
+        print("Failed to fetch service owner after unstaking.")
+        pass
+
+    if (
+        service_owner is not None
+        and service_owner.lower() == effective_staking_contract.lower()
+        and service_owner.lower() != wallet_manager.crypto.address.lower()
+    ):
+        print(
+            f"Cannot terminate service {chain_config.chain_data.token}: service owner is still staking contract {effective_staking_contract}. "
+            "Please unstake first."
+        )
+        sys.exit(1)
 
     service_manager = operate.service_manager()
-    if service_manager._get_on_chain_state(service=service, chain=service.home_chain) in (
+    if service_manager._get_on_chain_state(
+        service=service, chain=service.home_chain
+    ) in (
         OnChainState.ACTIVE_REGISTRATION,
         OnChainState.FINISHED_REGISTRATION,
         OnChainState.DEPLOYED,
     ):
-        spinner = Halo(text=f"Terminating service {chain_config.chain_data.token}...", spinner="dots").start()
-        service_manager.terminate_service_on_chain(service_config_id=service.service_config_id)
+        spinner = Halo(
+            text=f"Terminating service {chain_config.chain_data.token}...",
+            spinner="dots",
+        ).start()
+        service_manager.terminate_service_on_chain(
+            service_config_id=service.service_config_id
+        )
         spinner.succeed("Service terminated")
 
     if (
         service_manager._get_on_chain_state(service=service, chain=service.home_chain)
         == OnChainState.TERMINATED_BONDED
     ):
-        spinner = Halo(text=f"Unbonding service {chain_config.chain_data.token}...", spinner="dots").start()
-        service_manager.unbond_service_on_chain(service_config_id=service.service_config_id)
+        spinner = Halo(
+            text=f"Unbonding service {chain_config.chain_data.token}...", spinner="dots"
+        ).start()
+        service_manager.unbond_service_on_chain(
+            service_config_id=service.service_config_id
+        )
         spinner.succeed("Service unbonded")
 
     service_owner = registry_contracts.service_registry.get_service_owner(
         ledger_api=ocm.ledger_api,
-        contract_address=trader_data.staking_variables["CUSTOM_SERVICE_REGISTRY_ADDRESS"],
+        contract_address=service_registry_address,
         service_id=chain_config.chain_data.token,
-    )['service_owner']
+    )["service_owner"]
     if service_owner != wallet_manager.safes[Chain.GNOSIS]:
-        spinner = Halo(text=f"Transfering service {chain_config.chain_data.token} from master EOA to master safe...", spinner="dots").start()
+        spinner = Halo(
+            text=f"Transfering service {chain_config.chain_data.token} from master EOA to master safe...",
+            spinner="dots",
+        ).start()
         if service_owner != wallet_manager.crypto.address:
             spinner.fail(
                 f"Service owner is not the master EOA. "
@@ -345,31 +449,50 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
 
         service_registry = registry_contracts.service_registry.get_instance(
             ledger_api=ocm.ledger_api,
-            contract_address=trader_data.staking_variables["CUSTOM_SERVICE_REGISTRY_ADDRESS"],
+            contract_address=trader_data.staking_variables[
+                "CUSTOM_SERVICE_REGISTRY_ADDRESS"
+            ],
         )
         tx = service_registry.functions.transferFrom(
             wallet_manager.crypto.address,
             wallet_manager.safes[Chain.GNOSIS],
             chain_config.chain_data.token,
-        ).build_transaction({
-            "from": wallet_manager.crypto.address,
-            "nonce": ocm.ledger_api.api.eth.get_transaction_count(wallet_manager.crypto.address),
-        })
-        signed_tx = ocm.ledger_api.api.eth.account.sign_transaction(tx, private_key=ocm.crypto.private_key)
-        tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.rawTransaction)
+        ).build_transaction(
+            {
+                "from": wallet_manager.crypto.address,
+                "nonce": ocm.ledger_api.api.eth.get_transaction_count(
+                    wallet_manager.crypto.address
+                ),
+            }
+        )
+        signed_tx = ocm.ledger_api.api.eth.account.sign_transaction(
+            tx, private_key=ocm.crypto.private_key
+        )
+        tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.raw_transaction)
         ocm.ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
         spinner.succeed("Service transfered from master EOA to master safe")
 
+    token_profiles = (
+        ERC20_TOKENS.values() if isinstance(ERC20_TOKENS, dict) else ERC20_TOKENS
+    )
+    asset_addresses = {
+        token[Chain.GNOSIS]
+        for token in token_profiles
+        if isinstance(token, dict) and Chain.GNOSIS in token
+    }
     assets_balances = get_assets_balances(
         ledger_api=ocm.ledger_api,
-        asset_addresses={token[Chain.GNOSIS] for token in ERC20_TOKENS},
-        addresses={ocm.crypto.address}
+        asset_addresses=asset_addresses,
+        addresses={ocm.crypto.address},
     )
     for asset, balance in assets_balances[ocm.crypto.address].items():
         if balance == 0:
             continue
 
-        spinner = Halo(text=f"Transferring {balance} {asset} from master EOA to master safe...", spinner="dots").start()
+        spinner = Halo(
+            text=f"Transferring {balance} {asset} from master EOA to master safe...",
+            spinner="dots",
+        ).start()
         erc20_contract = registry_contracts.erc20.get_instance(
             ledger_api=ocm.ledger_api,
             contract_address=asset,
@@ -377,19 +500,27 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
         tx = erc20_contract.functions.transfer(
             wallet_manager.safes[Chain.GNOSIS],
             balance,
-        ).build_transaction({
-            "from": ocm.crypto.address,
-            "nonce": ocm.ledger_api.api.eth.get_transaction_count(ocm.crypto.address),
-        })
-        signed_tx = ocm.ledger_api.api.eth.account.sign_transaction(tx, private_key=ocm.crypto.private_key)
-        tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.rawTransaction)
+        ).build_transaction(
+            {
+                "from": ocm.crypto.address,
+                "nonce": ocm.ledger_api.api.eth.get_transaction_count(
+                    ocm.crypto.address
+                ),
+            }
+        )
+        signed_tx = ocm.ledger_api.api.eth.account.sign_transaction(
+            tx, private_key=ocm.crypto.private_key
+        )
+        tx_hash = ocm.ledger_api.api.eth.send_raw_transaction(signed_tx.raw_transaction)
         ocm.ledger_api.api.eth.wait_for_transaction_receipt(tx_hash)
-        spinner.succeed(f"{balance} {asset} transferred from master EOA to master safe.")
+        spinner.succeed(
+            f"{balance} {asset} transferred from master EOA to master safe."
+        )
 
     xdai_balance = get_asset_balance(
         ledger_api=ocm.ledger_api,
         asset_address=ZERO_ADDRESS,
-        address=ocm.crypto.address
+        address=ocm.crypto.address,
     )
     gas_fund_requirements = CHAIN_TO_METADATA[Chain.GNOSIS.value]["gasFundReq"]
     transferable_amount = xdai_balance - gas_fund_requirements
@@ -411,14 +542,17 @@ def migrate_to_master_safe(operate: OperateApp, trader_data: TraderData, service
     if tx["value"] <= 0:
         return
 
-    spinner = Halo(text=f'Transferring {tx["value"]} xDAI from master EOA to master safe...', spinner="dots").start()
+    spinner = Halo(
+        text=f"Transferring {tx['value']} xDAI from master EOA to master safe...",
+        spinner="dots",
+    ).start()
     tx_signed = master_wallet.crypto.sign_transaction(transaction=tx)
     tx_digest = ledger_api.send_signed_transaction(
         tx_signed=tx_signed,
         raise_on_try=True,
     )
     ledger_api.api.eth.wait_for_transaction_receipt(tx_digest)
-    spinner.succeed(f'{tx["value"]} xDAI transferred from master EOA to master safe.')
+    spinner.succeed(f"{tx['value']} xDAI transferred from master EOA to master safe.")
 
 
 def main(config_path: Path) -> None:
@@ -426,7 +560,7 @@ def main(config_path: Path) -> None:
     if not TRADER_RUNNER_PATH.exists():
         print("No .trader_runner file found!")
         sys.exit(1)
-    
+
     with open(config_path, "r") as f:
         config = json.load(f)
 
@@ -445,7 +579,9 @@ def main(config_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Migrate legacy quickstart to unified quickstart")
+    parser = ArgumentParser(
+        description="Migrate legacy quickstart to unified quickstart"
+    )
     parser.add_argument(
         dest="config_path",
         type=Path,
