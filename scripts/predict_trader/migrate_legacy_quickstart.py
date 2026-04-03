@@ -302,7 +302,6 @@ def migrate_to_master_safe(
         )["service_owner"]
     except Exception:  # pylint: disable=broad-except
         print("Failed to fetch service owner.")
-        pass
 
     effective_staking_contract = staking_contract
     if (
@@ -317,8 +316,10 @@ def migrate_to_master_safe(
             )
             if owner_contract_status in (StakingState.STAKED, StakingState.EVICTED):
                 effective_staking_contract = service_owner
-        except Exception:  # pylint: disable=broad-except
-            pass
+        except Exception as e:  # pylint: disable=broad-except
+            print(
+                f"Failed to fetch staking status for service owner {service_owner}: {e}"
+            )
 
     staking_status = ocm.staking_status(
         service_id=chain_config.chain_data.token,
@@ -388,7 +389,6 @@ def migrate_to_master_safe(
         )["service_owner"]
     except Exception:  # pylint: disable=broad-except
         print("Failed to fetch service owner after unstaking.")
-        pass
 
     if (
         service_owner is not None
@@ -430,11 +430,16 @@ def migrate_to_master_safe(
         )
         spinner.succeed("Service unbonded")
 
-    service_owner = registry_contracts.service_registry.get_service_owner(
-        ledger_api=ocm.ledger_api,
-        contract_address=service_registry_address,
-        service_id=chain_config.chain_data.token,
-    )["service_owner"]
+    service_owner = None
+    try:
+        service_owner = registry_contracts.service_registry.get_service_owner(
+            ledger_api=ocm.ledger_api,
+            contract_address=service_registry_address,
+            service_id=chain_config.chain_data.token,
+        )["service_owner"]
+    except Exception:  # pylint: disable=broad-except
+        print("Failed to fetch service owner before transfer to safe.")
+        sys.exit(1)
     if service_owner != wallet_manager.safes[Chain.GNOSIS]:
         spinner = Halo(
             text=f"Transfering service {chain_config.chain_data.token} from master EOA to master safe...",

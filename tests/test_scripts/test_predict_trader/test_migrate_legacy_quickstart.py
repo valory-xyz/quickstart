@@ -585,7 +585,6 @@ def _build_migrate_context(
     tmp_path: Path,
     *,
     staking_status,
-    service_owner,
     on_chain_states,
     xdai_balance,
     tx_value_after_gas,
@@ -728,8 +727,7 @@ def test_migrate_to_master_safe_paths(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-        service_owner="0xmaster",
-        on_chain_states=[
+                on_chain_states=[
             migrate.OnChainState.ACTIVE_REGISTRATION,
             migrate.OnChainState.TERMINATED_BONDED,
         ],
@@ -801,8 +799,7 @@ def test_migrate_to_master_safe_cancelled_and_short_duration(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-        service_owner="0xsafe",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -814,8 +811,7 @@ def test_migrate_to_master_safe_cancelled_and_short_duration(
     operate2, trader_data2, service2, ocm2 = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-        service_owner="0xsafe",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -849,8 +845,7 @@ def test_migrate_to_master_safe_owner_mismatch_and_early_returns(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0xother",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -887,8 +882,7 @@ def test_migrate_to_master_safe_transferable_amount_non_positive(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0xsafe",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=1,
         tx_value_after_gas=0,
     )
@@ -924,8 +918,7 @@ def test_migrate_to_master_safe_transfer_tx_value_non_positive(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0xsafe",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=100,
         tx_value_after_gas=0,
     )
@@ -963,8 +956,7 @@ def test_migrate_to_master_safe_uses_owner_contract_when_config_mismatch(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0x3112",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1054,8 +1046,7 @@ def test_migrate_to_master_safe_fallback_owner_status_error_keeps_config_contrac
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.STAKED,
-        service_owner="0x3112",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1133,8 +1124,7 @@ def test_migrate_to_master_safe_terminate_guard_when_owner_lookup_unavailable(
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0x3112",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1197,8 +1187,7 @@ def test_migrate_to_master_safe_exits_when_owner_still_effective_staking_contrac
     operate, trader_data, service, ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0x3112",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
@@ -1264,8 +1253,7 @@ def test_migrate_to_master_safe_handles_dict_erc20_tokens_shape(
     operate, trader_data, service, _ocm = _build_migrate_context(
         tmp_path,
         staking_status=migrate.StakingState.UNSTAKED,
-        service_owner="0xsafe",
-        on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
+                on_chain_states=[migrate.OnChainState.DEPLOYED, migrate.OnChainState.DEPLOYED],
         xdai_balance=0,
         tx_value_after_gas=0,
     )
