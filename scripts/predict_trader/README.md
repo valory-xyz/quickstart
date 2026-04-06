@@ -76,7 +76,7 @@ You may customize the AI agent's behaviour by setting these Omenstrat-specific e
 | `OPENING_MARGIN` | `int` | `300` | The markets opening before this margin will not be fetched. |
 | `LANGUAGES` | `list` | `["en_US"]` | Filter questions by languages. |
 | `SAMPLE_BETS_CLOSING_DAYS` | `int` | `10` | Sample the bets that are closed within this number of days. |
-| `TRADING_STRATEGY` | `str` | `kelly_criterion_no_conf` | Trading strategy to use. |
+| `TRADING_STRATEGY` | `str` | `kelly_criterion` | Trading strategy to use. |
 | `USE_FALLBACK_STRATEGY` | `bool` | `true` | Whether to use the fallback strategy. |
 | `BET_THRESHOLD` | `int` | `100000000000000000` | Threshold (wei) for placing a bet. A bet will only be placed if `potential_net_profit` - `BET_THRESHOLD` >= 0. |
 | `PROMPT_TEMPLATE` | `str` | `With the given question "@{question}" and the 'yes' option represented by '@{yes}' and the 'no' option represented by '@{no}', what are the respective probabilities of 'p_yes' and 'p_no' occurring?` | The prompt template to use for prompting the mech. |
@@ -86,13 +86,58 @@ You may customize the AI agent's behaviour by setting these Omenstrat-specific e
 | `STOP_TRADING_IF_STAKING_KPI_MET` | `bool` | `true` | Whether to stop trading if the staking KPI is met. |
 | `AGENT_BALANCE_THRESHOLD` | `int` | `10000000000000000` | Balance threshold (wei) below which the AI agent will stop trading and a refill will be required. |
 | `REFILL_CHECK_INTERVAL` | `int` | `10` | Interval in seconds to check the AI agent balance, when waiting for a refill. |
-| `FILE_HASH_TO_STRATEGIES_JSON` | `list` | `[["bafybeihufqu2ra7vud4h6g2nwahx7mvdido7ff6prwnib2tdlc4np7dw24",["bet_amount_per_threshold"]],["bafybeibxfp27rzrfnp7sxq62vwv32pdvrijxi7vzg7ihukkaka3bwzrgae",["kelly_criterion_no_conf"]]]` | A list of mapping from ipfs file hash to strategy names. |
-| `STRATEGIES_KWARGS` | `list` | `[["bet_kelly_fraction",1.0],["floor_balance",500000000000000000],["bet_amount_per_threshold",{"0.0":0,"0.1":0,"0.2":0,"0.3":0,"0.4":0,"0.5":0,"0.6":60000000000000000,"0.7":90000000000000000,"0.8":100000000000000000,"0.9":1000000000000000000,"1.0":10000000000000000000}]]` | A list of keyword arguments for the strategies. |
+| `FILE_HASH_TO_STRATEGIES_JSON` | `list` | `[["bafybeididlcixparvundh76gajplac2ab4ftzcom4cyaeli2ofl5dkdhaa",["kelly_criterion"]],["bafybeigp65doxrfukxdndsyflukyf6tjigvobig42334e2gfncczteujvm",["fixed_bet"]]]` | A list of mapping from ipfs file hash to strategy names. |
+| `STRATEGIES_KWARGS` | `dict` | See [Configuring Kelly bet sizing](#configuring-kelly-bet-sizing) below. | Keyword arguments for the trading strategies. |
 | `USE_SUBGRAPH_FOR_REDEEMING` | `bool` | `true` | Whether to use the subgraph to check if a position is redeemed. |
 | `USE_NEVERMINED` | `bool` | `false` | Whether to use Nevermined. |
 | `SUBSCRIPTION_PARAMS` | `list` | `[["base_url", "https://marketplace-api.gnosis.nevermined.app/api/v1/metadata/assets/ddo"],["did", "did:nv:01706149da2f9f3f67cf79ec86c37d63cec87fc148f5633b12bf6695653d5b3c"],["escrow_payment_condition_address", "0x31B2D187d674C9ACBD2b25f6EDce3d2Db2B7f446"],["lock_payment_condition_address", "0x2749DDEd394196835199471027713773736bffF2"],["transfer_nft_condition_address", "0x659fCA7436936e9fe8383831b65B8B442eFc8Ea8"],["token_address", "0x1b5DeaD7309b56ca7663b3301A503e077Be18cba"], ["order_address","0x72201948087aE83f8Eac22cf7A9f2139e4cFA829"], ["nft_amount", "100"], ["payment_token","0x0000000000000000000000000000000000000000"], ["order_address", "0x72201948087aE83f8Eac22cf7A9f2139e4cFA829"],["price", "1000000000000000000"]]` | Parameters for the Nevermined subscription. |
 
 The rest of the common environment variables are present in the [service.yaml](https://github.com/valory-xyz/trader/blob/main/packages/valory/services/trader_pearl/service.yaml), which are customizable too.
+
+##### Configuring Kelly bet sizing
+
+Starting from v0.33.2, Omenstrat uses dynamic [Kelly criterion](https://en.wikipedia.org/wiki/Kelly_criterion) bet sizing instead of fixed bet amounts. The bet size parameters are controlled via the `STRATEGIES_KWARGS` environment variable.
+
+The default `STRATEGIES_KWARGS` value is:
+
+```json
+{"floor_balance":0,"default_max_bet_size":2000000000000000000,"absolute_min_bet_size":25000000000000000,"absolute_max_bet_size":2000000000000000000,"n_bets":1,"min_edge":0.03,"min_oracle_prob":0.5,"fee_per_trade":10000000000000000,"grid_points":500}
+```
+
+| Parameter | Default | Description | Changeable on restart? |
+| --- | --- | --- | --- |
+| `default_max_bet_size` | `2000000000000000000` (2 xDAI) | Per-bet cap (wei). Only read on first run and cached by the service. | No — sticky after first run |
+| `absolute_min_bet_size` | `25000000000000000` (0.025 xDAI) | Minimum bet size (wei). | Yes |
+| `floor_balance` | `0` | Reserved balance (wei) that is never risked. | Yes |
+| `n_bets` | `1` | Number of concurrent bets the bankroll is split across. | Yes |
+| `min_edge` | `0.03` (3%) | Minimum edge over market price required to place a bet. | Yes |
+| `min_oracle_prob` | `0.5` | Minimum oracle probability to consider a market. | Yes |
+| `fee_per_trade` | `10000000000000000` (0.01 xDAI) | Estimated gas/fee cost per trade (wei). | Yes |
+| `grid_points` | `500` | Resolution of Kelly optimization grid. | Yes |
+| `absolute_max_bet_size` | `2000000000000000000` (2 xDAI) | Hard ceiling (wei) — used by ChatUI, not directly applicable to QS. | N/A |
+
+To override `STRATEGIES_KWARGS`, add the following to the `"env_variables"` field in [the config file](../../configs/config_predict_trader.json). For example, to cap bets at 1 xDAI:
+
+```json
+"STRATEGIES_KWARGS": {
+    "name": "",
+    "description": "",
+    "value": "{\"floor_balance\":0,\"default_max_bet_size\":1000000000000000000,\"absolute_min_bet_size\":25000000000000000,\"absolute_max_bet_size\":2000000000000000000,\"n_bets\":1,\"min_edge\":0.03,\"min_oracle_prob\":0.5,\"fee_per_trade\":10000000000000000,\"grid_points\":500}",
+    "provision_type": "fixed"
+}
+```
+
+> **Note:** `default_max_bet_size` is only read on first startup and cached permanently by the service. To change it after the service has already been started, edit the file `.operate/services/sc-<service_hash>/persistent_data/chatui_param_store.json` and update the `max_bet_size` value, then restart the service.
+
+Common xDAI-to-wei conversions:
+
+| Amount | Wei |
+| --- | --- |
+| 0.025 xDAI | `25000000000000000` |
+| 0.5 xDAI | `500000000000000000` |
+| 1 xDAI | `1000000000000000000` |
+| 2 xDAI | `2000000000000000000` |
+| 5 xDAI | `5000000000000000000` |
 
 To set `IRRELEVANT_TOOLS` for example, add the following lines under the `"env_variables"` field in the [the config file](../../configs/config_predict_trader.json).
 ```
