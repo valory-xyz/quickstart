@@ -116,16 +116,7 @@ The default `STRATEGIES_KWARGS` value is:
 | `grid_points` | `500` | Resolution of Kelly optimization grid. | Yes |
 | `absolute_max_bet_size` | `2000000000000000000` (2 xDAI) | Hard ceiling (wei) — used by ChatUI, not directly applicable to QS. | N/A |
 
-To override `STRATEGIES_KWARGS`, add the following to the `"env_variables"` field in [the config file](../../configs/config_predict_trader.json). For example, to cap bets at 1 xDAI:
-
-```json
-"STRATEGIES_KWARGS": {
-    "name": "",
-    "description": "",
-    "value": "{\"floor_balance\":0,\"default_max_bet_size\":1000000000000000000,\"absolute_min_bet_size\":25000000000000000,\"absolute_max_bet_size\":2000000000000000000,\"n_bets\":1,\"min_edge\":0.03,\"min_oracle_prob\":0.5,\"fee_per_trade\":10000000000000000,\"grid_points\":500}",
-    "provision_type": "fixed"
-}
-```
+On first run, you will be prompted to set `STRATEGIES_KWARGS` with the defaults pre-filled. To change the values later, run `./reset_configs.sh` or edit the `STRATEGIES_KWARGS` entry under `user_provided_args` in `.operate/Trader Agent-quickstart-config.json` directly. For example, to cap bets at 1 xDAI, set `default_max_bet_size` to `1000000000000000000`.
 
 > **Note:** `default_max_bet_size` is only read on first startup and cached permanently by the service. To change it after the service has already been started, edit the file `.operate/services/sc-<service_hash>/persistent_data/chatui_param_store.json` and update the `max_bet_size` value, then restart the service.
 
