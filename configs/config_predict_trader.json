@@ -201,6 +201,12 @@
             "description": "The penalization window for an unresponsive mech in seconds.",
             "value": "7200",
             "provision_type": "fixed"
+        },
+        "IGNORED_MECHS": {
+            "name": "Ignored mechs",
+            "description": "The list of ignored mechs. The agent will ignore these mechs when using the mech marketplace.",
+            "value": "[\"0x33ca1e117c4254b2ee8cd7ef1621739431a37396\"]",
+            "provision_type": "fixed"
         }
     }
 }
