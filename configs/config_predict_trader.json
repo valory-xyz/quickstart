@@ -109,7 +109,7 @@
         "TRADING_STRATEGY": {
             "name": "Trading strategy",
             "description": "",
-            "value": "kelly_criterion",
+            "value": "fixed_bet",
             "provision_type": "fixed"
         },
         "TOOLS_ACCURACY_HASH": {
@@ -201,12 +201,6 @@
             "description": "The penalization window for an unresponsive mech in seconds.",
             "value": "7200",
             "provision_type": "fixed"
-        },
-        "STRATEGIES_KWARGS": {
-            "name": "Strategy parameters",
-            "description": "Keyword arguments for the trading strategies. Values in wei.",
-            "value": "{\"floor_balance\":0,\"default_max_bet_size\":2000000000000000000,\"absolute_min_bet_size\":25000000000000000,\"absolute_max_bet_size\":2000000000000000000,\"n_bets\":1,\"min_edge\":0.03,\"min_oracle_prob\":0.5,\"fee_per_trade\":10000000000000000,\"grid_points\":500}",
-            "provision_type": "user"
         }
     }
 }
