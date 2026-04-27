@@ -268,7 +268,12 @@ You can gain access to the assets of your AI agent as follows:
 
 Now, you have full access through the hot wallet to the Master EOA and you can transfer their assets to any other address. You can also manage the assets of the Master Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/wallets/ethereum.json`.
 
-To access the Agent instance EOA account, you can import it into your hot wallet in a similar way, using the private keys found in the files in `.operate/keys`. This time you'll need to open the Accounts drop-down in Metamask &#8594; select "Add account or hardware wallet" &#8594; "Private Key" &#8594; "Select Type: Private Key", then open those `.operate/keys` files with a text editor, copy the private key, and paste it into the Metamask private key text field. Then you can manage the AI agent's assets in the AI agent Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/services/sc-.../config.json` against the `"multisig"` field.
+To access the Agent instance EOA account, first run the following script:
+```bash
+./extract_private_keys.sh
+```
+Then check in `.operate/keys`, and identify which of the addresses is your agent's EOA signer. Its private key will be `<address>.pk`.
+Then you may import it into your hot wallet in the same way, using the private key files found in `.operate/keys` that ends with `.pk`. After importing, you can manage the AI agent's assets in the AI agent Safe through the DApp https://app.safe.global/, using the address located in the file `.operate/services/sc-.../config.json` against the `"multisig"` field.
 
 ## Terminate your on-chain AI agent
 
