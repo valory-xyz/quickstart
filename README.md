@@ -1,6 +1,19 @@
-# OLAS AI agents - Quickstart
+> [!IMPORTANT]
+> **Quickstart is being discontinued on 1 May 2026.**
+>
+> We are moving to [Pearl](https://pearl.you) as the primary way to run agents on Olas. Pearl supports all the same agents and now also runs on Raspberry Pi.
+>
+> If you are currently running agents on Quickstart, please complete the following steps before 1 May 2026:
+>
+> 1. Stop your running agents
+> 2. Withdraw your funds from Quickstart
+> 3. Download Pearl and set up your agents at [pearl.you](https://pearl.you)
+>
+> If you need help with the migration, contact support through the Pearl app or reach out to the Telegram community.
 
-A quickstart to run OLAS AI agents
+# Olas AI agents - Quickstart
+
+A quickstart to run Olas AI agents
 
 ## Compatible Systems
 
