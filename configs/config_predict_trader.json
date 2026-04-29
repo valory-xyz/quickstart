@@ -205,7 +205,7 @@
         "IGNORED_MECHS": {
             "name": "Ignored mechs",
             "description": "The list of ignored mechs. The agent will ignore these mechs when using the mech marketplace.",
-            "value": "[\"0x33ca1e117c4254b2ee8cd7ef1621739431a37396\"]",
+            "value": "[\"0x33ca1e117c4254b2ee8cd7ef1621739431a37396\",\"0x2ebd2237e5db798e36a2fa67afa74effb17c5ebb\"]",
             "provision_type": "fixed"
         }
     }
