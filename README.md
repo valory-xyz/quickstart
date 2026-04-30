@@ -1,9 +1,9 @@
 > [!IMPORTANT]
-> **Quickstart is being discontinued on 1 May 2026.**
+> **Quickstart is being discontinued on 4 May 2026.**
 >
 > We are moving to [Pearl](https://pearl.you) as the primary way to run agents on Olas. Pearl supports all the same agents and now also runs on Raspberry Pi.
 >
-> If you are currently running agents on Quickstart, please complete the following steps before 1 May 2026:
+> If you are currently running agents on Quickstart, please complete the following steps before 4 May 2026:
 >
 > 1. Stop your running agents
 > 2. Withdraw your funds from Quickstart
