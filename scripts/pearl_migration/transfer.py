@@ -75,15 +75,43 @@ def swap_service_safe_owner(
 ) -> None:
     """Replace `old_owner` with `new_owner` on `service_safe`.
 
-    Thin wrapper over `operate.utils.gnosis.swap_owner` so callers don't need
-    to import middleware internals.
-    """
-    from operate.utils.gnosis import swap_owner
+    `old_owner` is the quickstart master Safe (a contract owner of the
+    service multisig after `terminate` swapped agents -> master Safe);
+    `crypto` is the master EOA that owns the quickstart master Safe.
 
-    swap_owner(
+    We can NOT use `operate.utils.gnosis.swap_owner` here: that helper
+    sends the swap as a Safe tx originated by `service_safe` itself
+    signed by `crypto` directly, which only validates if `crypto` is an
+    EOA owner of `service_safe`. After terminate the service Safe's
+    owner is the qs master Safe (a contract), so signing as the EOA
+    fails Gnosis Safe signature checks (GS026) and the tx silently
+    reverts on-chain — the migration script logs success because the
+    failure happens in the receipt, not the submit.
+
+    Correct path mirrors `transfer_service_nft`: build the swapOwner
+    calldata against `service_safe`, then send it as a Safe tx
+    originated by the qs master Safe (which IS an owner of
+    `service_safe`) and signed by the master EOA (which IS an owner of
+    the qs master Safe).
+    """
+    from autonomy.chain.base import registry_contracts
+    from operate.utils.gnosis import get_prev_owner, send_safe_txs
+
+    prev_owner = get_prev_owner(
+        ledger_api=ledger_api, safe=service_safe, owner=old_owner,
+    )
+    instance = registry_contracts.gnosis_safe.get_instance(
+        ledger_api=ledger_api,
+        contract_address=service_safe,
+    )
+    txd_hex = instance.encode_abi(
+        abi_element_identifier="swapOwner",
+        args=[prev_owner, old_owner, new_owner],
+    )
+    send_safe_txs(
+        txd=bytes.fromhex(txd_hex[2:]),
+        safe=old_owner,
         ledger_api=ledger_api,
         crypto=crypto,
-        safe=service_safe,
-        old_owner=old_owner,
-        new_owner=new_owner,
+        to=service_safe,
     )

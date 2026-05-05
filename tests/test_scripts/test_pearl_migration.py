@@ -1160,29 +1160,66 @@ class TestTransfer:
         assert sent["to"] == "0xreg"
         assert sent["txd"] == bytes.fromhex("deadbeef")
 
-    def test_swap_service_safe_owner_delegates(
+    def test_swap_service_safe_owner_dispatches_via_qs_master_safe(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Swap MUST be sent as a Safe tx originated by the quickstart
+        master Safe (the qs Safe is the owner of the service multisig
+        after terminate); signing as the EOA against the service Safe
+        directly fails Gnosis signature validation (GS026) and the tx
+        silently reverts on-chain. Verify wiring: encoded swapOwner
+        calldata, send_safe_txs(safe=qs_master_safe, to=service_safe)."""
         from scripts.pearl_migration import transfer
 
+        # Stub autonomy.chain.base.registry_contracts.gnosis_safe.
+        autonomy_pkg = types.ModuleType("autonomy")
+        autonomy_chain = types.ModuleType("autonomy.chain")
+        autonomy_base = types.ModuleType("autonomy.chain.base")
+        class _FakeInstance:
+            def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
+                assert abi_element_identifier == "swapOwner"
+                assert args == ["0xprev", "0xqsafe", "0xpearl"]
+                return "0xdeadbeef"
+        class _FakeGnosisSafe:
+            @staticmethod
+            def get_instance(*, ledger_api: Any, contract_address: str) -> Any:
+                assert contract_address == "0xservice"
+                return _FakeInstance()
+        autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
+            gnosis_safe=_FakeGnosisSafe(),
+        )
+        monkeypatch.setitem(sys.modules, "autonomy", autonomy_pkg)
+        monkeypatch.setitem(sys.modules, "autonomy.chain", autonomy_chain)
+        monkeypatch.setitem(sys.modules, "autonomy.chain.base", autonomy_base)
+
+        # Stub operate.utils.gnosis.{get_prev_owner, send_safe_txs}.
         captured: dict[str, Any] = {}
         operate_pkg = types.ModuleType("operate")
         operate_utils = types.ModuleType("operate.utils")
         operate_gnosis = types.ModuleType("operate.utils.gnosis")
-        def fake_swap(**kw: Any) -> None:
+        def fake_get_prev_owner(*, ledger_api: Any, safe: str, owner: str) -> str:
+            assert safe == "0xservice" and owner == "0xqsafe"
+            return "0xprev"
+        def fake_send(**kw: Any) -> str:
             captured.update(kw)
-        operate_gnosis.swap_owner = fake_swap  # type: ignore[attr-defined]
+            return "0xtx"
+        operate_gnosis.get_prev_owner = fake_get_prev_owner  # type: ignore[attr-defined]
+        operate_gnosis.send_safe_txs = fake_send  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
         monkeypatch.setitem(sys.modules, "operate.utils", operate_utils)
         monkeypatch.setitem(sys.modules, "operate.utils.gnosis", operate_gnosis)
 
         transfer.swap_service_safe_owner(
             ledger_api="LA", crypto="CR",
-            service_safe="0xs", old_owner="0xo", new_owner="0xn",
+            service_safe="0xservice",
+            old_owner="0xqsafe", new_owner="0xpearl",
         )
         assert captured == {
-            "ledger_api": "LA", "crypto": "CR",
-            "safe": "0xs", "old_owner": "0xo", "new_owner": "0xn",
+            "txd": bytes.fromhex("deadbeef"),
+            "safe": "0xqsafe",
+            "ledger_api": "LA",
+            "crypto": "CR",
+            "to": "0xservice",
         }
 
 
