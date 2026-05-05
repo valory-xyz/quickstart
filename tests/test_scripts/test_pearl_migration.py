@@ -877,24 +877,15 @@ class TestFilesystemExtras:
         # Should be a no-op, no exceptions.
         filesystem.fix_root_ownership(store)
 
-    def test_fix_root_ownership_no_root_owned(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        (tmp_path / "services" / "sc-aaa" / "persistent_data").mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: False)
-        called: list[Any] = []
-        monkeypatch.setattr(filesystem.subprocess, "run",
-                            lambda *a, **k: called.append((a, k)))
-        store = detect.OperateStore(root=tmp_path)
-        filesystem.fix_root_ownership(store)
-        assert called == []
-
     def test_fix_root_ownership_runs_chown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # fix_root_ownership now always chowns each service dir (detection
+        # via Path.rglob is unreliable on Python 3.14 against trees the
+        # current user can't traverse, so unconditional chown is safer
+        # than risking a mid-copy permission denied).
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         invoked: list[list[str]] = []
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             invoked.append(cmd)
@@ -909,7 +900,6 @@ class TestFilesystemExtras:
     ) -> None:
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             raise subprocess.CalledProcessError(1, cmd)
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
@@ -930,7 +920,6 @@ class TestFilesystemExtras:
         outside = tmp_path / "elsewhere"
         outside.mkdir()
         (store_root / "services" / "sc-aaa").symlink_to(outside)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         store = detect.OperateStore(root=store_root.resolve())
         with pytest.raises(RuntimeError, match="not inside store root"):
             filesystem.fix_root_ownership(store)

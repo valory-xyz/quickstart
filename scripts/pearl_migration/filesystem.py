@@ -20,7 +20,6 @@ from operate.services.service import Service
 
 from .detect import OperateStore
 from .prompts import CollisionChoice, backup_suffix, collision, info, warn
-from .status import any_root_owned_under
 
 
 class MissingAgentKey(OSError):
@@ -78,8 +77,14 @@ def fix_root_ownership(store: OperateStore) -> None:
                 f"refusing to chown {service_dir}: not inside store root "
                 f"{store_root} ({exc})"
             )
-        if any_root_owned_under(service_dir):
-            needs_chown.append(service_dir)
+        # Always chown unconditionally. Detection via Path.rglob + stat is
+        # unreliable on Python 3.14 against trees containing dirs the
+        # current user can't traverse (rglob silently skips, leaving
+        # root-owned files inside undetected). chown -R to the current
+        # uid:gid is idempotent — a no-op if everything is already
+        # user-owned — so paying the sudo invocation is cheaper than
+        # discovering the gap mid-copy.
+        needs_chown.append(service_dir)
     if not needs_chown:
         return
 
