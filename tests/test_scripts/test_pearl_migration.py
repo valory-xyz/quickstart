@@ -518,7 +518,7 @@ class TestStatusOSChecks:
         class FakeStat:
             st_uid = 0
 
-        monkeypatch.setattr(Path, "stat", lambda self: FakeStat())
+        monkeypatch.setattr(Path, "stat", lambda self, **kwargs: FakeStat())
         assert status.is_root_owned(f) is True
 
     def test_is_root_owned_propagates_oserror(
@@ -529,8 +529,8 @@ class TestStatusOSChecks:
         the subsequent copytree would corrupt the destination."""
         f = tmp_path / "x"
         f.write_text("hi")
-        monkeypatch.setattr(Path, "exists", lambda self: True)
-        def boom(self: Path) -> None:
+        monkeypatch.setattr(Path, "exists", lambda self, **kwargs: True)
+        def boom(self: Path, **kwargs: Any) -> None:
             raise OSError("permission denied")
         monkeypatch.setattr(Path, "stat", boom)
         with pytest.raises(OSError, match="permission denied"):
@@ -560,7 +560,7 @@ class TestStatusOSChecks:
             st_uid = 0
             st_mode = _statmod.S_IFREG | 0o644
 
-        def fake_stat(self: Path) -> Any:
+        def fake_stat(self: Path, **kwargs: Any) -> Any:
             return FakeStatChild() if self == child else FakeStatRoot()
         monkeypatch.setattr(Path, "stat", fake_stat)
         assert status.any_root_owned_under(tmp_path) is True
@@ -589,10 +589,10 @@ class TestStatusOSChecks:
 
         original_stat = Path.stat
 
-        def stat_raises_for_child(self: Path) -> Any:
+        def stat_raises_for_child(self: Path, **kwargs: Any) -> Any:
             if self.name == "x":
                 raise OSError("permission")
-            return original_stat(self)
+            return original_stat(self, **kwargs)
         monkeypatch.setattr(Path, "stat", stat_raises_for_child)
         with pytest.raises(OSError, match="permission"):
             status.any_root_owned_under(tmp_path)
