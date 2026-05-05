@@ -300,7 +300,6 @@ class TestMergeService:
         # Fresh copy in place.
         assert (dest.services_dir / "sc-aaa" / "config.json").exists()
 
-
 # ---------------------------------------------------------------------------
 # prompts.py
 # ---------------------------------------------------------------------------
@@ -859,6 +858,130 @@ class TestDetectExtras:
 
 
 # ---------------------------------------------------------------------------
+# wallet.py — quickstart-side password alignment
+# ---------------------------------------------------------------------------
+
+class TestAlignQuickstartPassword:
+    def test_no_op_when_passwords_match(self) -> None:
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        update_calls: list[str] = []
+        qs_app = types.SimpleNamespace(
+            password="same",
+            keys_manager=types.SimpleNamespace(path=Path("/tmp/nope")),
+        )
+        qs_wallet = types.SimpleNamespace(
+            update_password=lambda new: update_calls.append(new),
+        )
+        wallet_mod.align_quickstart_password(
+            qs_app=qs_app, qs_wallet=qs_wallet, new_password="same",
+        )
+        assert update_calls == []
+        assert qs_app.password == "same"
+
+    def test_reencrypts_master_and_agent_keys(self, tmp_path: Path) -> None:
+        from eth_account import Account
+        from operate.keys import Key
+        from operate.operate_types import LedgerType
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        # Two agent keyfiles encrypted with the OLD password.
+        old_pw, new_pw = "old-pw", "new-pw"
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+        agent_pks: dict[str, bytes] = {}
+        for i in (1, 2):
+            raw = bytes([i]) * 32
+            addr = Account.from_key(raw).address
+            agent_pks[addr] = raw
+            keyfile = Account.encrypt(raw, old_pw)
+            key = Key(  # type: ignore[call-arg]
+                ledger=LedgerType.ETHEREUM,
+                address=addr,
+                private_key=json.dumps(keyfile),
+            )
+            (keys_dir / addr).write_text(json.dumps(key.json), encoding="utf-8")
+        # A `.bak` sibling — must be skipped by the walker.
+        (keys_dir / "stale.bak").write_text("{}", encoding="utf-8")
+
+        master_calls: list[str] = []
+        qs_wallet = types.SimpleNamespace(
+            update_password=lambda new: master_calls.append(new),
+        )
+        keys_manager = types.SimpleNamespace(path=keys_dir, password=old_pw)
+        qs_app = types.SimpleNamespace(
+            password=old_pw, keys_manager=keys_manager,
+        )
+
+        wallet_mod.align_quickstart_password(
+            qs_app=qs_app, qs_wallet=qs_wallet, new_password=new_pw,
+        )
+
+        # Master keyfile re-encrypt was delegated to operate's update_password.
+        assert master_calls == [new_pw]
+        # qs_app and the keys manager now report the new password.
+        assert qs_app.password == new_pw
+        assert keys_manager.password == new_pw
+        # Each agent keyfile decrypts under the new password to the
+        # original raw private key, and rejects the old password.
+        for addr, raw in agent_pks.items():
+            blob = json.loads((keys_dir / addr).read_text(encoding="utf-8"))
+            inner = json.loads(blob["private_key"])
+            assert bytes(Account.decrypt(inner, new_pw)) == raw
+            with pytest.raises(Exception):
+                Account.decrypt(inner, old_pw)
+
+    def test_reencrypt_failure_is_propagated_and_warned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Failure inside _reencrypt_agent_key MUST propagate so the caller
+        aborts the migration rather than half-converting the keys dir."""
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+        (keys_dir / "0xagent").write_text("{}", encoding="utf-8")
+
+        warn_calls: list[str] = []
+        monkeypatch.setattr(wallet_mod, "warn", lambda msg: warn_calls.append(msg))
+
+        def boom(**kwargs: Any) -> None:
+            raise RuntimeError("disk full")
+        monkeypatch.setattr(wallet_mod, "_reencrypt_agent_key", boom)
+
+        qs_wallet = types.SimpleNamespace(update_password=lambda new: None)
+        qs_app = types.SimpleNamespace(
+            password="old",
+            keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+        )
+        with pytest.raises(RuntimeError, match="disk full"):
+            wallet_mod.align_quickstart_password(
+                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            )
+        assert any("failed to re-encrypt" in msg for msg in warn_calls)
+
+    def test_skips_walk_when_keys_dir_missing(self, tmp_path: Path) -> None:
+        """A quickstart with no agent keys yet (services pre-deploy) must
+        still re-encrypt the master keyfile and update qs_app.password."""
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        master_calls: list[str] = []
+        qs_wallet = types.SimpleNamespace(
+            update_password=lambda new: master_calls.append(new),
+        )
+        keys_manager = types.SimpleNamespace(
+            path=tmp_path / "absent_keys", password="old",
+        )
+        qs_app = types.SimpleNamespace(password="old", keys_manager=keys_manager)
+        wallet_mod.align_quickstart_password(
+            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+        )
+        assert master_calls == ["new"]
+        assert qs_app.password == "new"
+        assert keys_manager.password == "new"
+
+
+# ---------------------------------------------------------------------------
 # filesystem.py — extras
 # ---------------------------------------------------------------------------
 
@@ -877,14 +1000,18 @@ class TestFilesystemExtras:
         # Should be a no-op, no exceptions.
         filesystem.fix_root_ownership(store)
 
-    def test_fix_root_ownership_no_root_owned(
+    def test_fix_root_ownership_empty_services_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        (tmp_path / "services" / "sc-aaa" / "persistent_data").mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: False)
+        """services/ exists but contains no service dirs — chown loop is
+        skipped and subprocess.run is never called."""
+        (tmp_path / "services").mkdir()
         called: list[Any] = []
-        monkeypatch.setattr(filesystem.subprocess, "run",
-                            lambda *a, **k: called.append((a, k)))
+        monkeypatch.setattr(
+            filesystem.subprocess,
+            "run",
+            lambda *a, **k: called.append((a, k)),
+        )
         store = detect.OperateStore(root=tmp_path)
         filesystem.fix_root_ownership(store)
         assert called == []
@@ -892,9 +1019,12 @@ class TestFilesystemExtras:
     def test_fix_root_ownership_runs_chown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # fix_root_ownership now always chowns each service dir (detection
+        # via Path.rglob is unreliable on Python 3.14 against trees the
+        # current user can't traverse, so unconditional chown is safer
+        # than risking a mid-copy permission denied).
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         invoked: list[list[str]] = []
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             invoked.append(cmd)
@@ -909,7 +1039,6 @@ class TestFilesystemExtras:
     ) -> None:
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             raise subprocess.CalledProcessError(1, cmd)
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
@@ -930,7 +1059,6 @@ class TestFilesystemExtras:
         outside = tmp_path / "elsewhere"
         outside.mkdir()
         (store_root / "services" / "sc-aaa").symlink_to(outside)
-        monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         store = detect.OperateStore(root=store_root.resolve())
         with pytest.raises(RuntimeError, match="not inside store root"):
             filesystem.fix_root_ownership(store)
@@ -1155,30 +1283,108 @@ class TestTransfer:
         assert sent["to"] == "0xreg"
         assert sent["txd"] == bytes.fromhex("deadbeef")
 
-    def test_swap_service_safe_owner_delegates(
+    def test_swap_service_safe_owner_uses_approve_hash_then_exec_pattern(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Swap MUST be the Safe-A-controlling-Safe-B pattern: qs master
+        Safe first calls service Safe.approveHash(inner_tx_hash), then
+        calls service Safe.execTransaction(...) with a packed
+        approved-hash signature. Calling swapOwner directly from the qs
+        master Safe (single send_safe_txs) fails because Gnosis
+        swapOwner requires `msg.sender == address(this)` (i.e. it MUST
+        go through execTransaction on the service Safe itself)."""
         from scripts.pearl_migration import transfer
 
-        captured: dict[str, Any] = {}
+        # autonomy.chain.base.registry_contracts.gnosis_safe stub.
+        autonomy_pkg = types.ModuleType("autonomy")
+        autonomy_chain = types.ModuleType("autonomy.chain")
+        autonomy_base = types.ModuleType("autonomy.chain.base")
+        encoded: list[tuple[str, list]] = []
+        class _FakeInstance:
+            def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
+                encoded.append((abi_element_identifier, args))
+                # Return distinguishable hex per element so we can verify
+                # which calldata went to which send_safe_txs call.
+                return {
+                    "swapOwner": "0x1100",
+                    "approveHash": "0x2200",
+                    "execTransaction": "0x3300",
+                }[abi_element_identifier]
+        class _FakeGnosisSafe:
+            @staticmethod
+            def get_instance(*, ledger_api: Any, contract_address: str) -> Any:
+                assert contract_address == "0xservice"
+                return _FakeInstance()
+            @staticmethod
+            def get_raw_safe_transaction_hash(**kw: Any) -> dict:
+                # Reflect args back so the test asserts the inner-tx-hash
+                # request is for a self-call on the service Safe with
+                # the swapOwner calldata.
+                assert kw["contract_address"] == "0xservice"
+                assert kw["to_address"] == "0xservice"
+                assert kw["data"] == bytes.fromhex("1100")
+                return {"tx_hash": "0xabcdef"}
+        autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
+            gnosis_safe=_FakeGnosisSafe(),
+        )
+        monkeypatch.setitem(sys.modules, "autonomy", autonomy_pkg)
+        monkeypatch.setitem(sys.modules, "autonomy.chain", autonomy_chain)
+        monkeypatch.setitem(sys.modules, "autonomy.chain.base", autonomy_base)
+
+        # operate stubs.
+        sends: list[dict[str, Any]] = []
         operate_pkg = types.ModuleType("operate")
+        operate_services = types.ModuleType("operate.services")
+        operate_protocol = types.ModuleType("operate.services.protocol")
         operate_utils = types.ModuleType("operate.utils")
         operate_gnosis = types.ModuleType("operate.utils.gnosis")
-        def fake_swap(**kw: Any) -> None:
-            captured.update(kw)
-        operate_gnosis.swap_owner = fake_swap  # type: ignore[attr-defined]
+        operate_protocol.get_packed_signature_for_approved_hash = (  # type: ignore[attr-defined]
+            lambda *, owners: b"PACKED_SIG_FOR_" + owners[0].encode()
+        )
+        class _SafeOperation:
+            class CALL:
+                value = 0
+        operate_gnosis.SafeOperation = _SafeOperation  # type: ignore[attr-defined]
+        operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
+            lambda *, ledger_api, safe, owner: "0xprev"
+        )
+        operate_gnosis.send_safe_txs = (  # type: ignore[attr-defined]
+            lambda **kw: sends.append(kw) or "0xtx"
+        )
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
+        monkeypatch.setitem(sys.modules, "operate.services", operate_services)
+        monkeypatch.setitem(sys.modules, "operate.services.protocol", operate_protocol)
         monkeypatch.setitem(sys.modules, "operate.utils", operate_utils)
         monkeypatch.setitem(sys.modules, "operate.utils.gnosis", operate_gnosis)
 
         transfer.swap_service_safe_owner(
             ledger_api="LA", crypto="CR",
-            service_safe="0xs", old_owner="0xo", new_owner="0xn",
+            service_safe="0xservice",
+            old_owner="0xqsafe", new_owner="0xpearl",
         )
-        assert captured == {
-            "ledger_api": "LA", "crypto": "CR",
-            "safe": "0xs", "old_owner": "0xo", "new_owner": "0xn",
-        }
+
+        # Three encode_abi calls: swapOwner (for the inner-hash and exec
+        # data fields), approveHash, execTransaction.
+        assert [name for name, _ in encoded] == [
+            "swapOwner", "approveHash", "execTransaction",
+        ]
+        assert encoded[0][1] == ["0xprev", "0xqsafe", "0xpearl"]
+        assert encoded[1][1] == ["0xabcdef"]  # approveHash(inner_tx_hash)
+        # execTransaction args: to=service, value=0, data=swapOwner bytes,
+        # operation=0, safeTxGas=0, baseGas=0, gasPrice=0, gasToken=zero,
+        # refundReceiver=zero, signatures=packed(qs_master_safe).
+        exec_args = encoded[2][1]
+        assert exec_args[0] == "0xservice"
+        assert exec_args[2] == bytes.fromhex("1100")
+        assert exec_args[-1] == b"PACKED_SIG_FOR_0xqsafe"
+
+        # Two send_safe_txs calls — both originated by qs master Safe and
+        # targeting service Safe.
+        assert len(sends) == 2
+        assert sends[0]["safe"] == "0xqsafe" and sends[0]["to"] == "0xservice"
+        assert sends[0]["txd"] == bytes.fromhex("2200")  # approveHash
+        assert sends[1]["safe"] == "0xqsafe" and sends[1]["to"] == "0xservice"
+        assert sends[1]["txd"] == bytes.fromhex("3300")  # execTransaction
 
 
 # ---------------------------------------------------------------------------
@@ -3436,6 +3642,80 @@ class TestDrainMaster:
 
 
 class TestRunModeB:
+    def test_password_align_runs_when_passwords_differ(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """qs_app.password != pearl_app.password -> user is asked to confirm
+        and align_quickstart_password is invoked with Pearl's password."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        passwords = iter(["qs-pw", "pearl-pw"])
+        monkeypatch.setattr(
+            m, "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password=next(passwords)), "WALLET",
+            ),
+        )
+        align_calls: list[dict[str, Any]] = []
+        monkeypatch.setattr(
+            m, "align_quickstart_password",
+            lambda **kw: align_calls.append(kw),
+        )
+        monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+        monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
+        monkeypatch.setattr(
+            m, "merge_service",
+            lambda service, src, dest: types.SimpleNamespace(),
+        )
+        monkeypatch.setattr(m, "_drain_master", lambda **kw: [])
+        monkeypatch.setattr(m, "rename_source_for_rollback", lambda src: src.root)
+        monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
+
+        m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
+
+        assert len(align_calls) == 1
+        assert align_calls[0]["new_password"] == "pearl-pw"
+        out = capsys.readouterr().out
+        assert "ALIGNING QUICKSTART PASSWORD" in out
+
+    def test_password_align_aborts_on_user_decline(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        passwords = iter(["qs-pw", "pearl-pw"])
+        monkeypatch.setattr(
+            m, "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password=next(passwords)), "WALLET",
+            ),
+        )
+        align_called = {"n": 0}
+        monkeypatch.setattr(
+            m, "align_quickstart_password",
+            lambda **kw: align_called.update(n=align_called["n"] + 1),
+        )
+        monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
+
+        with pytest.raises(SystemExit):
+            m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
+        assert align_called["n"] == 0
+
     def test_dry_run_short_circuits(
         self, orch: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -3464,7 +3744,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -3501,7 +3781,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         def boom(**kw: Any) -> None:
             raise m._Unmigratable(
@@ -3543,7 +3823,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
@@ -3582,7 +3862,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
@@ -3609,7 +3889,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -3658,7 +3938,7 @@ class TestRunModeB:
             chain_configs={"gnosis": chain_config},
         )
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -3707,7 +3987,7 @@ class TestRunModeB:
                               chain_configs={"gnosis": cc_b})
 
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -3766,7 +4046,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: ("APP", "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",

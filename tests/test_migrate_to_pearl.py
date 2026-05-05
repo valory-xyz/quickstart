@@ -247,6 +247,10 @@ def _spawn_migrate_to_pearl(
         r"\s*Pearl password:\s*$": pearl_password,
         r"Rename the source quickstart `\.operate/` to keep it as a rollback\?": "y",
         r"Do you want to run Pearl on a different machine than this one\?": "n",
+        # Mode B fires this when qs and Pearl have different master passwords;
+        # the e2e exercises that path (qs2 has a distinct password) so we
+        # accept the re-encryption.
+        r"Proceed with re-encryption\?": "y",
     }
 
     def _all_choice(out: str) -> str:
@@ -496,6 +500,20 @@ class TestMigrateToPearlEndToEnd:
             # Don't rely on "deploy succeeded" as a proxy: a wrong-owner state
             # with sufficient remaining permissions could still pass that.
             # Read NFT owner + Safe owner list directly per chain.
+            # Two invariants per chain:
+            #   1) NFT owner == Pearl Safe — proves Pearl can re-register /
+            #      terminate / redeploy the service via ServiceRegistry.
+            #      This is the load-bearing migration contract.
+            #   2) Multisig owners are in one of two valid post-migration
+            #      states:
+            #        - Mode A (filesystem-only copy, no on-chain change):
+            #          owners == registered agent EOAs, the post-deploy
+            #          state inherited from the original quickstart.
+            #        - Mode B (terminated + swapped during migration):
+            #          owners == [Pearl Safe], because terminate swapped
+            #          agents -> master Safe and the migration then
+            #          swapped quickstart Safe -> Pearl Safe.
+            #      Anything else means the service is stuck mid-state.
             from operate.ledger.profiles import CONTRACTS
             from operate.operate_types import Chain
             from scripts.pearl_migration.status import (
@@ -527,9 +545,13 @@ class TestMigrateToPearlEndToEnd:
                         safe=chain_config.chain_data.multisig,
                     )
                     owners_lower = {o.lower() for o in owners}
-                    assert pearl_safe.lower() in owners_lower, (
+                    expected_agents = {a.lower() for a in svc_obj.agent_addresses}
+                    expected_pearl = {pearl_safe.lower()}
+                    assert owners_lower in (expected_agents, expected_pearl), (
                         f"[{chain_str}] service Safe {chain_config.chain_data.multisig} "
-                        f"owners {owners} should include Pearl Safe {pearl_safe}"
+                        f"owners {owners} match neither the registered agent "
+                        f"EOAs {sorted(expected_agents)} (Mode A) nor "
+                        f"[{pearl_safe}] (Mode B)"
                     )
 
             # Build a service-name -> origin config path map by reading the

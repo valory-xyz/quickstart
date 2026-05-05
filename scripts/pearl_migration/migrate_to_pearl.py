@@ -130,6 +130,7 @@ from scripts.pearl_migration.stop import (
     force_remove_known_containers,
     stop_via_middleware,
 )
+from scripts.pearl_migration.wallet import align_quickstart_password
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +466,29 @@ def _run_mode_b(
 
     # ---- load BOTH master wallets up front -----------------------------------
     qs_app, qs_wallet = _load_wallet(disc.quickstart, "quickstart")
-    _, pearl_wallet = _load_wallet(disc.pearl, "Pearl")
+    pearl_app, pearl_wallet = _load_wallet(disc.pearl, "Pearl")
+
+    # ---- align master passwords if they differ -------------------------------
+    # Pearl's keys manager will use Pearl's password to decrypt every agent
+    # key it inherits from us. If qs and Pearl were initialised with
+    # different passwords, the agent keys must be re-encrypted with Pearl's
+    # password BEFORE merging — otherwise the first deploy from Pearl fails
+    # with `DecryptError: Decrypt error! Bad password?`.
+    if qs_app.password != pearl_app.password:
+        print_section("ALIGNING QUICKSTART PASSWORD")
+        info(
+            "The quickstart and Pearl master passwords differ. Before "
+            "merging, the quickstart's master keyfile and every agent key "
+            "under `keys/` will be re-encrypted with Pearl's password. The "
+            "original keyfiles are kept as `.bak` siblings."
+        )
+        if not yes_no("Proceed with re-encryption?", default=True):
+            fatal("Migration aborted by user; nothing on-chain has changed.")
+        align_quickstart_password(
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password=pearl_app.password,
+        )
 
     fix_root_ownership(disc.quickstart)
 
