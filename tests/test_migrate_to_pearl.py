@@ -142,6 +142,7 @@ def _spawn_run_service(
         child = pexpect.spawn(
             f"bash ./run_service.sh {config_path}",
             encoding="utf-8", timeout=600, env=spawn_env, cwd=str(cwd),
+            logfile=sys.stdout,
         )
         try:
             while True:
@@ -176,6 +177,7 @@ def _spawn_stop_service(
         child = pexpect.spawn(
             f"bash ./stop_service.sh {config_path}",
             encoding="utf-8", timeout=120, env=spawn_env, cwd=str(cwd),
+            logfile=sys.stdout,
         )
         try:
             while True:
