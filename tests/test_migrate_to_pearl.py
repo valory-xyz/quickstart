@@ -247,6 +247,10 @@ def _spawn_migrate_to_pearl(
         r"\s*Pearl password:\s*$": pearl_password,
         r"Rename the source quickstart `\.operate/` to keep it as a rollback\?": "y",
         r"Do you want to run Pearl on a different machine than this one\?": "n",
+        # Mode B fires this when qs and Pearl have different master passwords;
+        # the e2e exercises that path (qs2 has a distinct password) so we
+        # accept the re-encryption.
+        r"Proceed with re-encryption\?": "y",
     }
 
     def _all_choice(out: str) -> str:
