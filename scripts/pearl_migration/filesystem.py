@@ -139,6 +139,11 @@ def merge_service(
 
     On collision the user is prompted (skip vs overwrite-with-backup). Backups
     are timestamped siblings — never deleted by this script.
+
+    Assumes both stores share the same master password — the caller must
+    have already aligned them via `align_quickstart_password` so the
+    agent keys can be copied verbatim and decrypt under the destination
+    password at deploy time.
     """
     backups: List[Path] = []
     sid = service.service_config_id
