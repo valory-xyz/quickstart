@@ -56,7 +56,6 @@ jobs:
 
   e2e-test-run-service:
     needs: setup
-    if: false  # TEMP: disabled to iterate on e2e-test-migrate-to-pearl; re-enable before merge
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -127,7 +126,6 @@ jobs:
         done
 
   e2e-test-staking:
-    if: false  # TEMP: disabled to iterate on e2e-test-migrate-to-pearl; re-enable before merge
     runs-on: ubuntu-24.04
     env:
       GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
