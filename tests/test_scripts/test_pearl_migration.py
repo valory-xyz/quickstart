@@ -921,16 +921,15 @@ class TestFilesystemExtras:
     def test_fix_root_ownership_refuses_outside_store(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Construct a service dir that is symlinked OUTSIDE the store.
+        # Construct a service dir whose entry under services/ is itself a
+        # symlink to a directory OUTSIDE the store. fix_root_ownership
+        # resolves the service dir and refuses if it escapes store root.
         store_root = tmp_path / "store"
         store_root.mkdir()
         (store_root / "services").mkdir()
-        outside = tmp_path / "elsewhere/persistent_data"
-        outside.mkdir(parents=True)
-        # Service dir contains a symlink to the outside persistent_data.
-        sdir = store_root / "services" / "sc-aaa"
-        sdir.mkdir()
-        (sdir / "persistent_data").symlink_to(outside)
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        (store_root / "services" / "sc-aaa").symlink_to(outside)
         monkeypatch.setattr(filesystem, "any_root_owned_under", lambda p: True)
         store = detect.OperateStore(root=store_root.resolve())
         with pytest.raises(RuntimeError, match="not inside store root"):

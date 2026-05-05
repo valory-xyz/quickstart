@@ -50,13 +50,17 @@ class CopyOutcome:
 
 
 def fix_root_ownership(store: OperateStore) -> None:
-    """chown -R the user if any persistent_data is root-owned.
+    """chown -R the user if any service tree contains root-owned files.
 
-    Mirrors the cleanup block at the top of `run_service.sh` (look for the
-    `.operate/services/sc-*` chown loop). Raises on any failure: the
-    callers (`_run_mode_a` / `_run_mode_b`) immediately follow with
-    `shutil.copytree` / `merge_service` over the same tree, so silently
-    leaving root-owned files would corrupt the destination mid-copy.
+    Docker leaves root-owned files in `persistent_data/` AND under
+    `deployment/nodes/node0/{config,data}/` (tendermint validator keys
+    and state). The original `run_service.sh` cleanup block only chowns
+    `persistent_data` because it then deletes and recreates `deployment`,
+    but migration copies the whole service tree — so any root-owned file
+    anywhere under it will fail the subsequent `shutil.copytree`. Raises
+    on any failure: callers (`_run_mode_a` / `_run_mode_b`) immediately
+    follow with the copy and silent skip would corrupt the destination
+    mid-copy.
     """
     if not store.services_dir.exists():
         return
@@ -64,32 +68,28 @@ def fix_root_ownership(store: OperateStore) -> None:
     needs_chown = []
     for service_dir in store.services_dir.iterdir():
         # Defence in depth: --quickstart-home with a symlink/typo could
-        # point us outside the actual store. Validate BOTH the service
-        # dir AND the persistent_data resolution; either could escape via
-        # symlinks (`services/sc-foo -> ../somewhere`) and we'd otherwise
-        # `chown -R` whatever they pointed at.
-        for candidate in (service_dir, service_dir / "persistent_data"):
-            try:
-                resolved = candidate.resolve()
-                resolved.relative_to(store_root)
-            except (OSError, ValueError) as exc:
-                raise RuntimeError(
-                    f"refusing to chown {candidate}: not inside store root "
-                    f"{store_root} ({exc})"
-                )
-        pdata = service_dir / "persistent_data"
-        if any_root_owned_under(pdata):
-            needs_chown.append(pdata)
+        # point us outside the actual store. Validate the resolution to
+        # avoid `chown -R` ing whatever a stray symlink points at.
+        try:
+            resolved = service_dir.resolve()
+            resolved.relative_to(store_root)
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(
+                f"refusing to chown {service_dir}: not inside store root "
+                f"{store_root} ({exc})"
+            )
+        if any_root_owned_under(service_dir):
+            needs_chown.append(service_dir)
     if not needs_chown:
         return
 
     uid = os.getuid()
     gid = os.getgid()
-    for pdata in needs_chown:
-        warn(f"Root-owned files found under {pdata}; running 'sudo chown -R {uid}:{gid}'.")
+    for target in needs_chown:
+        warn(f"Root-owned files found under {target}; running 'sudo chown -R {uid}:{gid}'.")
         try:
             subprocess.run(
-                ["sudo", "chown", "-R", f"{uid}:{gid}", str(pdata)],
+                ["sudo", "chown", "-R", f"{uid}:{gid}", str(target)],
                 check=True,
                 timeout=120,
             )
@@ -98,8 +98,8 @@ def fix_root_ownership(store: OperateStore) -> None:
             # user, which will error out partway and leave a half-populated
             # destination. Better to abort cleanly here.
             raise RuntimeError(
-                f"could not chown {pdata}: {exc}. Run 'sudo chown -R {uid}:{gid} "
-                f"{pdata}' manually and re-run the migration."
+                f"could not chown {target}: {exc}. Run 'sudo chown -R {uid}:{gid} "
+                f"{target}' manually and re-run the migration."
             )
 
 
