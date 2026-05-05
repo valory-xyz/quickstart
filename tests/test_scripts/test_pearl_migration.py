@@ -1160,31 +1160,47 @@ class TestTransfer:
         assert sent["to"] == "0xreg"
         assert sent["txd"] == bytes.fromhex("deadbeef")
 
-    def test_swap_service_safe_owner_dispatches_via_qs_master_safe(
+    def test_swap_service_safe_owner_uses_approve_hash_then_exec_pattern(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Swap MUST be sent as a Safe tx originated by the quickstart
-        master Safe (the qs Safe is the owner of the service multisig
-        after terminate); signing as the EOA against the service Safe
-        directly fails Gnosis signature validation (GS026) and the tx
-        silently reverts on-chain. Verify wiring: encoded swapOwner
-        calldata, send_safe_txs(safe=qs_master_safe, to=service_safe)."""
+        """Swap MUST be the Safe-A-controlling-Safe-B pattern: qs master
+        Safe first calls service Safe.approveHash(inner_tx_hash), then
+        calls service Safe.execTransaction(...) with a packed
+        approved-hash signature. Calling swapOwner directly from the qs
+        master Safe (single send_safe_txs) fails because Gnosis
+        swapOwner requires `msg.sender == address(this)` (i.e. it MUST
+        go through execTransaction on the service Safe itself)."""
         from scripts.pearl_migration import transfer
 
-        # Stub autonomy.chain.base.registry_contracts.gnosis_safe.
+        # autonomy.chain.base.registry_contracts.gnosis_safe stub.
         autonomy_pkg = types.ModuleType("autonomy")
         autonomy_chain = types.ModuleType("autonomy.chain")
         autonomy_base = types.ModuleType("autonomy.chain.base")
+        encoded: list[tuple[str, list]] = []
         class _FakeInstance:
             def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
-                assert abi_element_identifier == "swapOwner"
-                assert args == ["0xprev", "0xqsafe", "0xpearl"]
-                return "0xdeadbeef"
+                encoded.append((abi_element_identifier, args))
+                # Return distinguishable hex per element so we can verify
+                # which calldata went to which send_safe_txs call.
+                return {
+                    "swapOwner": "0x1100",
+                    "approveHash": "0x2200",
+                    "execTransaction": "0x3300",
+                }[abi_element_identifier]
         class _FakeGnosisSafe:
             @staticmethod
             def get_instance(*, ledger_api: Any, contract_address: str) -> Any:
                 assert contract_address == "0xservice"
                 return _FakeInstance()
+            @staticmethod
+            def get_raw_safe_transaction_hash(**kw: Any) -> dict:
+                # Reflect args back so the test asserts the inner-tx-hash
+                # request is for a self-call on the service Safe with
+                # the swapOwner calldata.
+                assert kw["contract_address"] == "0xservice"
+                assert kw["to_address"] == "0xservice"
+                assert kw["data"] == bytes.fromhex("1100")
+                return {"tx_hash": "0xabcdef"}
         autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
             gnosis_safe=_FakeGnosisSafe(),
         )
@@ -1192,20 +1208,29 @@ class TestTransfer:
         monkeypatch.setitem(sys.modules, "autonomy.chain", autonomy_chain)
         monkeypatch.setitem(sys.modules, "autonomy.chain.base", autonomy_base)
 
-        # Stub operate.utils.gnosis.{get_prev_owner, send_safe_txs}.
-        captured: dict[str, Any] = {}
+        # operate stubs.
+        sends: list[dict[str, Any]] = []
         operate_pkg = types.ModuleType("operate")
+        operate_services = types.ModuleType("operate.services")
+        operate_protocol = types.ModuleType("operate.services.protocol")
         operate_utils = types.ModuleType("operate.utils")
         operate_gnosis = types.ModuleType("operate.utils.gnosis")
-        def fake_get_prev_owner(*, ledger_api: Any, safe: str, owner: str) -> str:
-            assert safe == "0xservice" and owner == "0xqsafe"
-            return "0xprev"
-        def fake_send(**kw: Any) -> str:
-            captured.update(kw)
-            return "0xtx"
-        operate_gnosis.get_prev_owner = fake_get_prev_owner  # type: ignore[attr-defined]
-        operate_gnosis.send_safe_txs = fake_send  # type: ignore[attr-defined]
+        operate_protocol.get_packed_signature_for_approved_hash = (  # type: ignore[attr-defined]
+            lambda *, owners: b"PACKED_SIG_FOR_" + owners[0].encode()
+        )
+        class _SafeOperation:
+            class CALL:
+                value = 0
+        operate_gnosis.SafeOperation = _SafeOperation  # type: ignore[attr-defined]
+        operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
+            lambda *, ledger_api, safe, owner: "0xprev"
+        )
+        operate_gnosis.send_safe_txs = (  # type: ignore[attr-defined]
+            lambda **kw: sends.append(kw) or "0xtx"
+        )
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
+        monkeypatch.setitem(sys.modules, "operate.services", operate_services)
+        monkeypatch.setitem(sys.modules, "operate.services.protocol", operate_protocol)
         monkeypatch.setitem(sys.modules, "operate.utils", operate_utils)
         monkeypatch.setitem(sys.modules, "operate.utils.gnosis", operate_gnosis)
 
@@ -1214,13 +1239,29 @@ class TestTransfer:
             service_safe="0xservice",
             old_owner="0xqsafe", new_owner="0xpearl",
         )
-        assert captured == {
-            "txd": bytes.fromhex("deadbeef"),
-            "safe": "0xqsafe",
-            "ledger_api": "LA",
-            "crypto": "CR",
-            "to": "0xservice",
-        }
+
+        # Three encode_abi calls: swapOwner (for the inner-hash and exec
+        # data fields), approveHash, execTransaction.
+        assert [name for name, _ in encoded] == [
+            "swapOwner", "approveHash", "execTransaction",
+        ]
+        assert encoded[0][1] == ["0xprev", "0xqsafe", "0xpearl"]
+        assert encoded[1][1] == ["0xabcdef"]  # approveHash(inner_tx_hash)
+        # execTransaction args: to=service, value=0, data=swapOwner bytes,
+        # operation=0, safeTxGas=0, baseGas=0, gasPrice=0, gasToken=zero,
+        # refundReceiver=zero, signatures=packed(qs_master_safe).
+        exec_args = encoded[2][1]
+        assert exec_args[0] == "0xservice"
+        assert exec_args[2] == bytes.fromhex("1100")
+        assert exec_args[-1] == b"PACKED_SIG_FOR_0xqsafe"
+
+        # Two send_safe_txs calls — both originated by qs master Safe and
+        # targeting service Safe.
+        assert len(sends) == 2
+        assert sends[0]["safe"] == "0xqsafe" and sends[0]["to"] == "0xservice"
+        assert sends[0]["txd"] == bytes.fromhex("2200")  # approveHash
+        assert sends[1]["safe"] == "0xqsafe" and sends[1]["to"] == "0xservice"
+        assert sends[1]["txd"] == bytes.fromhex("3300")  # execTransaction
 
 
 # ---------------------------------------------------------------------------

@@ -79,37 +79,97 @@ def swap_service_safe_owner(
     service multisig after `terminate` swapped agents -> master Safe);
     `crypto` is the master EOA that owns the quickstart master Safe.
 
-    We can NOT use `operate.utils.gnosis.swap_owner` here: that helper
-    sends the swap as a Safe tx originated by `service_safe` itself
-    signed by `crypto` directly, which only validates if `crypto` is an
-    EOA owner of `service_safe`. After terminate the service Safe's
-    owner is the qs master Safe (a contract), so signing as the EOA
-    fails Gnosis Safe signature checks (GS026) and the tx silently
-    reverts on-chain — the migration script logs success because the
-    failure happens in the receipt, not the submit.
+    Two on-chain transactions, both originated by the qs master Safe and
+    signed by the master EOA. This mirrors operate's
+    `EthSafeTxBuilder.get_safe_b_native_transfer_messages` Safe-A-
+    controlling-Safe-B pattern (protocol.py:get_safe_b_native_transfer_messages),
+    adapted for a swapOwner inner instead of a value transfer.
 
-    Correct path mirrors `transfer_service_nft`: build the swapOwner
-    calldata against `service_safe`, then send it as a Safe tx
-    originated by the qs master Safe (which IS an owner of
-    `service_safe`) and signed by the master EOA (which IS an owner of
-    the qs master Safe).
+    Why we can't just call swapOwner from the qs master Safe directly:
+    Gnosis Safe's `swapOwner` has `authorized` requiring
+    `msg.sender == address(this)`. It MUST go through the service
+    Safe's own `execTransaction`. Since the service Safe's only owner
+    is a contract (the qs master Safe), the qs master Safe authorizes
+    that `execTransaction` via the on-chain `approveHash` path:
+
+      1) qs_master_safe -> service_safe.approveHash(inner_tx_hash)
+         (registers qs_master_safe as having pre-approved the hash).
+      2) qs_master_safe -> service_safe.execTransaction(<swapOwner args>,
+         signatures=packed_approved_hash(qs_master_safe))
+         (Safe's signature check sees the approved-hash signature,
+         looks up approvedHashes[qs_master_safe][inner_tx_hash] == 1,
+         and proceeds. The inner call is a self-call into swapOwner,
+         which then sees msg.sender == address(this).)
     """
     from autonomy.chain.base import registry_contracts
-    from operate.utils.gnosis import get_prev_owner, send_safe_txs
+    from operate.services.protocol import (
+        get_packed_signature_for_approved_hash,
+    )
+    from operate.utils.gnosis import (
+        SafeOperation,
+        get_prev_owner,
+        send_safe_txs,
+    )
 
     prev_owner = get_prev_owner(
         ledger_api=ledger_api, safe=service_safe, owner=old_owner,
     )
-    instance = registry_contracts.gnosis_safe.get_instance(
+    service_safe_instance = registry_contracts.gnosis_safe.get_instance(
         ledger_api=ledger_api,
         contract_address=service_safe,
     )
-    txd_hex = instance.encode_abi(
+    swap_owner_data_hex = service_safe_instance.encode_abi(
         abi_element_identifier="swapOwner",
         args=[prev_owner, old_owner, new_owner],
     )
+    swap_owner_data = bytes.fromhex(swap_owner_data_hex[2:])
+
+    # Hash of the inner Safe tx that the service Safe will execute on
+    # itself. Must match the parameters passed to execTransaction below.
+    inner_tx_hash_hex = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+        ledger_api=ledger_api,
+        contract_address=service_safe,
+        to_address=service_safe,
+        value=0,
+        data=swap_owner_data,
+        operation=SafeOperation.CALL.value,
+        safe_tx_gas=0,
+    ).get("tx_hash")
+
+    # Step 1: qs master Safe -> service Safe.approveHash(inner_tx_hash).
+    approve_hash_data_hex = service_safe_instance.encode_abi(
+        abi_element_identifier="approveHash",
+        args=[inner_tx_hash_hex],
+    )
     send_safe_txs(
-        txd=bytes.fromhex(txd_hex[2:]),
+        txd=bytes.fromhex(approve_hash_data_hex[2:]),
+        safe=old_owner,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        to=service_safe,
+    )
+
+    # Step 2: qs master Safe -> service Safe.execTransaction(...) with a
+    # packed approved-hash signature pointing back at the qs master Safe.
+    exec_data_hex = service_safe_instance.encode_abi(
+        abi_element_identifier="execTransaction",
+        args=[
+            service_safe,                             # to (self-call)
+            0,                                        # value
+            swap_owner_data,                          # data
+            SafeOperation.CALL.value,                 # operation
+            0,                                        # safeTxGas
+            0,                                        # baseGas
+            0,                                        # gasPrice
+            "0x" + "00" * 20,                         # gasToken
+            "0x" + "00" * 20,                         # refundReceiver
+            get_packed_signature_for_approved_hash(
+                owners=(old_owner,),
+            ),
+        ],
+    )
+    send_safe_txs(
+        txd=bytes.fromhex(exec_data_hex[2:]),
         safe=old_owner,
         ledger_api=ledger_api,
         crypto=crypto,
