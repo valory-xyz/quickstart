@@ -86,7 +86,7 @@ def fix_root_ownership(store: OperateStore) -> None:
         # discovering the gap mid-copy.
         needs_chown.append(service_dir)
     if not needs_chown:
-        return
+        return  # services_dir exists but is empty; nothing to chown
 
     uid = os.getuid()
     gid = os.getgid()

@@ -877,6 +877,22 @@ class TestFilesystemExtras:
         # Should be a no-op, no exceptions.
         filesystem.fix_root_ownership(store)
 
+    def test_fix_root_ownership_empty_services_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """services/ exists but contains no service dirs — chown loop is
+        skipped and subprocess.run is never called."""
+        (tmp_path / "services").mkdir()
+        called: list[Any] = []
+        monkeypatch.setattr(
+            filesystem.subprocess,
+            "run",
+            lambda *a, **k: called.append((a, k)),
+        )
+        store = detect.OperateStore(root=tmp_path)
+        filesystem.fix_root_ownership(store)
+        assert called == []
+
     def test_fix_root_ownership_runs_chown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
