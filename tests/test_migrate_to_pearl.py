@@ -93,7 +93,7 @@ def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
         ".", dest, dirs_exist_ok=True,
         ignore=shutil.ignore_patterns(
             ".operate", ".pytest_cache", "__pycache__",
-            "*.pyc", "logs", "*.log", ".env",
+            "*.pyc", "logs", "*.log", ".env", ".venv",
         ),
     )
     logger.info(f"Copied repo to {dest}")
