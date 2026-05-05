@@ -88,7 +88,14 @@ MIGRATION_TIMEOUT = 1200  # 20 min — Mode B can include several Safe txs
 # ---------------------------------------------------------------------------
 
 def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
-    """Copy the repo into `dest`, excluding heavy/local-only paths."""
+    """Copy the repo into `dest`, excluding heavy/local-only paths.
+
+    `.venv` is symlinked rather than copied: a deep copy via shutil
+    dereferences interpreter symlinks and silently drops parts of the
+    site-packages tree, and a fresh `poetry install` in `dest` triggers
+    PEP 517 sdist rebuilds (halo, python-baseconv) that fail under
+    Poetry 2.4 + setuptools >= 80. Sharing the runner's venv avoids
+    both pitfalls."""
     shutil.copytree(
         ".", dest, dirs_exist_ok=True,
         ignore=shutil.ignore_patterns(
@@ -96,6 +103,12 @@ def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
             "*.pyc", "logs", "*.log", ".env", ".venv",
         ),
     )
+    src_venv = Path(".venv").resolve()
+    if src_venv.is_dir():
+        link = dest / ".venv"
+        if link.exists() or link.is_symlink():
+            link.unlink()
+        link.symlink_to(src_venv)
     logger.info(f"Copied repo to {dest}")
 
 
