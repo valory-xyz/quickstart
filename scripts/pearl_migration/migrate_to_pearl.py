@@ -686,7 +686,10 @@ def _step_transfer_nft(
     ensure_signable,
 ) -> None:
     """Transfer the service NFT to Pearl's master Safe (idempotent)."""
-    from scripts.pearl_migration.transfer import transfer_service_nft
+    from scripts.pearl_migration.transfer import (
+        PostConditionUnknown,
+        transfer_service_nft,
+    )
 
     current_owner = service_nft_owner(
         ledger_api=ledger_api,
@@ -718,6 +721,18 @@ def _step_transfer_nft(
             pearl_master_safe=pearl_master_safe,
             service_id=token_id,
         )
+    except PostConditionUnknown as exc:
+        # Distinct from "inner reverted": tx submitted, but the post-tx
+        # ownerOf read failed all retries. State is INDETERMINATE — DO NOT
+        # re-run blindly (a re-run after the NFT actually moved would hit
+        # `ERC721: caller not owner`). Surface unwrapped so the user sees
+        # the original guidance. `from exc` (PEP 3134) marks this as an
+        # intentional translation so the underlying RPC failure stays
+        # visible in the traceback chain.
+        raise _Unmigratable(
+            service_id=sid, chain=chain_str,
+            reason=str(exc),
+        ) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
             sid=sid, chain=chain_str,
@@ -732,7 +747,10 @@ def _step_swap_service_safe_owner(
     ensure_signable,
 ) -> None:
     """Swap the service multisig's owner from qs Safe to Pearl Safe (idempotent)."""
-    from scripts.pearl_migration.transfer import swap_service_safe_owner
+    from scripts.pearl_migration.transfer import (
+        PostConditionUnknown,
+        swap_service_safe_owner,
+    )
 
     try:
         owners = safe_owners(ledger_api=ledger_api, safe=service_safe)
@@ -762,6 +780,19 @@ def _step_swap_service_safe_owner(
             service_safe=service_safe,
             old_owner=qs_master_safe, new_owner=pearl_master_safe,
         )
+    except PostConditionUnknown as exc:
+        # State is INDETERMINATE — execTransaction submitted but the
+        # post-tx getOwners read failed all retries. The NFT is already
+        # owned by Pearl, so a re-run that hits a post-condition mismatch
+        # (because the swap actually landed) is the WORST outcome:
+        # rename_source_for_rollback would erase qs/.operate believing
+        # success. Surface unwrapped so the user gets the explicit
+        # "verify on a block explorer first" guidance. `from exc`
+        # preserves the underlying RPC failure in the traceback chain.
+        raise _Unmigratable(
+            service_id=sid, chain=chain_str,
+            reason=str(exc),
+        ) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
             sid=sid, chain=chain_str,

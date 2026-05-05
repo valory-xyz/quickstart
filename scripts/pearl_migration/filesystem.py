@@ -49,26 +49,34 @@ class CopyOutcome:
 
 
 def fix_root_ownership(store: OperateStore) -> None:
-    """chown -R the user if any service tree contains root-owned files.
+    """`sudo chown -RP` every service directory whose resolved path stays inside the store root, to the current uid:gid.
 
     Docker leaves root-owned files in `persistent_data/` AND under
     `deployment/nodes/node0/{config,data}/` (tendermint validator keys
     and state). The original `run_service.sh` cleanup block only chowns
     `persistent_data` because it then deletes and recreates `deployment`,
     but migration copies the whole service tree — so any root-owned file
-    anywhere under it will fail the subsequent `shutil.copytree`. Raises
-    on any failure: callers (`_run_mode_a` / `_run_mode_b`) immediately
-    follow with the copy and silent skip would corrupt the destination
-    mid-copy.
+    anywhere under it will fail the subsequent `shutil.copytree`.
+
+    Detection-via-`Path.rglob`+`stat` was tried first but is unreliable
+    on Python 3.14 against trees containing dirs the current user can't
+    traverse (rglob silently skips, leaving root-owned files inside
+    undetected). `chown` with current uid:gid is idempotent — a no-op
+    when nothing's actually root-owned — so paying the sudo invocation
+    is cheaper than discovering the gap mid-copy. Raises on any failure:
+    callers (`_run_mode_a` / `_run_mode_b`) immediately follow with the
+    copy, and silent skip would corrupt the destination mid-copy.
     """
     if not store.services_dir.exists():
         return
     store_root = store.root.resolve()
-    needs_chown = []
+    uid = os.getuid()
+    gid = os.getgid()
+    successful: List[Path] = []
     for service_dir in store.services_dir.iterdir():
         # Defence in depth: --quickstart-home with a symlink/typo could
         # point us outside the actual store. Validate the resolution to
-        # avoid `chown -R` ing whatever a stray symlink points at.
+        # avoid `chown -R`-ing whatever a stray symlink points at.
         try:
             resolved = service_dir.resolve()
             resolved.relative_to(store_root)
@@ -77,34 +85,35 @@ def fix_root_ownership(store: OperateStore) -> None:
                 f"refusing to chown {service_dir}: not inside store root "
                 f"{store_root} ({exc})"
             )
-        # Always chown unconditionally. Detection via Path.rglob + stat is
-        # unreliable on Python 3.14 against trees containing dirs the
-        # current user can't traverse (rglob silently skips, leaving
-        # root-owned files inside undetected). chown -R to the current
-        # uid:gid is idempotent — a no-op if everything is already
-        # user-owned — so paying the sudo invocation is cheaper than
-        # discovering the gap mid-copy.
-        needs_chown.append(service_dir)
-    if not needs_chown:
-        return  # services_dir exists but is empty; nothing to chown
-
-    uid = os.getuid()
-    gid = os.getgid()
-    for target in needs_chown:
-        warn(f"Root-owned files found under {target}; running 'sudo chown -R {uid}:{gid}'.")
+        warn(f"Root-owned files found under {service_dir}; running 'sudo -n chown -RP {uid}:{gid}'.")
         try:
             subprocess.run(
-                ["sudo", "chown", "-R", f"{uid}:{gid}", str(target)],
+                # `-n` (sudo): non-interactive — fail fast on machines that
+                # require a sudo password instead of hanging for 120s on a
+                # blocked tty prompt.
+                # `-RP` (chown): recursive but DO NOT traverse symbolic links
+                # — a stray symlink under `persistent_data/` (e.g. pointing
+                # at `/etc`) would otherwise have its target chowned to the
+                # current user.
+                ["sudo", "-n", "chown", "-RP", f"{uid}:{gid}", str(service_dir)],
                 check=True,
                 timeout=120,
             )
+            successful.append(service_dir)
         except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             # Don't continue: the next step copies this tree as the current
             # user, which will error out partway and leave a half-populated
-            # destination. Better to abort cleanly here.
+            # destination. Better to abort cleanly here. Include the list
+            # of dirs already mutated so the user has an audit trail —
+            # `chown -R` to the current uid is irreversible without backups.
+            already = ", ".join(str(t) for t in successful) or "(none)"
             raise RuntimeError(
-                f"could not chown {target}: {exc}. Run 'sudo chown -R {uid}:{gid} "
-                f"{target}' manually and re-run the migration."
+                f"could not chown {service_dir}: {exc}. "
+                f"Already mutated: {already}. "
+                f"Currently in indeterminate state (chown may have walked "
+                f"partway before failing): {service_dir}. "
+                f"Run 'sudo chown -RP {uid}:{gid} {service_dir}' manually "
+                "(plus enable passwordless sudo if required) and re-run."
             )
 
 

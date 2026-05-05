@@ -887,8 +887,16 @@ class TestAlignQuickstartPassword:
 
         # Two agent keyfiles encrypted with the OLD password.
         old_pw, new_pw = "old-pw", "new-pw"
-        keys_dir = tmp_path / "keys"
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
         keys_dir.mkdir()
+        # Master keyfile placeholder — content doesn't matter; the test
+        # stubs `qs_wallet.update_password`, so the snapshot just needs a
+        # readable directory tree to copy.
+        (wallets_dir / "ethereum.txt").write_text("master", encoding="utf-8")
+
         agent_pks: dict[str, bytes] = {}
         for i in (1, 2):
             raw = bytes([i]) * 32
@@ -901,11 +909,13 @@ class TestAlignQuickstartPassword:
                 private_key=json.dumps(keyfile),
             )
             (keys_dir / addr).write_text(json.dumps(key.json), encoding="utf-8")
-        # A `.bak` sibling — must be skipped by the walker.
+        # A `.bak` sibling and a stale `.tmp` — both must be skipped.
         (keys_dir / "stale.bak").write_text("{}", encoding="utf-8")
+        (keys_dir / "stale.tmp").write_text("{}", encoding="utf-8")
 
         master_calls: list[str] = []
         qs_wallet = types.SimpleNamespace(
+            path=wallets_dir,
             update_password=lambda new: master_calls.append(new),
         )
         keys_manager = types.SimpleNamespace(path=keys_dir, password=old_pw)
@@ -930,6 +940,18 @@ class TestAlignQuickstartPassword:
             assert bytes(Account.decrypt(inner, new_pw)) == raw
             with pytest.raises(Exception):
                 Account.decrypt(inner, old_pw)
+        # Snapshot directory exists alongside wallets/ + keys/ for recovery.
+        snap_dirs = list(operate_root.glob(".pre-align.*"))
+        assert len(snap_dirs) == 1
+        assert (snap_dirs[0] / "wallets" / "ethereum.txt").exists()
+        # The snapshot's agent keyfiles still encrypt under the OLD password
+        # (proves they were captured before mutation, not after).
+        for addr, raw in agent_pks.items():
+            snap_blob = json.loads(
+                (snap_dirs[0] / "keys" / addr).read_text(encoding="utf-8"),
+            )
+            snap_inner = json.loads(snap_blob["private_key"])
+            assert bytes(Account.decrypt(snap_inner, old_pw)) == raw
 
     def test_reencrypt_failure_is_propagated_and_warned(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -938,7 +960,10 @@ class TestAlignQuickstartPassword:
         aborts the migration rather than half-converting the keys dir."""
         from scripts.pearl_migration import wallet as wallet_mod
 
-        keys_dir = tmp_path / "keys"
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
         keys_dir.mkdir()
         (keys_dir / "0xagent").write_text("{}", encoding="utf-8")
 
@@ -949,7 +974,9 @@ class TestAlignQuickstartPassword:
             raise RuntimeError("disk full")
         monkeypatch.setattr(wallet_mod, "_reencrypt_agent_key", boom)
 
-        qs_wallet = types.SimpleNamespace(update_password=lambda new: None)
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
@@ -958,19 +985,103 @@ class TestAlignQuickstartPassword:
             wallet_mod.align_quickstart_password(
                 qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
             )
+        # User is told the recovery path — must include the snapshot dir.
         assert any("failed to re-encrypt" in msg for msg in warn_calls)
+        assert any(".pre-align." in msg for msg in warn_calls)
+
+    def test_snapshot_preserves_originals_after_partial_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The whole point of the snapshot is recovery. After a mid-loop
+        failure (key 1 already mutated, key 2 raised), the snapshot
+        copies of BOTH keys must still decrypt under the OLD password —
+        otherwise the user's recovery `mv` would restore corrupted state."""
+        from eth_account import Account
+        from operate.keys import Key
+        from operate.operate_types import LedgerType
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        old_pw, new_pw = "old-pw", "new-pw"
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
+        keys_dir.mkdir()
+        (wallets_dir / "ethereum.txt").write_text("master", encoding="utf-8")
+
+        agent_pks: dict[str, bytes] = {}
+        for i in (1, 2):
+            raw = bytes([i]) * 32
+            addr = Account.from_key(raw).address
+            agent_pks[addr] = raw
+            keyfile = Account.encrypt(raw, old_pw)
+            key = Key(  # type: ignore[call-arg]
+                ledger=LedgerType.ETHEREUM,
+                address=addr,
+                private_key=json.dumps(keyfile),
+            )
+            (keys_dir / addr).write_text(json.dumps(key.json), encoding="utf-8")
+
+        # Stub _reencrypt_agent_key to mutate the FIRST key (re-encrypt
+        # under new_pw) and raise on the SECOND. Mirrors the real partial-
+        # failure shape: walk gets through some files before erroring.
+        seen: list[Path] = []
+        original = wallet_mod._reencrypt_agent_key
+        def partial(*, key_path: Path, old_password: str, new_password: str) -> None:
+            seen.append(key_path)
+            if len(seen) == 1:
+                original(
+                    key_path=key_path,
+                    old_password=old_password,
+                    new_password=new_password,
+                )
+                return
+            raise RuntimeError("io error mid-walk")
+        monkeypatch.setattr(wallet_mod, "_reencrypt_agent_key", partial)
+
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
+        qs_app = types.SimpleNamespace(
+            password=old_pw,
+            keys_manager=types.SimpleNamespace(path=keys_dir, password=old_pw),
+        )
+        with pytest.raises(RuntimeError, match="io error mid-walk"):
+            wallet_mod.align_quickstart_password(
+                qs_app=qs_app, qs_wallet=qs_wallet, new_password=new_pw,
+            )
+
+        # Snapshot must exist and must contain ORIGINAL (old-pw) copies of
+        # BOTH keys — the first key in the live tree is now new-pw'd, but
+        # the snapshot is the recovery surface and MUST be unaffected.
+        snap_dirs = list(operate_root.glob(".pre-align.*"))
+        assert len(snap_dirs) == 1
+        for addr, raw in agent_pks.items():
+            snap_blob = json.loads(
+                (snap_dirs[0] / "keys" / addr).read_text(encoding="utf-8"),
+            )
+            snap_inner = json.loads(snap_blob["private_key"])
+            assert bytes(Account.decrypt(snap_inner, old_pw)) == raw, (
+                f"snapshot copy of {addr} no longer decrypts under old "
+                "password — recovery would restore corrupted state"
+            )
 
     def test_skips_walk_when_keys_dir_missing(self, tmp_path: Path) -> None:
         """A quickstart with no agent keys yet (services pre-deploy) must
         still re-encrypt the master keyfile and update qs_app.password."""
         from scripts.pearl_migration import wallet as wallet_mod
 
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        wallets_dir.mkdir(parents=True)
+
         master_calls: list[str] = []
         qs_wallet = types.SimpleNamespace(
+            path=wallets_dir,
             update_password=lambda new: master_calls.append(new),
         )
         keys_manager = types.SimpleNamespace(
-            path=tmp_path / "absent_keys", password="old",
+            path=operate_root / "absent_keys", password="old",
         )
         qs_app = types.SimpleNamespace(password="old", keys_manager=keys_manager)
         wallet_mod.align_quickstart_password(
@@ -979,6 +1090,75 @@ class TestAlignQuickstartPassword:
         assert master_calls == ["new"]
         assert qs_app.password == "new"
         assert keys_manager.password == "new"
+
+    def test_skips_non_file_entries_in_keys_dir(self, tmp_path: Path) -> None:
+        """A subdirectory under keys/ (legacy artifact) must be skipped, not
+        passed to _reencrypt_agent_key."""
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
+        keys_dir.mkdir()
+        (keys_dir / "subdir").mkdir()  # not-a-file entry
+
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
+        qs_app = types.SimpleNamespace(
+            password="old",
+            keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+        )
+        # Should not raise — subdir gets skipped silently.
+        wallet_mod.align_quickstart_password(
+            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+        )
+        assert qs_app.password == "new"
+
+    def test_old_password_captured_before_update_password(
+        self, tmp_path: Path,
+    ) -> None:
+        """qs_wallet.update_password may mutate qs_app.password as a side
+        effect (the wallet shares state with the manager). The function
+        MUST capture old_password before the rotate or every agent-key
+        decrypt fails silently."""
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
+        keys_dir.mkdir()
+
+        # update_password mutates qs_app.password (mirroring real operate
+        # behaviour where the wallet manager propagates the new password).
+        qs_app: Any = types.SimpleNamespace(
+            password="real-old",
+            keys_manager=types.SimpleNamespace(path=keys_dir, password="real-old"),
+        )
+        def mutate_password(new: str) -> None:
+            qs_app.password = new
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=mutate_password,
+        )
+
+        captured_old: list[str] = []
+        original_reencrypt = wallet_mod._reencrypt_agent_key
+        def capture(*, key_path: Any, old_password: str, new_password: str) -> None:
+            captured_old.append(old_password)
+        wallet_mod._reencrypt_agent_key = capture
+        try:
+            (keys_dir / "0xagent").write_text("{}", encoding="utf-8")
+            wallet_mod.align_quickstart_password(
+                qs_app=qs_app, qs_wallet=qs_wallet, new_password="real-new",
+            )
+        finally:
+            wallet_mod._reencrypt_agent_key = original_reencrypt
+        assert captured_old == ["real-old"], (
+            "old_password must be captured BEFORE update_password rotates it; "
+            f"got {captured_old}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1046,6 +1226,46 @@ class TestFilesystemExtras:
         # Must raise — caller would otherwise corrupt the destination.
         with pytest.raises(RuntimeError, match="could not chown"):
             filesystem.fix_root_ownership(store)
+
+    def test_fix_root_ownership_partial_failure_lists_audit_trail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When chown succeeds on the first dir then fails on the second,
+        the raised message MUST list the successful one under 'Already
+        mutated' and name the failing one as the partially-mutated dir —
+        that audit trail is the user's only recovery surface for an
+        irreversible operation."""
+        services_dir = tmp_path / "services"
+        services_dir.mkdir()
+        (services_dir / "sc-aaa").mkdir()
+        (services_dir / "sc-bbb").mkdir()
+
+        # Order in which `services_dir.iterdir()` yields entries is not
+        # guaranteed — make the LAST chown call fail and capture the
+        # iteration order so the test reasons about it directly.
+        seen: list[str] = []
+        def fake_run(cmd: list[str], **kw: Any) -> Any:
+            target = cmd[-1]
+            seen.append(target)
+            if len(seen) == 2:  # second dir, whichever it is
+                raise subprocess.CalledProcessError(1, cmd)
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+        monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
+
+        store = detect.OperateStore(root=tmp_path.resolve())
+        with pytest.raises(RuntimeError) as excinfo:
+            filesystem.fix_root_ownership(store)
+        msg = str(excinfo.value)
+        first_chowned, failing = seen
+        # The first dir was successfully chowned — must appear under
+        # "Already mutated".
+        assert "Already mutated:" in msg
+        assert first_chowned in msg
+        # The failing dir must be named as the partially-mutated one.
+        assert failing in msg
+        assert "indeterminate" in msg
+        # Both chown attempts ran (no early-exit before the failure).
+        assert len(seen) == 2
 
     def test_fix_root_ownership_refuses_outside_store(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1235,6 +1455,113 @@ class TestStop:
 # transfer.py
 # ---------------------------------------------------------------------------
 
+class TestPostConditionRetry:
+    """`_read_with_retry` and `PostConditionUnknown` make the post-tx
+    verification reads tolerant of transient RPC errors. The on-chain
+    side has already mined; an RPC hiccup must not be reported as
+    'transfer failed' (which would push the user into a re-run that
+    double-submits or hits a stale-prev-owner revert)."""
+
+    def test_returns_value_on_first_success(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scripts.pearl_migration import transfer
+        monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
+        result = transfer._read_with_retry(lambda: "ok", tx_hash="0xtx")
+        assert result == "ok"
+
+    def test_retries_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scripts.pearl_migration import transfer
+        monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
+        # Network-shaped failures (ConnectionError, TimeoutError) are
+        # retried; programming bugs are NOT — see the test below.
+        attempts = iter([
+            ConnectionError("rpc 502"), TimeoutError("rpc slow"), "good",
+        ])
+        def step() -> str:
+            v = next(attempts)
+            if isinstance(v, Exception):
+                raise v
+            return v
+        result = transfer._read_with_retry(step, tx_hash="0xtx", attempts=3)
+        assert result == "good"
+
+    def test_propagates_programming_bugs_without_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A regression in the lambda (TypeError, AttributeError, ...) is
+        a code defect, not a transient RPC issue. It MUST propagate
+        immediately so the user sees a real traceback rather than the
+        misleading 'verify on a block explorer' framing."""
+        from scripts.pearl_migration import transfer
+        sleeps: list[float] = []
+        monkeypatch.setattr(
+            transfer.time, "sleep", lambda s: sleeps.append(s),
+        )
+        calls = {"n": 0}
+        def buggy() -> str:
+            calls["n"] += 1
+            raise TypeError("regression: ownerOf signature changed")
+        with pytest.raises(TypeError, match="regression"):
+            transfer._read_with_retry(buggy, tx_hash="0xtx", attempts=3)
+        assert calls["n"] == 1, "must NOT retry programming bugs"
+        assert sleeps == [], "must NOT sleep before propagating programming bugs"
+
+    def test_attempts_must_be_at_least_one(self) -> None:
+        from scripts.pearl_migration import transfer
+        with pytest.raises(ValueError, match="attempts must be >= 1"):
+            transfer._read_with_retry(lambda: "x", tx_hash="0xtx", attempts=0)
+
+    def test_rpc_exception_types_tuple_covers_stdlib_and_optional_libs(
+        self,
+    ) -> None:
+        """The cached `_RPC_EXCEPTION_TYPES` tuple must include the
+        stdlib network-error bases AND the third-party RPC error roots
+        (web3 / requests). A regression that drops `Web3Exception` would
+        let a `ContractLogicError` from `ownerOf` escape the retry net
+        and surface as a non-`PostConditionUnknown` failure — the
+        migration would abort on a transient revert that retry might
+        have ridden through."""
+        import requests.exceptions
+        import web3.exceptions
+        from scripts.pearl_migration import transfer
+        excs = transfer._RPC_EXCEPTION_TYPES
+        # Stdlib bases — always must be present.
+        assert ConnectionError in excs
+        assert TimeoutError in excs
+        assert OSError in excs
+        # Python 3.10's `asyncio.TimeoutError` is a distinct subclass of
+        # Exception (not the builtin alias as in 3.11+) and the project
+        # supports 3.10 — must be in the tuple regardless of runtime.
+        import asyncio
+        assert asyncio.TimeoutError in excs
+        # Third-party RPC roots — load-bearing for retry semantics.
+        assert web3.exceptions.Web3Exception in excs
+        assert requests.exceptions.RequestException in excs
+
+    def test_raises_post_condition_unknown_after_exhaustion(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Distinct exception type so callers can tell 'inner reverted'
+        (RuntimeError) apart from 'verification read RPC dead'
+        (PostConditionUnknown). Re-running blindly in the latter case
+        would fail because the on-chain side already mined."""
+        from scripts.pearl_migration import transfer
+        monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
+        def always_fail() -> str:
+            raise ConnectionError("rpc 503")
+        with pytest.raises(transfer.PostConditionUnknown) as excinfo:
+            transfer._read_with_retry(
+                always_fail, tx_hash="0xMINED", attempts=3,
+            )
+        msg = str(excinfo.value)
+        assert "0xMINED" in msg
+        assert "DO NOT re-run" in msg
+        assert isinstance(excinfo.value.last_exc, ConnectionError)
+
+
 class TestTransfer:
     def test_transfer_service_nft_encodes_and_dispatches(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1242,10 +1569,21 @@ class TestTransfer:
         from scripts.pearl_migration import transfer
 
         encoded: dict[str, Any] = {}
+        # Stub `instance.functions.ownerOf(tid).call()` to return the Pearl
+        # Safe — this is the post-condition the function reads to confirm
+        # the transfer landed on-chain.
+        owner_of_calls: list[int] = []
+        class _OwnerOfCallable:
+            def __init__(self, token_id: int) -> None:
+                owner_of_calls.append(token_id)
+            def call(self) -> str:
+                return "0xpl"
+        functions = types.SimpleNamespace(ownerOf=_OwnerOfCallable)
         instance = types.SimpleNamespace(
             encode_abi=lambda abi_element_identifier, args: (
                 encoded.update(name=abi_element_identifier, args=args) or "0xdeadbeef"
             ),
+            functions=functions,
         )
         registry = types.SimpleNamespace(
             service_registry=types.SimpleNamespace(
@@ -1282,6 +1620,45 @@ class TestTransfer:
         assert sent["safe"] == "0xqs"
         assert sent["to"] == "0xreg"
         assert sent["txd"] == bytes.fromhex("deadbeef")
+        # Post-condition was actually checked.
+        assert owner_of_calls == [99]
+
+    def test_transfer_service_nft_raises_when_owner_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Inner-call revert leaves owner == qs Safe; transfer must raise
+        instead of returning a misleading 'success' tx hash."""
+        from scripts.pearl_migration import transfer
+
+        class _OwnerOfCallable:
+            def __init__(self, token_id: int) -> None: pass
+            def call(self) -> str: return "0xqs"  # unchanged: inner call reverted
+        instance = types.SimpleNamespace(
+            encode_abi=lambda abi_element_identifier, args: "0xdeadbeef",
+            functions=types.SimpleNamespace(ownerOf=_OwnerOfCallable),
+        )
+        registry = types.SimpleNamespace(
+            service_registry=types.SimpleNamespace(get_instance=lambda **kw: instance),
+        )
+        _install_fake_autonomy(monkeypatch, registry)
+
+        operate_pkg = types.ModuleType("operate")
+        operate_utils = types.ModuleType("operate.utils")
+        operate_gnosis = types.ModuleType("operate.utils.gnosis")
+        operate_gnosis.send_safe_txs = (  # type: ignore[attr-defined]
+            lambda **kw: "0xtxhash"
+        )
+        monkeypatch.setitem(sys.modules, "operate", operate_pkg)
+        monkeypatch.setitem(sys.modules, "operate.utils", operate_utils)
+        monkeypatch.setitem(sys.modules, "operate.utils.gnosis", operate_gnosis)
+
+        with pytest.raises(RuntimeError, match="still reports owner"):
+            transfer.transfer_service_nft(
+                ledger_api=object(), crypto=object(),
+                service_registry_address="0xreg",
+                qs_master_safe="0xqs", pearl_master_safe="0xpl",
+                service_id=99,
+            )
 
     def test_swap_service_safe_owner_uses_approve_hash_then_exec_pattern(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1348,6 +1725,11 @@ class TestTransfer:
         operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
             lambda *, ledger_api, safe, owner: "0xprev"
         )
+        # Post-condition read: returns the post-swap owners list. Happy
+        # path = pearl present, qs absent.
+        operate_gnosis.get_owners = (  # type: ignore[attr-defined]
+            lambda *, ledger_api, safe: ["0xpearl"]
+        )
         operate_gnosis.send_safe_txs = (  # type: ignore[attr-defined]
             lambda **kw: sends.append(kw) or "0xtx"
         )
@@ -1385,6 +1767,73 @@ class TestTransfer:
         assert sends[0]["txd"] == bytes.fromhex("2200")  # approveHash
         assert sends[1]["safe"] == "0xqsafe" and sends[1]["to"] == "0xservice"
         assert sends[1]["txd"] == bytes.fromhex("3300")  # execTransaction
+
+    def test_swap_service_safe_owner_raises_when_post_condition_unmet(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Both send_safe_txs calls 'succeed' (return tx hashes), but
+        post-swap getOwners() still shows the qs Safe as owner — the inner
+        execTransaction reverted with ExecutionFailure (Gnosis Safe doesn't
+        bubble that to the outer tx). The swap MUST raise so the migration
+        aborts BEFORE rename_source_for_rollback erases qs/.operate."""
+        from scripts.pearl_migration import transfer
+
+        autonomy_pkg = types.ModuleType("autonomy")
+        autonomy_chain = types.ModuleType("autonomy.chain")
+        autonomy_base = types.ModuleType("autonomy.chain.base")
+        class _FakeInstance:
+            def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
+                return "0x00"
+        class _FakeGnosisSafe:
+            @staticmethod
+            def get_instance(**kw: Any) -> Any: return _FakeInstance()
+            @staticmethod
+            def get_raw_safe_transaction_hash(**kw: Any) -> dict:
+                return {"tx_hash": "0xabcdef"}
+        autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
+            gnosis_safe=_FakeGnosisSafe(),
+        )
+        monkeypatch.setitem(sys.modules, "autonomy", autonomy_pkg)
+        monkeypatch.setitem(sys.modules, "autonomy.chain", autonomy_chain)
+        monkeypatch.setitem(sys.modules, "autonomy.chain.base", autonomy_base)
+
+        operate_pkg = types.ModuleType("operate")
+        operate_services = types.ModuleType("operate.services")
+        operate_protocol = types.ModuleType("operate.services.protocol")
+        operate_utils = types.ModuleType("operate.utils")
+        operate_gnosis = types.ModuleType("operate.utils.gnosis")
+        operate_protocol.get_packed_signature_for_approved_hash = (  # type: ignore[attr-defined]
+            lambda *, owners: b""
+        )
+        class _SafeOperation:
+            class CALL:
+                value = 0
+        operate_gnosis.SafeOperation = _SafeOperation  # type: ignore[attr-defined]
+        operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
+            lambda *, ledger_api, safe, owner: "0xprev"
+        )
+        # Inner-call reverted: owners still include qs Safe.
+        operate_gnosis.get_owners = (  # type: ignore[attr-defined]
+            lambda *, ledger_api, safe: ["0xqsafe"]
+        )
+        operate_gnosis.send_safe_txs = (  # type: ignore[attr-defined]
+            lambda **kw: "0xtx"
+        )
+        for name, mod in [
+            ("operate", operate_pkg),
+            ("operate.services", operate_services),
+            ("operate.services.protocol", operate_protocol),
+            ("operate.utils", operate_utils),
+            ("operate.utils.gnosis", operate_gnosis),
+        ]:
+            monkeypatch.setitem(sys.modules, name, mod)
+
+        with pytest.raises(RuntimeError, match="still has owners"):
+            transfer.swap_service_safe_owner(
+                ledger_api="LA", crypto="CR",
+                service_safe="0xservice",
+                old_owner="0xqsafe", new_owner="0xpearl",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -2016,6 +2465,7 @@ class TestStepTransferNft:
         def fake_nft(**kw: Any) -> str:
             calls.append(kw); return "0x1"
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = fake_nft  # type: ignore[attr-defined]
         fake_mod.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
@@ -2094,6 +2544,7 @@ class TestStepTransferNft:
         m, *_ = orch
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         def boom(**kw: Any) -> None:
             raise RuntimeError("nonce stale")
         fake_mod.transfer_service_nft = boom  # type: ignore[attr-defined]
@@ -2110,6 +2561,43 @@ class TestStepTransferNft:
             )
         assert "NFT transfer failed" in ei.value.reason
 
+    def test_post_condition_unknown_surfaces_unwrapped(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`PostConditionUnknown` carries critical 'DO NOT re-run blindly'
+        guidance. The step wrapper MUST surface it as an _Unmigratable
+        whose reason preserves the original message, NOT bury it inside
+        the generic 'NFT transfer failed: ...' wrap."""
+        m, *_ = orch
+        monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
+        fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        class _PCU(RuntimeError):
+            pass
+        fake_mod.PostConditionUnknown = _PCU  # type: ignore[attr-defined]
+        def post_cond_unknown(**kw: Any) -> None:
+            raise _PCU(
+                "On-chain state INDETERMINATE after Safe tx 0xMINED: "
+                "DO NOT re-run blindly."
+            )
+        fake_mod.transfer_service_nft = post_cond_unknown  # type: ignore[attr-defined]
+        fake_mod.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
+        with pytest.raises(m._Unmigratable) as ei:
+            m._step_transfer_nft(
+                ledger_api="LA",
+                qs_wallet=types.SimpleNamespace(crypto="CR"),
+                registry_addr="0xreg",
+                qs_master_safe="0xqs", pearl_master_safe="0xpl",
+                token_id=42, sid="sc-aaa", chain_str="gnosis",
+                ensure_signable=lambda: None,
+            )
+        # The original "DO NOT re-run blindly" / "INDETERMINATE" message
+        # must be preserved verbatim in the unmigratable reason — without
+        # this, the user is misdirected into a re-run that double-submits.
+        assert "INDETERMINATE" in ei.value.reason
+        assert "DO NOT re-run blindly" in ei.value.reason
+        assert "NFT transfer failed" not in ei.value.reason
+
 
 class TestStepSwapServiceSafeOwner:
     """Direct unit tests for `_step_swap_service_safe_owner` — covers
@@ -2120,6 +2608,7 @@ class TestStepSwapServiceSafeOwner:
     def fake_swap(self, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
         calls: list = []
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         def fake(**kw: Any) -> None:
             calls.append(kw)
@@ -2192,6 +2681,7 @@ class TestStepSwapServiceSafeOwner:
         m, *_ = orch
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         def boom(**kw: Any) -> None:
             raise RuntimeError("safe tx revert")
@@ -2207,6 +2697,40 @@ class TestStepSwapServiceSafeOwner:
         # Half-state message must call out the inconsistency.
         assert "service Safe owner swap failed" in ei.value.reason
         assert "still lists 0xqs as owner" in ei.value.reason
+
+    def test_post_condition_unknown_surfaces_unwrapped(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Same as the NFT-step test: the swap step MUST surface
+        PostConditionUnknown's verbatim 'INDETERMINATE / DO NOT re-run'
+        guidance — the worst outcome is the user re-running and having
+        rename_source_for_rollback erase qs/.operate believing success."""
+        m, *_ = orch
+        monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
+        fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        class _PCU(RuntimeError):
+            pass
+        fake_mod.PostConditionUnknown = _PCU  # type: ignore[attr-defined]
+        fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
+        def post_cond_unknown(**kw: Any) -> None:
+            raise _PCU(
+                "On-chain state INDETERMINATE after Safe tx 0xMINED: "
+                "DO NOT re-run blindly."
+            )
+        fake_mod.swap_service_safe_owner = post_cond_unknown  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
+        with pytest.raises(m._Unmigratable) as ei:
+            m._step_swap_service_safe_owner(
+                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+                service_safe="0xms", qs_master_safe="0xqs",
+                pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+                ensure_signable=lambda: None,
+            )
+        assert "INDETERMINATE" in ei.value.reason
+        assert "DO NOT re-run blindly" in ei.value.reason
+        # Must NOT be wrapped under the generic "swap failed; NFT now owned"
+        # half-state framing — that misdirects the user.
+        assert "service Safe owner swap failed" not in ei.value.reason
 
 
 class TestUnmigratableExceptionInit:
@@ -2360,6 +2884,7 @@ class TestMigrateOneService:
 
         # Stub the lazy transfer-module import.
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         moves: list[Any] = []
         def fake_nft(**kw: Any) -> str:
             moves.append(("nft", kw)); return "0x1"
@@ -2406,6 +2931,7 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
 
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         nft_called: list[Any] = []
         swap_called: list[Any] = []
         fake_transfer.transfer_service_nft = lambda **kw: nft_called.append(kw)  # type: ignore[attr-defined]
@@ -2479,6 +3005,7 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
 
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         def boom(**kw: Any) -> None:
             raise RuntimeError("revert: nonce stale")
         fake_transfer.transfer_service_nft = boom  # type: ignore[attr-defined]
@@ -2514,6 +3041,7 @@ class TestMigrateOneService:
         # steps would make the error message a lie — pin the contract here.
         order: list[str] = []
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         def fake_nft(**kw: Any) -> str:
             order.append("nft"); return "0x1"
         def swap_boom(**kw: Any) -> None:
@@ -3252,6 +3780,7 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "safe_threshold", recording_threshold)
 
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_transfer.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_transfer)
@@ -3353,6 +3882,7 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_transfer.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(
