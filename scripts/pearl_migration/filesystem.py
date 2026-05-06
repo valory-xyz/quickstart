@@ -94,22 +94,27 @@ def fix_root_ownership(store: OperateStore) -> None:
                 f"refusing to chown {service_dir}: not inside store root "
                 f"{store_root} ({exc})"
             )
-        warn(f"Root-owned files found under {service_dir}; running 'sudo -n chown -RP {uid}:{gid}'.")
+        warn(
+            f"Root-owned files found under {service_dir}; running "
+            f"'sudo chown -RP {uid}:{gid}'. You may be prompted for your sudo password."
+        )
         try:
             subprocess.run(
-                # `-n` (sudo): non-interactive — fail fast on machines that
-                # require a sudo password instead of hanging for 120s on a
-                # blocked tty prompt.
+                # Plain interactive `sudo` (no `-n`): legacy
+                # `run_service.sh` does the same and prints the same
+                # "Please enter sudo password" notice. Using `-n` here
+                # would fail immediately on machines without passwordless
+                # sudo without ever giving the user a chance to type the
+                # password, which is exactly the QA failure this replaces.
                 # `-RP` (chown): recursive but DO NOT traverse symbolic links
                 # — a stray symlink under `persistent_data/` (e.g. pointing
                 # at `/etc`) would otherwise have its target chowned to the
                 # current user.
-                ["sudo", "-n", "chown", "-RP", f"{uid}:{gid}", str(service_dir)],
+                ["sudo", "chown", "-RP", f"{uid}:{gid}", str(service_dir)],
                 check=True,
-                timeout=120,
             )
             successful.append(service_dir)
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
             # Don't continue: the next step copies this tree as the current
             # user, which will error out partway and leave a half-populated
             # destination. Better to abort cleanly here. Include the list
@@ -122,7 +127,7 @@ def fix_root_ownership(store: OperateStore) -> None:
                 f"Currently in indeterminate state (chown may have walked "
                 f"partway before failing): {service_dir}. "
                 f"Run 'sudo chown -RP {uid}:{gid} {service_dir}' manually "
-                "(plus enable passwordless sudo if required) and re-run."
+                "and re-run."
             )
 
 
