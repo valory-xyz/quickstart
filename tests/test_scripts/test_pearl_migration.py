@@ -1450,6 +1450,24 @@ class TestStop:
         monkeypatch.setattr(stop.subprocess, "run", boom)
         assert stop.force_remove_known_containers() == []
 
+    def test_force_remove_known_containers_raises_on_nonzero_exit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-zero `docker rm -f` exit (daemon refused, permission
+        denied on /var/run/docker.sock) must raise — the docstring's
+        "don't proceed against still-running deployment" guarantee
+        depends on it."""
+        from scripts.pearl_migration import stop
+        monkeypatch.setattr(stop, "docker_quickstart_containers", lambda: ["abci0"])
+        def boom(*_a: Any, **_k: Any) -> None:
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=["docker", "rm", "-f", "abci0"],
+                stderr=b"permission denied",
+            )
+        monkeypatch.setattr(stop.subprocess, "run", boom)
+        with pytest.raises(RuntimeError, match="exited 1.*permission denied"):
+            stop.force_remove_known_containers()
+
 
 # ---------------------------------------------------------------------------
 # transfer.py
@@ -2250,6 +2268,58 @@ class TestRunModeA:
         )
         m._run_mode_a(disc=d, dry_run=True)
         assert "Would back up" in capsys.readouterr().out
+
+    def test_mode_a_re_probe_failure_is_fatal(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Mode A re-probes via `docker_quickstart_containers` after
+        `force_remove_known_containers()` returned cleanly. If `docker ps`
+        itself raises (daemon hung mid-cleanup), Mode A must `fatal()`
+        — proceeding to copy `.operate/` while the deployment may still
+        be writing would corrupt the Pearl store, and the subsequent
+        rename would make it unrecoverable."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"
+        _write_service(qs_root, "sc-aaa", agent_addresses=["0xa"])
+        _write_key(qs_root, "0xa")
+        _write_wallet(qs_root)
+        pl_root = tmp_path / "pl/.operate"
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root.resolve()),
+            pearl=detect.OperateStore(root=pl_root.resolve()),
+            mode=detect.Mode.FRESH_COPY,
+        )
+        monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+        def boom() -> list:
+            raise RuntimeError("docker daemon hung")
+        monkeypatch.setattr(m, "docker_quickstart_containers", boom)
+        monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+        with pytest.raises(SystemExit):
+            m._run_mode_a(disc=d, dry_run=False)
+
+    def test_mode_a_re_probe_finds_remaining_containers_is_fatal(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`force_remove_known_containers()` may return cleanly even
+        when the docker daemon refused the rm with a non-zero exit (the
+        old `check=False` behavior). The re-probe is the safety net —
+        if it sees containers still present, Mode A must `fatal()`."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"
+        _write_service(qs_root, "sc-aaa", agent_addresses=["0xa"])
+        _write_key(qs_root, "0xa")
+        _write_wallet(qs_root)
+        pl_root = tmp_path / "pl/.operate"
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root.resolve()),
+            pearl=detect.OperateStore(root=pl_root.resolve()),
+            mode=detect.Mode.FRESH_COPY,
+        )
+        monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+        monkeypatch.setattr(m, "docker_quickstart_containers", lambda: ["abci0"])
+        monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+        with pytest.raises(SystemExit):
+            m._run_mode_a(disc=d, dry_run=False)
 
     def test_force_cleanup_failure_is_fatal_in_mode_a(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

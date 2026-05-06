@@ -32,12 +32,15 @@ def force_remove_known_containers() -> List[str]:
 
     Returns the list of container names that were forcibly removed.
 
-    Raises `subprocess.TimeoutExpired` on `docker rm -f` hang — silently
-    returning `[]` would be indistinguishable from "nothing to remove",
-    letting on-chain steps proceed against a still-running deployment
-    that may sign txs with the agent key. Only `FileNotFoundError`
-    (docker not installed) is swallowed, in which case the upstream
-    `docker_quickstart_containers()` would already have returned `[]`.
+    Raises `subprocess.TimeoutExpired` on `docker rm -f` hang and
+    `RuntimeError` on a non-zero `docker rm -f` exit (daemon refused the
+    rm, permission denied on `/var/run/docker.sock`, container in a
+    transitional state, etc.) — silently returning `[]` would be
+    indistinguishable from "nothing to remove", letting on-chain steps
+    proceed against a still-running deployment that may sign txs with
+    the agent key. Only `FileNotFoundError` (docker not installed) is
+    swallowed, in which case the upstream `docker_quickstart_containers()`
+    would already have returned `[]`.
     """
     leftovers = docker_quickstart_containers()
     if not leftovers:
@@ -45,12 +48,17 @@ def force_remove_known_containers() -> List[str]:
     try:
         subprocess.run(
             ["docker", "rm", "-f", *leftovers],
-            check=False,
+            check=True,
             capture_output=True,
             timeout=30,
         )
     except FileNotFoundError:
         return []
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or b"").decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            f"`docker rm -f` exited {exc.returncode}: {stderr or '(no stderr)'}"
+        ) from exc
     return leftovers
 
 

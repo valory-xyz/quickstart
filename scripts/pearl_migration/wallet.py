@@ -83,7 +83,16 @@ def align_quickstart_password(
 
         if keys_dir.exists():
             re_encrypted = 0
-            for key_path in keys_dir.iterdir():
+            # Snapshot the listing before in-place mutation: each
+            # `_reencrypt_agent_key` does an atomic rename over the original
+            # keyfile. POSIX doesn't guarantee `iterdir`'s underlying
+            # `scandir` stream behavior across rename-over-self, and some
+            # FUSE / network mounts (CIFS, certain SMB clients) re-yield
+            # the renamed entry — which would feed an already-rotated key
+            # back through `_reencrypt_agent_key` with `old_password` and
+            # raise `DecryptError`, forcing the user onto the manual
+            # snapshot-recovery path on a happy-path rotation.
+            for key_path in list(keys_dir.iterdir()):
                 if not key_path.is_file():
                     continue
                 # Skip `.tmp` partial-write artifacts and operate's own

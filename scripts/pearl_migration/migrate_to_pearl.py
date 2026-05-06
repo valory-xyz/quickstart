@@ -35,7 +35,18 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Tuple,
+    Type,
+)
 
 from operate.operate_types import Chain, OnChainState
 from operate.quickstart.utils import (
@@ -295,6 +306,56 @@ def _load_wallet(
 
 
 # ---------------------------------------------------------------------------
+# Shared cleanup helper (used by both Mode A and Mode B)
+# ---------------------------------------------------------------------------
+
+def _ensure_containers_stopped(
+    on_failure: Callable[[str], NoReturn],
+) -> List[str]:
+    """Force-remove known quickstart containers and re-probe to confirm.
+
+    Both modes need the same three-step guarantee before touching the
+    qs `.operate/`:
+      1. `force_remove_known_containers()` — best-effort `docker rm -f`.
+      2. Re-probe via `docker_quickstart_containers()` — catches the
+         case where step 1 returned cleanly but the daemon refused the
+         rm with a non-zero exit (the old `check=False` behavior; now
+         tightened to `check=True` but the re-probe is still the
+         belt-and-braces guard against future regressions).
+      3. Surface any "still running" via `on_failure`.
+
+    `on_failure` MUST NOT return — it must either raise or
+    `sys.exit`. Callers decide the failure shape:
+      * Mode A passes `fatal` (global, no aggregation possible).
+      * Mode B passes a closure that raises `_Unmigratable(service_id=...)`
+        so the orchestrator can keep migrating other services.
+
+    Returns the list of containers that step 1 force-removed (may be
+    empty). Callers can log this; failure paths never return so the
+    caller doesn't need to check.
+    """
+    try:
+        leftovers = force_remove_known_containers()
+    except (subprocess.TimeoutExpired, RuntimeError) as exc:
+        on_failure(
+            f"could not confirm containers are stopped: {exc}. "
+            "Stop the running deployment manually (`docker ps`, "
+            "`docker rm -f`) and re-run."
+        )
+    try:
+        remaining = docker_quickstart_containers()
+    except RuntimeError as exc:
+        on_failure(f"could not verify containers stopped: {exc}.")
+    if remaining:
+        on_failure(
+            f"quickstart containers still running after cleanup: "
+            f"{remaining}. Stop them manually (`docker ps`, "
+            "`docker rm -f`) before re-running."
+        )
+    return leftovers
+
+
+# ---------------------------------------------------------------------------
 # Mode A — fresh copy
 # ---------------------------------------------------------------------------
 
@@ -325,16 +386,13 @@ def _run_mode_a(disc: Discovery, dry_run: bool) -> MigrationOutcome:
         info(f"[dry-run] Would copy {disc.quickstart.root} -> {disc.pearl.root}")
         return MigrationOutcome()
 
-    # Best-effort: stop the deployment(s) so containers don't conflict later.
-    # Mode A has no per-service aggregation, so an unstoppable deployment
-    # is a `fatal()` — copying `.operate/` while the daemon is still
-    # writing to it would corrupt the migration.
-    try:
-        leftovers = force_remove_known_containers()
-    except (subprocess.TimeoutExpired, RuntimeError) as exc:
-        fatal(f"Could not stop running deployment: {exc}. "
-              "Stop the running deployment manually (`docker ps`, "
-              "`docker rm -f`) and re-run.")
+    # Stop and verify any quickstart containers are gone. Mode A has no
+    # per-service aggregation, so failures escalate to `fatal()` — copying
+    # `.operate/` while the daemon is still writing to `persistent_data/`
+    # or `deployment/nodes/.../{config,data}/` would corrupt the migration,
+    # and the subsequent `rename_source_for_rollback` would make it
+    # unrecoverable.
+    leftovers = _ensure_containers_stopped(on_failure=fatal)
     if leftovers:
         info(f"Removed leftover containers: {', '.join(leftovers)}")
 
@@ -840,37 +898,15 @@ def _migrate_one_service(
             # the on-chain branch.
             _reraise_if_programming_bug(exc)
             warn(f"stop_service via middleware failed: {exc}; trying force cleanup.")
-    # `force_remove_known_containers` raises `subprocess.TimeoutExpired` on
-    # docker daemon hang. `docker_quickstart_containers` raises
-    # `RuntimeError` if `docker ps` itself fails (permission denied on
-    # /var/run/docker.sock, daemon down, etc.). Convert both to a
-    # per-service `_Unmigratable` — proceeding to NFT transfer with
-    # containers possibly still signing with the agent key would race.
-    try:
-        force_remove_known_containers()
-    except (subprocess.TimeoutExpired, RuntimeError) as exc:
-        raise _Unmigratable(
-            service_id=sid, chain=None,
-            reason=f"could not confirm containers are stopped: {exc}. "
-                   "Stop the running deployment manually (`docker ps`, "
-                   "`docker rm -f`) and re-run.",
-        )
-    # Re-probe so a `force_remove_known_containers()` that returned
-    # cleanly but didn't actually remove the containers (e.g. docker
-    # daemon refused the rm with non-zero exit) still surfaces.
-    try:
-        remaining = docker_quickstart_containers()
-    except RuntimeError as exc:
-        raise _Unmigratable(
-            service_id=sid, chain=None,
-            reason=f"could not verify containers stopped: {exc}.",
-        )
-    if remaining:
-        raise _Unmigratable(
-            service_id=sid, chain=None,
-            reason=f"quickstart containers still running after cleanup: "
-                   f"{remaining}. Stop them manually before re-running.",
-        )
+    # Per-service variant of the global stop-and-verify: convert any
+    # cleanup failure into `_Unmigratable(service_id=...)` so the
+    # orchestrator can keep migrating other services. Proceeding to NFT
+    # transfer with containers possibly still signing with the agent key
+    # would race.
+    def _bail(reason: str) -> NoReturn:
+        raise _Unmigratable(service_id=sid, chain=None, reason=reason)
+
+    _ensure_containers_stopped(on_failure=_bail)
 
     # ---- per-chain on-chain operations --------------------------------------
     for chain_str, chain_config in service.chain_configs.items():
