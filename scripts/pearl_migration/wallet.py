@@ -105,6 +105,14 @@ def align_quickstart_password(
                     continue
                 if key_path.suffix == ".bak":
                     continue
+                # Skip dotfiles (`.DS_Store` from macOS Finder, editor
+                # swap files, etc.). Real agent keys are named after the
+                # Ethereum address (`0x{40-hex}`), so a leading dot
+                # never matches a legitimate keyfile — feeding one to
+                # `_reencrypt_agent_key` would crash at `json.loads()`
+                # and abort the whole rotation.
+                if key_path.name.startswith("."):
+                    continue
                 _reencrypt_agent_key(
                     key_path=key_path,
                     old_password=old_password,

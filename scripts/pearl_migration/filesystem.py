@@ -74,6 +74,15 @@ def fix_root_ownership(store: OperateStore) -> None:
     gid = os.getgid()
     successful: List[Path] = []
     for service_dir in store.services_dir.iterdir():
+        # Skip anything that isn't a real service directory. The
+        # middleware names service dirs `sc-{uuid}`; everything else
+        # (macOS `.DS_Store`, stray dotfiles, leftover backups from a
+        # previous abort) is not part of the service tree and must not
+        # be chowned — `.DS_Store` in particular is owned by root on
+        # some macOS setups, which would otherwise force a sudo prompt
+        # for a file the migration doesn't even copy.
+        if not service_dir.is_dir() or not service_dir.name.startswith("sc-"):
+            continue
         # Defence in depth: --quickstart-home with a symlink/typo could
         # point us outside the actual store. Validate the resolution to
         # avoid `chown -R`-ing whatever a stray symlink points at.

@@ -1116,6 +1116,43 @@ class TestAlignQuickstartPassword:
         )
         assert qs_app.password == "new"
 
+    def test_skips_dotfiles_in_keys_dir(self, tmp_path: Path) -> None:
+        """macOS Finder writes `.DS_Store` into any browsed directory,
+        including `keys/`. It must be skipped — feeding it to
+        `_reencrypt_agent_key` would crash at `json.loads()` and abort
+        the rotation. Same goes for any other dotfile (editor swap,
+        `.git`, etc.) — real keys are named `0x{40-hex}` so a leading
+        dot never matches a legitimate keyfile.
+        """
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        keys_dir = operate_root / "keys"
+        wallets_dir.mkdir(parents=True)
+        keys_dir.mkdir()
+        (keys_dir / ".DS_Store").write_bytes(b"\x00\x01binary-junk")
+
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
+        qs_app = types.SimpleNamespace(
+            password="old",
+            keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+        )
+        called: list[Any] = []
+        from unittest.mock import patch
+        with patch.object(
+            wallet_mod, "_reencrypt_agent_key",
+            lambda **kw: called.append(kw["key_path"]),
+        ):
+            wallet_mod.align_quickstart_password(
+                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            )
+        assert called == [], (
+            "dotfiles must be skipped — got: " + repr(called)
+        )
+
     def test_old_password_captured_before_update_password(
         self, tmp_path: Path,
     ) -> None:
@@ -1266,6 +1303,32 @@ class TestFilesystemExtras:
         assert "indeterminate" in msg
         # Both chown attempts ran (no early-exit before the failure).
         assert len(seen) == 2
+
+    def test_fix_root_ownership_skips_non_service_entries(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """macOS Finder writes a root-owned `.DS_Store` directly under
+        `services/` on some setups. It is not a service directory and
+        must not trigger a chown — otherwise users without passwordless
+        sudo hit a fatal `sudo -n` failure on a file that the migration
+        does not even copy. Same applies to any stray dotfile or
+        non-`sc-` directory.
+        """
+        services_dir = tmp_path / "services"
+        services_dir.mkdir()
+        (services_dir / "sc-aaa").mkdir()
+        (services_dir / ".DS_Store").write_text("junk")
+        (services_dir / "stray-dir").mkdir()
+        invoked_targets: list[str] = []
+        def fake_run(cmd: list[str], **kw: Any) -> Any:
+            invoked_targets.append(cmd[-1])
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+        monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
+        store = detect.OperateStore(root=tmp_path.resolve())
+        filesystem.fix_root_ownership(store)
+        # Only the real service dir was chowned.
+        assert len(invoked_targets) == 1
+        assert invoked_targets[0].endswith("/sc-aaa")
 
     def test_fix_root_ownership_refuses_outside_store(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
