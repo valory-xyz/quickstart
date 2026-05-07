@@ -2436,6 +2436,98 @@ class TestRunModeA:
         assert any(".bak." in p.name for p in siblings)
 
 
+class TestFormatExcChain:
+    """`_format_exc_chain` surfaces the deepest distinct chained cause.
+
+    Middleware wraps low-level errors (e.g. `KeyIsIncorrect` /
+    `DecryptError` carrying the keyfile path and reason) in generic
+    `click.ClickException`s ("Cannot load private key" with no detail).
+    Without the chain rendering, `_Unmigratable.reason` shows only the
+    generic message and there's no way for the user to tell wrong-pwd
+    from malformed file from missing path.
+    """
+
+    def test_returns_outer_when_no_chain(self) -> None:
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        assert m._format_exc_chain(RuntimeError("bare")) == "bare"
+
+    def test_appends_explicit_cause(self) -> None:
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        try:
+            try:
+                raise ValueError("MAC mismatch")
+            except ValueError as inner:
+                raise RuntimeError("Cannot load private key") from inner
+        except RuntimeError as exc:
+            rendered = m._format_exc_chain(exc)
+        assert rendered == (
+            "Cannot load private key (caused by ValueError: MAC mismatch)"
+        )
+
+    def test_falls_back_to_implicit_context(self) -> None:
+        """When the outer raise is a bare `raise NewExc(...)` inside an
+        `except`, Python sets `__context__` (not `__cause__`). We must
+        still surface that context so library code that doesn't bother
+        with `from e` still produces useful diagnostics.
+        """
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        try:
+            try:
+                raise ValueError("inner")
+            except ValueError:
+                raise RuntimeError("outer")  # implicit context, no `from`
+        except RuntimeError as exc:
+            rendered = m._format_exc_chain(exc)
+        assert rendered == "outer (caused by ValueError: inner)"
+
+    def test_skips_cause_with_identical_string(self) -> None:
+        """If the outer and inner stringify the same, repeating "(caused
+        by ...)" is noise. Walk past it to the next distinct cause if any.
+        """
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        try:
+            try:
+                try:
+                    raise KeyError("file_not_found")
+                except KeyError as a:
+                    raise ValueError("same") from a
+            except ValueError as b:
+                raise RuntimeError("same") from b
+        except RuntimeError as exc:
+            rendered = m._format_exc_chain(exc)
+        # Both 'same' layers are skipped; deepest distinct cause is the KeyError.
+        # Python repr's KeyError str adds quotes, hence "'file_not_found'".
+        assert rendered == "same (caused by KeyError: 'file_not_found')"
+
+    def test_returns_outer_when_chain_entirely_redundant(self) -> None:
+        """If every chained cause stringifies the same as the outer, we
+        return just the outer string — no useful diagnostic to add."""
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        try:
+            try:
+                raise ValueError("dup")
+            except ValueError as a:
+                raise RuntimeError("dup") from a
+        except RuntimeError as exc:
+            rendered = m._format_exc_chain(exc)
+        assert rendered == "dup"
+
+    def test_handles_self_referential_cause(self) -> None:
+        """Defensive: a malformed library could set __cause__ to self
+        (or a cycle). Walking blindly would loop forever. The `seen`
+        check should bail out cleanly."""
+        from scripts.pearl_migration import migrate_to_pearl as m
+
+        exc = RuntimeError("loop")
+        exc.__cause__ = exc  # type: ignore[assignment]
+        assert m._format_exc_chain(exc) == "loop"
+
+
 class TestStepTerminate:
     """Direct unit tests for `_step_terminate` — narrows the test surface
     so a step-helper signature regression is caught locally rather than

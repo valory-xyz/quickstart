@@ -100,11 +100,43 @@ def _wrap_step_failure(
     Everything else — including `KeyError`/`LookupError` raised by web3
     or middleware on missing chain metadata — gets wrapped so a single
     bad chain doesn't crash the whole multi-service batch.
+
+    Walks the `__cause__`/`__context__` chain and appends the deepest
+    non-trivial exception. Middleware wraps low-level errors in generic
+    `click.ClickException` (e.g. `OnChainHelper.load_crypto` raises
+    "Cannot load private key" while the actual `KeyIsIncorrect` /
+    `DecryptError` carries the file path and underlying reason). Without
+    chaining, the `_Unmigratable.reason` shows only the generic message
+    and the user has no way to tell wrong-password from malformed file
+    from missing path.
     """
     _reraise_if_programming_bug(exc)
     return _Unmigratable(
-        service_id=sid, chain=chain, reason=f"{prefix}: {exc}.",
+        service_id=sid, chain=chain,
+        reason=f"{prefix}: {_format_exc_chain(exc)}.",
     )
+
+
+def _format_exc_chain(exc: BaseException) -> str:
+    """Render `exc` plus the deepest distinct chained cause.
+
+    `__cause__` (explicit `raise X from Y`) wins over `__context__`
+    (implicit "during handling of"), since the explicit chain is what
+    library authors use to surface the underlying reason. We stop at the
+    first non-trivial cause whose string differs from the outer
+    exception's — adding "(caused by: 'foo')" when both stringify to
+    "foo" is noise.
+    """
+    seen: set[int] = set()
+    outer_str = str(exc)
+    cur: Optional[BaseException] = exc.__cause__ or exc.__context__
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        cur_str = str(cur)
+        if cur_str and cur_str != outer_str:
+            return f"{outer_str} (caused by {type(cur).__name__}: {cur_str})"
+        cur = cur.__cause__ or cur.__context__
+    return outer_str
 
 
 # Poll cadence for `_wait_for_native_funds`. Five seconds matches the
