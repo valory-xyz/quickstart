@@ -2464,6 +2464,7 @@ class TestStepTerminate:
             manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
             on_chain_state_cls=FakeOnChainState,
+            ledger_api=object(), qs_address="0xqs_eoa",
         )
         assert signed["n"] == 0   # never signed because already there
 
@@ -2480,6 +2481,7 @@ class TestStepTerminate:
             manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
             on_chain_state_cls=FakeOnChainState,
+            ledger_api=object(), qs_address="0xqs_eoa",
         )
         assert signed["n"] == 1   # ensure_signable was called
 
@@ -2495,6 +2497,7 @@ class TestStepTerminate:
             m._step_terminate(
                 manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(), qs_address="0xqs_eoa",
             )
         assert "could not unstake/terminate" in ei.value.reason
 
@@ -2519,6 +2522,7 @@ class TestStepTerminate:
             m._step_terminate(
                 manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(), qs_address="0xqs_eoa",
             )
         assert "post-state verification" in ei.value.reason
         assert "rpc 502" in ei.value.reason
@@ -2534,6 +2538,7 @@ class TestStepTerminate:
             m._step_terminate(
                 manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(), qs_address="0xqs_eoa",
             )
         assert "expected PRE_REGISTRATION" in ei.value.reason
 
@@ -2556,6 +2561,7 @@ class TestStepTerminate:
             m._step_terminate(
                 manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(), qs_address="0xqs_eoa",
             )
 
     @pytest.mark.parametrize("rpc_cls", [
@@ -2582,7 +2588,42 @@ class TestStepTerminate:
             m._step_terminate(
                 manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(), qs_address="0xqs_eoa",
             )
+
+    def test_terminate_waits_for_funds_then_retries(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Pin: an insufficient-funds error from `terminate_service_on_chain_from_safe`
+        MUST trigger the wait-and-retry helper, not bail as `_Unmigratable`.
+        The QA scenario (qs master EOA dries up between operations) is
+        exactly this — recoverable by the user topping up."""
+        m, FakeChain, FakeOnChainState = orch
+        attempts: list[int] = []
+
+        def maybe_boom(**kw: Any) -> None:
+            attempts.append(len(attempts))
+            if len(attempts) == 1:
+                raise RuntimeError("Client does not have any funds")
+
+        manager = self._manager(
+            FakeOnChainState,
+            state_seq=[
+                FakeOnChainState.DEPLOYED,         # before terminate
+                FakeOnChainState.PRE_REGISTRATION, # post-state read after retry
+            ],
+            terminate=maybe_boom,
+        )
+        balances = iter([0, 1000])
+        monkeypatch.setattr(m, "get_asset_balance", lambda *a, **kw: next(balances))
+        monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._step_terminate(
+            manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
+            ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
+            ledger_api=object(), qs_address="0xqs_eoa",
+        )
+        assert len(attempts) == 2  # one fail, one retry-after-topup
 
 
 class TestStepTransferNft:
@@ -2612,7 +2653,7 @@ class TestStepTransferNft:
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
         m._step_transfer_nft(
             ledger_api="LA",
-            qs_wallet=types.SimpleNamespace(crypto="CR"),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             registry_addr="0xreg",
             qs_master_safe="0xqs", pearl_master_safe="0xpl",
             token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2629,7 +2670,7 @@ class TestStepTransferNft:
         with pytest.raises(m._Unmigratable) as ei:
             m._step_transfer_nft(
                 ledger_api="LA",
-                qs_wallet=types.SimpleNamespace(crypto="CR"),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
                 qs_master_safe="0xqs", pearl_master_safe="0xpl",
                 token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2645,7 +2686,7 @@ class TestStepTransferNft:
         with pytest.raises(m._Unmigratable) as ei:
             m._step_transfer_nft(
                 ledger_api="LA",
-                qs_wallet=types.SimpleNamespace(crypto="CR"),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
                 qs_master_safe="0xqs", pearl_master_safe="0xpl",
                 token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2661,7 +2702,7 @@ class TestStepTransferNft:
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         m._step_transfer_nft(
             ledger_api="LA",
-            qs_wallet=types.SimpleNamespace(crypto="CR"),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             registry_addr="0xreg",
             qs_master_safe="0xqs", pearl_master_safe="0xpl",
             token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2686,7 +2727,7 @@ class TestStepTransferNft:
         with pytest.raises(m._Unmigratable) as ei:
             m._step_transfer_nft(
                 ledger_api="LA",
-                qs_wallet=types.SimpleNamespace(crypto="CR"),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
                 qs_master_safe="0xqs", pearl_master_safe="0xpl",
                 token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2718,7 +2759,7 @@ class TestStepTransferNft:
         with pytest.raises(m._Unmigratable) as ei:
             m._step_transfer_nft(
                 ledger_api="LA",
-                qs_wallet=types.SimpleNamespace(crypto="CR"),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
                 qs_master_safe="0xqs", pearl_master_safe="0xpl",
                 token_id=42, sid="sc-aaa", chain_str="gnosis",
@@ -2730,6 +2771,43 @@ class TestStepTransferNft:
         assert "INDETERMINATE" in ei.value.reason
         assert "DO NOT re-run blindly" in ei.value.reason
         assert "NFT transfer failed" not in ei.value.reason
+
+    def test_transfer_nft_waits_for_funds_then_retries(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Pin: insufficient-funds during the NFT `safeTransferFrom` MUST
+        trigger the wait-and-retry helper (qs master EOA pays gas), not
+        bail as `_Unmigratable`. Mirrors the terminate-path pin so a
+        future refactor that drops `_retry_on_funds_shortage` from this
+        site is caught locally."""
+        m, *_ = orch
+        monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
+        attempts: list[int] = []
+
+        def maybe_boom(**kw: Any) -> str:
+            attempts.append(len(attempts))
+            if len(attempts) == 1:
+                raise RuntimeError("Client does not have any funds")
+            return "0x1"
+
+        fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
+        fake_mod.transfer_service_nft = maybe_boom  # type: ignore[attr-defined]
+        fake_mod.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
+        balances = iter([0, 1000])
+        monkeypatch.setattr(m, "get_asset_balance", lambda *a, **kw: next(balances))
+        monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._step_transfer_nft(
+            ledger_api=object(),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+            registry_addr="0xreg",
+            qs_master_safe="0xqs", pearl_master_safe="0xpl",
+            token_id=42, sid="sc-aaa", chain_str="gnosis",
+            ensure_signable=lambda: None,
+        )
+        assert len(attempts) == 2  # one fail, one retry-after-topup
 
 
 class TestStepSwapServiceSafeOwner:
@@ -2756,7 +2834,7 @@ class TestStepSwapServiceSafeOwner:
         signed = {"n": 0}
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
         m._step_swap_service_safe_owner(
-            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             service_safe="0xms", qs_master_safe="0xqs",
             pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
@@ -2773,7 +2851,7 @@ class TestStepSwapServiceSafeOwner:
         monkeypatch.setattr(m, "safe_owners", boom)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 service_safe="0xms", qs_master_safe="0xqs",
                 pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None,
@@ -2787,7 +2865,7 @@ class TestStepSwapServiceSafeOwner:
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xstranger"])
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 service_safe="0xms", qs_master_safe="0xqs",
                 pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None,
@@ -2801,7 +2879,7 @@ class TestStepSwapServiceSafeOwner:
         signed = {"n": 0}
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         m._step_swap_service_safe_owner(
-            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             service_safe="0xms", qs_master_safe="0xqs",
             pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
@@ -2822,7 +2900,7 @@ class TestStepSwapServiceSafeOwner:
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 service_safe="0xms", qs_master_safe="0xqs",
                 pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None,
@@ -2854,7 +2932,7 @@ class TestStepSwapServiceSafeOwner:
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR"),
+                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 service_safe="0xms", qs_master_safe="0xqs",
                 pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
                 ensure_signable=lambda: None,
@@ -2864,6 +2942,39 @@ class TestStepSwapServiceSafeOwner:
         # Must NOT be wrapped under the generic "swap failed; NFT now owned"
         # half-state framing — that misdirects the user.
         assert "service Safe owner swap failed" not in ei.value.reason
+
+    def test_swap_owner_waits_for_funds_then_retries(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Pin: insufficient-funds during the service Safe owner swap MUST
+        trigger the wait-and-retry helper. Same risk shape as the NFT
+        transfer step — qs master EOA pays gas, can run out mid-flow."""
+        m, *_ = orch
+        monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
+        attempts: list[int] = []
+
+        def maybe_boom(**kw: Any) -> None:
+            attempts.append(len(attempts))
+            if len(attempts) == 1:
+                raise RuntimeError("Client does not have any funds")
+
+        fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+        fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
+        fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
+        fake_mod.swap_service_safe_owner = maybe_boom  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
+        balances = iter([0, 1000])
+        monkeypatch.setattr(m, "get_asset_balance", lambda *a, **kw: next(balances))
+        monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._step_swap_service_safe_owner(
+            ledger_api=object(),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+            service_safe="0xms", qs_master_safe="0xqs",
+            pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+            ensure_signable=lambda: None,
+        )
+        assert len(attempts) == 2  # one fail, one retry-after-topup
 
 
 class TestUnmigratableExceptionInit:
@@ -3004,7 +3115,7 @@ class TestMigrateOneService:
             FakeChain, FakeOnChainState, terminate=fake_terminate,
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        qs_wallet = types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"})
+        qs_wallet = types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"})
         pearl_wallet = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"})
 
         monkeypatch.setattr(m, "stop_via_middleware",
@@ -3053,7 +3164,7 @@ class TestMigrateOneService:
             state_seq=[FakeOnChainState.PRE_REGISTRATION],  # already there
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        qs_wallet = types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"})
+        qs_wallet = types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"})
         pearl_wallet = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"})
 
         monkeypatch.setattr(m, "stop_via_middleware",
@@ -3098,7 +3209,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3120,7 +3231,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3151,7 +3262,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3189,7 +3300,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3222,7 +3333,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
@@ -3248,7 +3359,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
@@ -3272,7 +3383,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3295,7 +3406,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3381,7 +3492,7 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", path=tmp_path)
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={
                 FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o",
             }),
             pearl_wallet=types.SimpleNamespace(safes={
@@ -3473,7 +3584,7 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", path=tmp_path)
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={
                 FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o",
             }),
             pearl_wallet=types.SimpleNamespace(safes={
@@ -3514,12 +3625,15 @@ class TestMigrateOneService:
         def fake_create_safe(*, chain: Any, rpc: Any) -> None:
             creates.append({"chain": chain, "rpc": rpc})
             pearl_safes[chain] = "0xpl-new"
-        pearl_wallet = types.SimpleNamespace(safes=pearl_safes, create_safe=fake_create_safe)
+        pearl_wallet = types.SimpleNamespace(
+            safes=pearl_safes, create_safe=fake_create_safe,
+            ledger_api=lambda **kw: object(), address="0xpe",
+        )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
             pearl_wallet=pearl_wallet, config_path=None,
         )
         assert len(creates) == 1
@@ -3540,12 +3654,15 @@ class TestMigrateOneService:
 
         def boom(**kw: Any) -> None:
             raise RuntimeError("rpc rejected safe deployment")
-        pearl_wallet = types.SimpleNamespace(safes={}, create_safe=boom)
+        pearl_wallet = types.SimpleNamespace(
+            safes={}, create_safe=boom, address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=pearl_wallet, config_path=None,
             )
         assert "could not create Pearl master Safe" in ei.value.reason
@@ -3570,7 +3687,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3599,7 +3716,7 @@ class TestMigrateOneService:
         with pytest.raises(bug_cls):
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
@@ -3623,12 +3740,15 @@ class TestMigrateOneService:
                             lambda operate, config_path: None)
         def buggy(**kw: Any) -> None:
             raise bug_cls("middleware refactor")
-        pearl_wallet = types.SimpleNamespace(safes={}, create_safe=buggy)
+        pearl_wallet = types.SimpleNamespace(
+            safes={}, create_safe=buggy, address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(bug_cls):
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=pearl_wallet, config_path=None,
             )
 
@@ -3657,7 +3777,7 @@ class TestMigrateOneService:
         with pytest.raises(bug_cls):
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3681,7 +3801,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3708,7 +3828,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3734,7 +3854,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3763,7 +3883,7 @@ class TestMigrateOneService:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
                 # No Safe registered for Gnosis -> KeyError on access.
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3795,7 +3915,7 @@ class TestMigrateOneService:
             with pytest.raises(m._Unmigratable) as ei:
                 m._migrate_one_service(
                     svc=ref, qs_app=qs_app,
-                    qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                    qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                     pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                     config_path=None,
                 )
@@ -3820,7 +3940,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3842,7 +3962,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3882,7 +4002,7 @@ class TestMigrateOneService:
         # Should complete cleanly: no signing → no threshold check.
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
@@ -3921,7 +4041,7 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
@@ -3947,7 +4067,7 @@ class TestMigrateOneService:
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
                 svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4024,11 +4144,159 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
             svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", safes={FakeChain.GNOSIS: "0xqs"}),
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
         assert called == []  # config_path None bypasses stop_via_middleware
+
+
+class TestPearlSafeFundsWait:
+    """Cover the wait-for-funds helpers introduced after the QA failure
+    where Pearl's master EOA had zero gas on gnosis. The script previously
+    flagged the service un-migratable and bailed; now it blocks until the
+    user tops up — matching the UX of olas-operate-middleware's
+    `ask_funds_in_address` (run_service.py:597)."""
+
+    def test_is_insufficient_funds_error_matches_known_phrasings(
+        self, orch: Any,
+    ) -> None:
+        m, _, _ = orch
+        assert m._is_insufficient_funds_error(
+            RuntimeError("Client does not have any funds")
+        )
+        assert m._is_insufficient_funds_error(
+            RuntimeError("insufficient funds for gas")
+        )
+        # Anything else must NOT match — we want the generic `_Unmigratable`
+        # path so the user sees the real reason instead of an infinite wait.
+        assert not m._is_insufficient_funds_error(
+            RuntimeError("rpc rejected safe deployment")
+        )
+
+    def test_wait_for_native_funds_returns_when_balance_increases(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Polls until balance > current. First call seeds `current`,
+        subsequent calls report the new balance — return as soon as it
+        rises so the caller can re-attempt Safe creation."""
+        m, _, _ = orch
+        balances = iter([100, 100, 250])
+        monkeypatch.setattr(
+            m, "get_asset_balance", lambda *a, **kw: next(balances),
+        )
+        monkeypatch.setattr(
+            m, "wei_to_token", lambda wei, chain, asset: f"{wei}wei",
+        )
+        slept: list[float] = []
+        monkeypatch.setattr(m.time, "sleep", lambda s: slept.append(s))
+        m._wait_for_native_funds(
+            ledger_api=object(),
+            address="0xpe",
+            chain_str="gnosis",
+            recipient_name="Pearl master EOA",
+        )
+        out = capsys.readouterr().out
+        # First poll saw the same balance (loop), second poll detected the
+        # increase — so we slept twice before returning.
+        assert len(slept) == 2
+        assert "Detected 150wei arrived" in out
+        assert "Pearl master EOA 0xpe" in out
+
+    def test_create_pearl_safe_waits_then_succeeds_on_insufficient_funds(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """When `create_safe` first raises an insufficient-funds error
+        (the QA failure mode), the helper MUST wait for the balance to
+        increase and retry — NOT bail with `_Unmigratable` like the old
+        path did, since funding is recoverable."""
+        m, FakeChain, _ = orch
+        attempts: list[tuple[Any, Any]] = []
+
+        def create_safe(*, chain: Any, rpc: Any) -> None:
+            attempts.append((chain, rpc))
+            if len(attempts) == 1:
+                raise RuntimeError("Client does not have any funds")
+            # Second attempt: user has topped up, succeed silently.
+
+        pearl = types.SimpleNamespace(
+            safes={}, create_safe=create_safe, address="0xpe",
+        )
+        balances = iter([0, 1000])  # current=0, then post-topup=1000.
+        monkeypatch.setattr(
+            m, "get_asset_balance", lambda *a, **kw: next(balances),
+        )
+        monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._create_pearl_safe_with_funds_wait(
+            pearl_wallet=pearl,
+            chain=FakeChain.GNOSIS,
+            chain_str="gnosis",
+            rpc="https://rpc/gnosis",
+            ledger_api=object(),
+        )
+        assert len(attempts) == 2
+        out = capsys.readouterr().out
+        # User-visible signal that we're waiting (not crashing) on funds.
+        assert "insufficient funds" in out
+        assert "Detected" in out
+
+    def test_wait_for_native_funds_tolerates_rpc_blip_mid_poll(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Pin: a transient RPC failure during the poll loop MUST NOT
+        crash `_wait_for_native_funds` with a confusing trace — the user
+        may already be sending the top-up tx. Warn and keep polling.
+        Without this guard, an outage during the wait silently drops the
+        migration mid-flow."""
+        m, _, _ = orch
+        # Sequence: initial read OK (0), first poll OK (still 0 -> loop),
+        # second poll RAISES (RPC blip), third poll OK (250 -> exit).
+        seq: list[Any] = [0, 0, RuntimeError("rpc 502"), 250]
+
+        def fake_balance(*a: Any, **kw: Any) -> int:
+            v = seq.pop(0)
+            if isinstance(v, BaseException):
+                raise v
+            return v
+
+        monkeypatch.setattr(m, "get_asset_balance", fake_balance)
+        monkeypatch.setattr(m, "wei_to_token", lambda wei, *a, **kw: f"{wei}wei")
+        monkeypatch.setattr(m.time, "sleep", lambda s: None)
+        m._wait_for_native_funds(
+            ledger_api=object(), address="0xpe", chain_str="gnosis",
+            recipient_name="Pearl master EOA",
+        )
+        out = capsys.readouterr().out
+        # Outage was logged and the loop continued (didn't crash).
+        assert "balance read failed" in out
+        assert "rpc 502" in out
+        # Final detection still happened.
+        assert "Detected 250wei arrived" in out
+
+    def test_create_pearl_safe_propagates_non_funds_error(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A non-funds error MUST surface to the caller (which wraps it
+        as `_Unmigratable` / `_DrainFailure`) rather than spinning the
+        wait loop on an unrelated failure that won't ever cure."""
+        m, FakeChain, _ = orch
+        def create_safe(*, chain: Any, rpc: Any) -> None:
+            raise RuntimeError("rpc rejected")
+        pearl = types.SimpleNamespace(
+            safes={}, create_safe=create_safe, address="0xpe",
+        )
+        with pytest.raises(RuntimeError, match="rpc rejected"):
+            m._create_pearl_safe_with_funds_wait(
+                pearl_wallet=pearl,
+                chain=FakeChain.GNOSIS,
+                chain_str="gnosis",
+                rpc="https://rpc/gnosis",
+                ledger_api=object(),
+            )
 
 
 class TestDrainMaster:
@@ -4043,10 +4311,13 @@ class TestDrainMaster:
             pearl_safes[chain] = "0xpl"
 
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=lambda **kw: {})
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=lambda **kw: {})
         pearl = types.SimpleNamespace(safes=pearl_safes,
                                       create_safe=fake_create_safe,
-                                      address="0xpe")
+                                      address="0xpe",
+                                      ledger_api=lambda **kw: object())
         m._drain_master(
             qs_wallet=qs, pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc/gnosis"},
@@ -4062,7 +4333,9 @@ class TestDrainMaster:
         "nothing to drain" and "silently dropped"."""
         m, FakeChain, _ = orch
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=lambda **kw: {})
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=lambda **kw: {})
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
@@ -4079,7 +4352,9 @@ class TestDrainMaster:
             called.append({"to": withdrawal_address, "from_safe": from_safe})
             return {"0xtoken": 100}
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=fake_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=fake_drain)
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
@@ -4097,7 +4372,9 @@ class TestDrainMaster:
                 raise RuntimeError("safe drain boom")
             return {}
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=fake_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=fake_drain)
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
@@ -4115,7 +4392,9 @@ class TestDrainMaster:
                 raise RuntimeError("eoa drain boom")
             return {}
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=fake_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=fake_drain)
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
@@ -4142,10 +4421,13 @@ class TestDrainMaster:
             return {}
 
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=fake_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=fake_drain)
         pearl = types.SimpleNamespace(safes=pearl_safes,
                                       create_safe=fake_create_safe,
-                                      address="0xpe")
+                                      address="0xpe",
+                                      ledger_api=lambda **kw: object())
         failures = m._drain_master(
             qs_wallet=qs, pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc.example/gnosis"},
@@ -4171,7 +4453,9 @@ class TestDrainMaster:
         def buggy_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict:
             raise bug_cls("simulated middleware refactor bug")
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=buggy_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=buggy_drain)
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         with pytest.raises(bug_cls):
@@ -4188,9 +4472,12 @@ class TestDrainMaster:
         def buggy_create(*, chain: Any, rpc: Any) -> None:
             raise bug_cls("simulated middleware refactor bug")
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=lambda **kw: {})
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=lambda **kw: {})
         pearl = types.SimpleNamespace(safes={}, create_safe=buggy_create,
-                                      address="0xpe")
+                                      address="0xpe",
+                                      ledger_api=lambda **kw: object())
         with pytest.raises(bug_cls):
             m._drain_master(
                 qs_wallet=qs, pearl_wallet=pearl,
@@ -4205,8 +4492,11 @@ class TestDrainMaster:
         def boom(*, chain: Any, rpc: Any) -> None:
             raise RuntimeError("create reverted")
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes={}, create_safe=boom, address="0xpe")
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=lambda **kw: {})
+        pearl = types.SimpleNamespace(safes={}, create_safe=boom, address="0xpe",
+                                      ledger_api=lambda **kw: object())
         # Provide an RPC so the create_safe boom is reached (new pre-check
         # would short-circuit otherwise).
         failures = m._drain_master(
@@ -4231,9 +4521,12 @@ class TestDrainMaster:
         def fake_create_safe(*, chain: Any, rpc: Any) -> None:
             creates.append(chain)
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=lambda **kw: {})
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=lambda **kw: {})
         pearl = types.SimpleNamespace(safes={}, create_safe=fake_create_safe,
-                                      address="0xpe")
+                                      address="0xpe",
+                                      ledger_api=lambda **kw: object())
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl, chain_rpcs={})
         # create_safe MUST NOT have been called with rpc=None.
         assert creates == []
@@ -4262,10 +4555,12 @@ class TestDrainMaster:
         qs = types.SimpleNamespace(
             safes={FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o"},
             address="0xqs_eoa", drain=fake_drain,
+            ledger_api=lambda **kw: object(),
         )
         pearl = types.SimpleNamespace(
             safes={FakeChain.OPTIMISM: "0xpl-o"},   # missing GNOSIS
             create_safe=fake_create_safe, address="0xpe",
+            ledger_api=lambda **kw: object(),
         )
         failures = m._drain_master(
             qs_wallet=qs, pearl_wallet=pearl,
@@ -4296,7 +4591,9 @@ class TestDrainMaster:
                 raise RuntimeError("safe drain boom")
             return {}
         qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa", drain=fake_drain)
+                                   address="0xqs_eoa",
+                                   ledger_api=lambda **kw: object(),
+                                   drain=fake_drain)
         pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
                                       address="0xpe")
         m._drain_master(qs_wallet=qs, pearl_wallet=pearl)

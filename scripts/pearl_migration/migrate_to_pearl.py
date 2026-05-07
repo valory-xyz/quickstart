@@ -33,6 +33,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
@@ -48,6 +49,7 @@ from typing import (
     Type,
 )
 
+from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, OnChainState
 from operate.quickstart.utils import (
     print_section,
@@ -55,6 +57,7 @@ from operate.quickstart.utils import (
     wei_to_token,
 )
 from operate.services.service import Service
+from operate.utils.gnosis import get_asset_balance
 
 # Programming bugs we DO NOT want wrapped as `_Unmigratable("NFT transfer
 # failed: ...")`. Letting these propagate surfaces the real fault (with a
@@ -101,6 +104,155 @@ def _wrap_step_failure(
     _reraise_if_programming_bug(exc)
     return _Unmigratable(
         service_id=sid, chain=chain, reason=f"{prefix}: {exc}.",
+    )
+
+
+# Poll cadence for `_wait_for_native_funds`. Five seconds matches the
+# olas-operate-middleware `ask_funds_in_address` UX (run_service.py:597)
+# closely enough for an interactive migration script while staying gentle
+# on RPC providers — Safe deployment is a one-shot, not a hot loop.
+_FUNDS_POLL_INTERVAL_SECONDS = 5
+
+
+def _is_insufficient_funds_error(exc: BaseException) -> bool:
+    """Detect the middleware's "no funds" failure so we can wait for the
+    user to top up instead of marking the service un-migratable.
+
+    olas-operate-middleware raises a plain `RuntimeError` (no dedicated
+    exception class) when an EOA can't pay gas — message-matching is the
+    only available signal. We tolerate the two known phrasings and fall
+    through to the generic `_Unmigratable` path on anything else, so a
+    new shape from the middleware degrades to the prior behaviour rather
+    than looping forever on an unrelated error.
+    """
+    msg = str(exc).lower()
+    return (
+        "does not have any funds" in msg
+        or "insufficient funds" in msg
+    )
+
+
+def _wait_for_native_funds(
+    *,
+    ledger_api: Any,
+    address: str,
+    chain_str: str,
+    recipient_name: str,
+    log_indent: str = "    ",
+) -> None:
+    """Block until `address` native balance increases on `chain_str`.
+
+    Mirrors `ask_funds_in_address` from olas-operate-middleware
+    (run_service.py:597). We can't compute the exact required balance
+    for the next on-chain op cheaply (gas price varies, and the
+    middleware doesn't expose it), so we wait for ANY balance increase
+    and let the caller re-attempt. `_retry_on_funds_shortage`'s outer
+    loop is the source of truth: if more funds are still needed, the
+    next attempt will fail and re-enter this wait.
+    """
+    current = get_asset_balance(ledger_api, ZERO_ADDRESS, address)
+    info(
+        f"{log_indent}[{chain_str}] {recipient_name} {address} needs "
+        f"native funds to make migration transactions (current balance: "
+        f"{wei_to_token(current, chain_str, ZERO_ADDRESS)})."
+    )
+    info(
+        f"{log_indent}[{chain_str}] Please transfer some native funds to "
+        f"{address}; this run will continue automatically. "
+        "(Ctrl-C to abort.)"
+    )
+    while True:
+        time.sleep(_FUNDS_POLL_INTERVAL_SECONDS)
+        # RPC outages mid-wait must not crash the migration with a
+        # confusing trace — the user may have already started the
+        # top-up tx. Warn and keep polling; the next poll will see the
+        # arrival once the RPC recovers.
+        try:
+            new = get_asset_balance(ledger_api, ZERO_ADDRESS, address)
+        except Exception as exc:  # pylint: disable=broad-except
+            _reraise_if_programming_bug(exc)
+            warn(
+                f"{log_indent}[{chain_str}] balance read failed "
+                f"({exc}); will retry in {_FUNDS_POLL_INTERVAL_SECONDS}s."
+            )
+            continue
+        if new > current:
+            delta = new - current
+            info(
+                f"{log_indent}[{chain_str}] Detected "
+                f"{wei_to_token(delta, chain_str, ZERO_ADDRESS)} arrived; "
+                "retrying."
+            )
+            return
+
+
+def _retry_on_funds_shortage(
+    fn: Callable[[], Any],
+    *,
+    ledger_api: Any,
+    address: str,
+    chain_str: str,
+    recipient_name: str,
+    log_indent: str = "    ",
+) -> Any:
+    """Run `fn`, blocking on insufficient-funds errors with a
+    wait-and-retry loop against `address`.
+
+    Used at the four signing sites where the middleware actually
+    propagates funds errors: `_step_terminate`, `_step_transfer_nft`,
+    `_step_swap_service_safe_owner`, and the two `pearl_wallet.create_safe`
+    calls (via `_create_pearl_safe_with_funds_wait`). Drain is NOT
+    wrapped — middleware's drain swallows per-asset errors internally,
+    so the wait would never engage; see `_drain_master` for the rationale.
+
+    Non-funds errors and programming bugs propagate; the caller wraps
+    those with the right granularity (per-service vs per-chain).
+    """
+    while True:
+        try:
+            return fn()
+        except Exception as exc:  # pylint: disable=broad-except
+            _reraise_if_programming_bug(exc)
+            if not _is_insufficient_funds_error(exc):
+                raise
+            warn(
+                f"{log_indent}{recipient_name} {address} has insufficient "
+                f"funds on {chain_str}: {exc}"
+            )
+            _wait_for_native_funds(
+                ledger_api=ledger_api,
+                address=address,
+                chain_str=chain_str,
+                recipient_name=recipient_name,
+                log_indent=log_indent,
+            )
+
+
+def _create_pearl_safe_with_funds_wait(
+    *,
+    pearl_wallet: Any,
+    chain: Any,
+    chain_str: str,
+    rpc: str,
+    ledger_api: Any,
+    log_indent: str = "    ",
+) -> None:
+    """Create the Pearl master Safe on `chain`, blocking on insufficient
+    funds with a wait-and-retry loop.
+
+    On non-funds errors the original exception is re-raised so the caller
+    can wrap it with the right granularity (`_Unmigratable` per-service
+    on the migration path, `_DrainFailure` on the drain path). Programming
+    bugs propagate as real tracebacks.
+    """
+    info(f"{log_indent}Pearl has no master Safe on {chain_str}; creating one.")
+    _retry_on_funds_shortage(
+        lambda: pearl_wallet.create_safe(chain=chain, rpc=rpc),
+        ledger_api=ledger_api,
+        address=pearl_wallet.address,
+        chain_str=chain_str,
+        recipient_name="Pearl master EOA",
+        log_indent=log_indent,
     )
 
 
@@ -693,6 +845,7 @@ def _step_terminate(
     *, manager: "ServiceManager", service: "Service", sid: str, chain_str: str,
     ensure_signable,                            # callable[[], None]
     on_chain_state_cls: OnChainState,
+    ledger_api: Any, qs_address: str,
 ) -> None:
     """Move on-chain to PRE_REGISTRATION (idempotent).
 
@@ -705,8 +858,12 @@ def _step_terminate(
         return
     ensure_signable()
     try:
-        manager.terminate_service_on_chain_from_safe(
-            service_config_id=sid, chain=chain_str,
+        _retry_on_funds_shortage(
+            lambda: manager.terminate_service_on_chain_from_safe(
+                service_config_id=sid, chain=chain_str,
+            ),
+            ledger_api=ledger_api, address=qs_address, chain_str=chain_str,
+            recipient_name="Quickstart master EOA",
         )
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
@@ -772,12 +929,16 @@ def _step_transfer_nft(
     ensure_signable()
     info(f"  transferring service NFT {token_id} {qs_master_safe} -> {pearl_master_safe}")
     try:
-        transfer_service_nft(
-            ledger_api=ledger_api, crypto=qs_wallet.crypto,
-            service_registry_address=registry_addr,
-            qs_master_safe=qs_master_safe,
-            pearl_master_safe=pearl_master_safe,
-            service_id=token_id,
+        _retry_on_funds_shortage(
+            lambda: transfer_service_nft(
+                ledger_api=ledger_api, crypto=qs_wallet.crypto,
+                service_registry_address=registry_addr,
+                qs_master_safe=qs_master_safe,
+                pearl_master_safe=pearl_master_safe,
+                service_id=token_id,
+            ),
+            ledger_api=ledger_api, address=qs_wallet.address,
+            chain_str=chain_str, recipient_name="Quickstart master EOA",
         )
     except PostConditionUnknown as exc:
         # Distinct from "inner reverted": tx submitted, but the post-tx
@@ -833,10 +994,14 @@ def _step_swap_service_safe_owner(
     ensure_signable()
     info(f"  swapping owner on service Safe {service_safe}")
     try:
-        swap_service_safe_owner(
-            ledger_api=ledger_api, crypto=qs_wallet.crypto,
-            service_safe=service_safe,
-            old_owner=qs_master_safe, new_owner=pearl_master_safe,
+        _retry_on_funds_shortage(
+            lambda: swap_service_safe_owner(
+                ledger_api=ledger_api, crypto=qs_wallet.crypto,
+                service_safe=service_safe,
+                old_owner=qs_master_safe, new_owner=pearl_master_safe,
+            ),
+            ledger_api=ledger_api, address=qs_wallet.address,
+            chain_str=chain_str, recipient_name="Quickstart master EOA",
         )
     except PostConditionUnknown as exc:
         # State is INDETERMINATE — execTransaction submitted but the
@@ -941,12 +1106,19 @@ def _migrate_one_service(
             )
         # Ensure Pearl has a master Safe on this chain. `create_safe` is
         # the same factory that bootstraps Pearl on a new chain — required
-        # before the Safe owner swap can name a real `new_owner`.
+        # before the Safe owner swap can name a real `new_owner`. Funding
+        # is the common failure here (Pearl's master EOA is fresh): block
+        # and let the user top up rather than abort the whole service.
         if chain not in pearl_wallet.safes:
-            info(f"    Pearl has no master Safe on {chain_str}; creating one.")
             try:
-                pearl_wallet.create_safe(
-                    chain=chain, rpc=chain_config.ledger_config.rpc,
+                _create_pearl_safe_with_funds_wait(
+                    pearl_wallet=pearl_wallet,
+                    chain=chain,
+                    chain_str=chain_str,
+                    rpc=chain_config.ledger_config.rpc,
+                    ledger_api=pearl_wallet.ledger_api(
+                        chain=chain, rpc=chain_config.ledger_config.rpc,
+                    ),
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 _reraise_if_programming_bug(exc)
@@ -1010,6 +1182,7 @@ def _migrate_one_service(
         _step_terminate(
             manager=manager, service=service, sid=sid, chain_str=chain_str,
             ensure_signable=_ensure_signable, on_chain_state_cls=OnChainState,
+            ledger_api=_ledger_api(), qs_address=qs_wallet.address,
         )
         _step_transfer_nft(
             ledger_api=_ledger_api(), qs_wallet=qs_wallet,
@@ -1085,9 +1258,15 @@ def _drain_master(
                            "drain into.",
                 ))
                 continue
-            info(f"  Pearl has no master Safe on {chain.name}; creating one.")
             try:
-                pearl_wallet.create_safe(chain=chain, rpc=rpc)
+                _create_pearl_safe_with_funds_wait(
+                    pearl_wallet=pearl_wallet,
+                    chain=chain,
+                    chain_str=chain.name,
+                    rpc=rpc,
+                    ledger_api=pearl_wallet.ledger_api(chain=chain, rpc=rpc),
+                    log_indent="  ",
+                )
             except Exception as exc:  # pylint: disable=broad-except
                 _reraise_if_programming_bug(exc)
                 warn(f"  could not create Pearl Safe on {chain.name}: {exc}")
@@ -1099,6 +1278,17 @@ def _drain_master(
                 ))
                 continue
 
+        # NOTE: `qs_wallet.drain` is NOT wrapped in `_retry_on_funds_shortage`.
+        # Middleware's drain catches per-asset transfer exceptions
+        # internally (`except Exception: logger.warning(...)` around the
+        # per-asset `self.transfer` call in master.py's `MasterWallet.drain`)
+        # and continues to the next asset — funds shortages never propagate
+        # out of `drain`. Wrapping it here would be dead code for the
+        # funds-wait case. If the qs EOA runs out of gas mid-drain, drain
+        # logs warnings, returns whatever moved before the failure(s), and
+        # the user sees a partial / empty `moved` dict. They can re-run
+        # after topping up; the drain is idempotent (per-asset balance
+        # check before each transfer).
         # Master Safe -> Pearl master Safe (Pearl Safe receives ERC20s + native).
         info(f"  [{chain.name}] master Safe -> Pearl master Safe ({pearl_wallet.safes[chain]})")
         try:
