@@ -104,8 +104,8 @@ class StakingBaseTestService(BaseTestService):
     def get_staking_config_settings(self) -> dict:
         """Get config specific settings with updated staking handler."""
         settings = get_config_specific_settings(self.config_path)
-        if r"Enter your choice" in settings["prompts"]:
-            settings["prompts"].pop(r"Enter your choice", None)
+        base_choice_key = r"Enter your choice\s*\(\s*\d+\s*-\s*\d+\s*\)\s*:\s*$"
+        settings["prompts"].pop(base_choice_key, None)
         settings["prompts"][r"Enter your choice \(1 - \d+\):"] = self.handle_staking_choice
         return settings
     

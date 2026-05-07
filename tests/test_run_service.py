@@ -605,9 +605,9 @@ def get_base_config(config_path: str = "") -> dict:
         r"Please input your password \(or press enter\)\:": base_config["TEST_PASSWORD"],
         r"Please confirm your password\:": base_config["TEST_PASSWORD"],
         r"Enter local user account password \[hidden input\]\:": base_config["TEST_PASSWORD"],
-        r"Enter your choice": base_config["STAKING_CHOICE"],
+        r"Enter your choice\s*\(\s*\d+\s*-\s*\d+\s*\)\s*:\s*$": base_config["STAKING_CHOICE"],
         r"Please input your backup owner \(leave empty to skip\)\:": base_config["BACKUP_WALLET"],
-        r"Press enter to continue": "\n",
+        r"Press enter to continue\.*\s*$": "\n",
         r"Please enter .*(?:\[hidden input\])?:\s*$": lambda output, logger: handle_env_var_prompt(output, logger, config_path)
     }
 
