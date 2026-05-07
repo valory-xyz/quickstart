@@ -73,6 +73,7 @@ _PROGRAMMING_BUGS: Tuple[Type[BaseException], ...] = (
     AttributeError,
     NameError,
     ImportError,
+    AssertionError,
 )
 
 
@@ -325,7 +326,10 @@ from scripts.pearl_migration.stop import (
     force_remove_known_containers,
     stop_via_middleware,
 )
-from scripts.pearl_migration.wallet import align_quickstart_password
+from scripts.pearl_migration.wallet import (
+    align_quickstart_password,
+    align_user_account_to_wallet,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +490,9 @@ def _load_wallet(
     # Password good; now safe to build the full app (with migrations).
     app = store.operate_app(password=pw)
     wallet = app.wallet_manager.load(LedgerType.ETHEREUM)
+    # Align `user.json` to the wallet password at the source — see
+    # `align_user_account_to_wallet` for why.
+    align_user_account_to_wallet(app)
     return app, wallet
 
 
@@ -726,11 +733,19 @@ def _run_mode_b(
         )
         if not yes_no("Proceed with re-encryption?", default=True):
             fatal("Migration aborted by user; nothing on-chain has changed.")
-        align_quickstart_password(
-            qs_app=qs_app,
-            qs_wallet=qs_wallet,
-            new_password=pearl_app.password,
-        )
+        try:
+            align_quickstart_password(
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password=pearl_app.password,
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            _reraise_if_programming_bug(exc)
+            fatal(
+                f"password alignment failed: {exc}. See the warning above "
+                "for the specific recovery steps; nothing on-chain has "
+                "changed yet."
+            )
 
     fix_root_ownership(disc.quickstart)
 

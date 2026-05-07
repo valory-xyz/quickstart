@@ -9,6 +9,7 @@ keeps satisfying `--cov-fail-under=100`.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -920,7 +921,7 @@ class TestAlignQuickstartPassword:
         )
         keys_manager = types.SimpleNamespace(path=keys_dir, password=old_pw)
         qs_app = types.SimpleNamespace(
-            password=old_pw, keys_manager=keys_manager,
+            password=old_pw, keys_manager=keys_manager, user_account=None,
         )
 
         wallet_mod.align_quickstart_password(
@@ -980,6 +981,7 @@ class TestAlignQuickstartPassword:
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+            user_account=None,
         )
         with pytest.raises(RuntimeError, match="disk full"):
             wallet_mod.align_quickstart_password(
@@ -1045,6 +1047,7 @@ class TestAlignQuickstartPassword:
         qs_app = types.SimpleNamespace(
             password=old_pw,
             keys_manager=types.SimpleNamespace(path=keys_dir, password=old_pw),
+            user_account=None,
         )
         with pytest.raises(RuntimeError, match="io error mid-walk"):
             wallet_mod.align_quickstart_password(
@@ -1083,7 +1086,9 @@ class TestAlignQuickstartPassword:
         keys_manager = types.SimpleNamespace(
             path=operate_root / "absent_keys", password="old",
         )
-        qs_app = types.SimpleNamespace(password="old", keys_manager=keys_manager)
+        qs_app = types.SimpleNamespace(
+            password="old", keys_manager=keys_manager, user_account=None,
+        )
         wallet_mod.align_quickstart_password(
             qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
         )
@@ -1109,6 +1114,7 @@ class TestAlignQuickstartPassword:
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+            user_account=None,
         )
         # Should not raise — subdir gets skipped silently.
         wallet_mod.align_quickstart_password(
@@ -1139,6 +1145,7 @@ class TestAlignQuickstartPassword:
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(path=keys_dir, password="old"),
+            user_account=None,
         )
         called: list[Any] = []
         from unittest.mock import patch
@@ -1173,6 +1180,7 @@ class TestAlignQuickstartPassword:
         qs_app: Any = types.SimpleNamespace(
             password="real-old",
             keys_manager=types.SimpleNamespace(path=keys_dir, password="real-old"),
+            user_account=None,
         )
         def mutate_password(new: str) -> None:
             qs_app.password = new
@@ -1196,6 +1204,119 @@ class TestAlignQuickstartPassword:
             "old_password must be captured BEFORE update_password rotates it; "
             f"got {captured_old}"
         )
+
+    def test_invokes_user_account_alignment_after_rotation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """After rotating the wallet+keys to Pearl's password,
+        `user.json` must be re-aligned. Without this, qs's `user.json`
+        still hashes the OLD pwd and middleware's
+        `ask_password_if_needed` would diverge from the freshly-rotated
+        wallet — re-introducing the same DecryptError-via-OnChainHelper
+        failure mode that the initial `_load_wallet` alignment fixes.
+        """
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        wallets_dir.mkdir(parents=True)
+
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
+        qs_app = types.SimpleNamespace(
+            password="old",
+            keys_manager=types.SimpleNamespace(
+                path=operate_root / "absent_keys", password="old",
+            ),
+            user_account=None,
+        )
+
+        align_calls: list[Any] = []
+        monkeypatch.setattr(
+            wallet_mod, "align_user_account_to_wallet",
+            lambda app: align_calls.append((app, app.password)),
+        )
+
+        wallet_mod.align_quickstart_password(
+            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+        )
+
+        assert align_calls == [(qs_app, "new")], (
+            "align_user_account_to_wallet must run AFTER qs_app.password is "
+            "rotated to Pearl's password — otherwise it would align "
+            "user.json to the now-stale qs password."
+        )
+
+    def test_alignment_failure_warns_about_keys_already_rotated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If `align_user_account_to_wallet` raises AFTER the wallet+keys
+        are already rotated, the warn message must NOT instruct the user
+        to restore from the snapshot — that would put wallet/keys back
+        to the old password while `qs_app.password` in-memory thinks
+        it's the new one. The alignment is OUTSIDE the snapshot try
+        for this reason; the message must explicitly tell the user not
+        to restore.
+        """
+        from scripts.pearl_migration import wallet as wallet_mod
+
+        operate_root = tmp_path / ".operate"
+        wallets_dir = operate_root / "wallets"
+        wallets_dir.mkdir(parents=True)
+
+        qs_wallet = types.SimpleNamespace(
+            path=wallets_dir, update_password=lambda new: None,
+        )
+        qs_app = types.SimpleNamespace(
+            password="old",
+            keys_manager=types.SimpleNamespace(
+                path=operate_root / "absent_keys", password="old",
+            ),
+            user_account=None,
+        )
+
+        warn_calls: list[str] = []
+        monkeypatch.setattr(wallet_mod, "warn", lambda msg: warn_calls.append(msg))
+
+        # Capture qs_app.password at the moment alignment fires. If
+        # `align_user_account_to_wallet` were ever moved back inside
+        # the snapshot try/except, this snapshot would still see "old"
+        # because the snapshot's exception handler short-circuits the
+        # rotation block before line 172's `qs_app.password = new`.
+        # Asserting "new" here is the structural proof that alignment
+        # runs AFTER the rotation, not during/before it — which is the
+        # entire reason the call was moved out in the first place.
+        password_at_alignment: list[str] = []
+
+        def fail_alignment(app: Any) -> None:
+            password_at_alignment.append(app.password)
+            raise OSError("disk full")
+        monkeypatch.setattr(
+            wallet_mod, "align_user_account_to_wallet", fail_alignment,
+        )
+
+        with pytest.raises(OSError, match="disk full"):
+            wallet_mod.align_quickstart_password(
+                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            )
+
+        # Structural placement assertion: alignment ran on the
+        # post-rotation app state, not the pre-rotation one.
+        assert password_at_alignment == ["new"], (
+            f"alignment fired with qs_app.password={password_at_alignment!r}; "
+            "expected 'new' (placement: AFTER rotation, OUTSIDE snapshot try)"
+        )
+
+        # The warn must be the alignment-specific one (not the snapshot-
+        # recovery one), and must explicitly warn against restore.
+        assert any("user.json hash failed" in m for m in warn_calls), warn_calls
+        assert any("Do NOT restore" in m for m in warn_calls), warn_calls
+        # And must NOT print the snapshot-recovery `rm -rf wallets/ keys/`
+        # message — that'd point the user at the wrong recovery.
+        assert not any(
+            "Recover with: rm -rf" in m for m in warn_calls
+        ), warn_calls
 
 
 # ---------------------------------------------------------------------------
@@ -1462,17 +1583,21 @@ class TestPromptsExtras:
 # ---------------------------------------------------------------------------
 
 class TestStop:
-    def test_stop_via_middleware_calls_into_module(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from scripts.pearl_migration import stop
-
+    @staticmethod
+    def _patch_middleware_stop(
+        monkeypatch: pytest.MonkeyPatch,
+        impl: Any,
+    ) -> dict[str, Any]:
+        """Stub `operate.quickstart.stop_service.stop_service` with `impl`."""
         called: dict[str, Any] = {}
         fake_quickstart = types.ModuleType("operate.quickstart")
         fake_stop = types.ModuleType("operate.quickstart.stop_service")
+
         def fake_stop_service(operate: Any, config_path: str) -> None:
             called["operate"] = operate
             called["config_path"] = config_path
+            impl(operate, config_path)
+
         fake_stop.stop_service = fake_stop_service  # type: ignore[attr-defined]
         operate_pkg = sys.modules.get("operate") or types.ModuleType("operate")
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
@@ -1480,9 +1605,123 @@ class TestStop:
         monkeypatch.setitem(
             sys.modules, "operate.quickstart.stop_service", fake_stop,
         )
+        return called
 
-        stop.stop_via_middleware(operate="OP", config_path="cfg.json")
-        assert called == {"operate": "OP", "config_path": "cfg.json"}
+    def test_stop_via_middleware_calls_into_module(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scripts.pearl_migration import stop
+
+        op = types.SimpleNamespace(password="pw_wallet")
+        called = self._patch_middleware_stop(monkeypatch, lambda o, c: None)
+
+        stop.stop_via_middleware(operate=op, config_path="cfg.json")
+        assert called == {"operate": op, "config_path": "cfg.json"}
+
+    def test_stop_via_middleware_sets_unattended_env_then_restores(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Middleware's `ask_password_if_needed` would prompt
+        interactively for a password we already validated, then
+        overwrite `operate.password` with whatever the user types
+        (validated against `user.json`'s hash, not the wallet keyfile).
+        Plumb `OPERATE_PASSWORD` + `ATTENDED=false` so middleware's
+        `ask_or_get_from_env` reads our wallet-validated password from
+        the env and skips the prompt entirely. Restore the env after
+        so unattended mode doesn't leak into post-stop steps.
+        """
+        from scripts.pearl_migration import stop
+
+        op = types.SimpleNamespace(password="pw_wallet")
+        seen_env: dict[str, Any] = {}
+
+        def capture_env(o: Any, c: str) -> None:
+            seen_env["OPERATE_PASSWORD"] = os.environ.get("OPERATE_PASSWORD")
+            seen_env["ATTENDED"] = os.environ.get("ATTENDED")
+
+        self._patch_middleware_stop(monkeypatch, capture_env)
+        # Ensure clean env: no pre-existing values to surprise the test.
+        monkeypatch.delenv("OPERATE_PASSWORD", raising=False)
+        monkeypatch.delenv("ATTENDED", raising=False)
+
+        stop.stop_via_middleware(operate=op, config_path="cfg.json")
+
+        assert seen_env == {
+            "OPERATE_PASSWORD": "pw_wallet", "ATTENDED": "false",
+        }
+        # Env restored to "absent" after the call — middleware's
+        # unattended mode must not leak into anything else.
+        assert "OPERATE_PASSWORD" not in os.environ
+        assert "ATTENDED" not in os.environ
+
+    def test_stop_via_middleware_restores_preexisting_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If the user already had `OPERATE_PASSWORD` / `ATTENDED` set
+        (e.g. running unattended via env), restore their original values
+        rather than deleting the env entries.
+        """
+        from scripts.pearl_migration import stop
+
+        op = types.SimpleNamespace(password="pw_wallet")
+        monkeypatch.setenv("OPERATE_PASSWORD", "user_pre_existing")
+        monkeypatch.setenv("ATTENDED", "true")
+
+        self._patch_middleware_stop(monkeypatch, lambda o, c: None)
+
+        stop.stop_via_middleware(operate=op, config_path="cfg.json")
+
+        assert os.environ["OPERATE_PASSWORD"] == "user_pre_existing"
+        assert os.environ["ATTENDED"] == "true"
+
+    def test_stop_via_middleware_restores_env_on_exception(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Env restoration must happen via `finally` even when middleware
+        raises — leaking unattended mode would silently degrade later
+        prompts (e.g. RPC re-entry) into "raise on missing env var"."""
+        from scripts.pearl_migration import stop
+
+        op = types.SimpleNamespace(password="pw_wallet")
+        monkeypatch.delenv("OPERATE_PASSWORD", raising=False)
+        monkeypatch.delenv("ATTENDED", raising=False)
+
+        def raising(o: Any, c: str) -> None:
+            raise RuntimeError("boom")
+
+        self._patch_middleware_stop(monkeypatch, raising)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            stop.stop_via_middleware(operate=op, config_path="cfg.json")
+        assert "OPERATE_PASSWORD" not in os.environ
+        assert "ATTENDED" not in os.environ
+
+    def test_stop_via_middleware_no_env_set_when_password_unset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If `operate.password` is `None` (caller didn't pre-validate),
+        don't fabricate an env var — let middleware's interactive
+        prompt run as designed (likely the create-new-user branch)."""
+        from scripts.pearl_migration import stop
+
+        op = types.SimpleNamespace(password=None)
+        seen_env: dict[str, Any] = {}
+
+        def capture_env(o: Any, c: str) -> None:
+            seen_env["OPERATE_PASSWORD"] = os.environ.get("OPERATE_PASSWORD")
+            seen_env["ATTENDED"] = os.environ.get("ATTENDED")
+
+        self._patch_middleware_stop(monkeypatch, capture_env)
+        monkeypatch.delenv("OPERATE_PASSWORD", raising=False)
+        monkeypatch.delenv("ATTENDED", raising=False)
+
+        stop.stop_via_middleware(operate=op, config_path="cfg.json")
+
+        assert seen_env == {"OPERATE_PASSWORD": None, "ATTENDED": None}
 
     def test_force_remove_known_containers_no_leftovers(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2250,7 +2489,14 @@ class TestLoadWallet:
 
         fake_wallet = types.SimpleNamespace(name="loaded")
         fake_wm = types.SimpleNamespace(load=lambda lt: fake_wallet)
-        fake_app = types.SimpleNamespace(wallet_manager=fake_wm, password=None)
+        # `user_account=None` so the alignment helper short-circuits;
+        # the alignment behaviour itself is exercised in
+        # `TestAlignUserAccountToWallet`. Here we just want to assert
+        # `_load_wallet` calls it (next test) without diving into its
+        # internals.
+        fake_app = types.SimpleNamespace(
+            wallet_manager=fake_wm, password=None, user_account=None,
+        )
         operate_cli = sys.modules.setdefault("operate.cli", types.ModuleType("operate.cli"))
         operate_cli.OperateApp = lambda **kw: fake_app  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate.cli", operate_cli)
@@ -2266,6 +2512,45 @@ class TestLoadWallet:
         assert wallet is fake_wallet
         assert app.password == "thepw"
         assert seen == ["wrong", "thepw"]
+
+    def test_invokes_user_account_alignment(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`_load_wallet` must invoke `align_user_account_to_wallet`
+        right after building the app. Without this, a diverged
+        `user.json` would later silently route through middleware's
+        `ask_password_if_needed` and overwrite the wallet-validated
+        password — see `align_user_account_to_wallet` docstring.
+        """
+        m, *_ = orch
+        _write_wallet(tmp_path)
+        store = detect.OperateStore(root=tmp_path)
+
+        self._stub_master_wallet_manager(monkeypatch, valid_password="thepw")
+
+        fake_wallet = types.SimpleNamespace(name="loaded")
+        fake_wm = types.SimpleNamespace(load=lambda lt: fake_wallet)
+        fake_app = types.SimpleNamespace(
+            wallet_manager=fake_wm, password=None, user_account=None,
+        )
+        operate_cli = sys.modules.setdefault("operate.cli", types.ModuleType("operate.cli"))
+        operate_cli.OperateApp = lambda **kw: fake_app  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "operate.cli", operate_cli)
+
+        align_calls: list[Any] = []
+        monkeypatch.setattr(
+            m, "align_user_account_to_wallet",
+            lambda app: align_calls.append(app),
+        )
+        monkeypatch.setattr(m, "ask_password_validating", lambda **kw: "thepw")
+
+        m._load_wallet(store, "label")
+
+        assert align_calls == [fake_app], (
+            "_load_wallet must call align_user_account_to_wallet on the "
+            "freshly-built operate app so user.json/wallet pwd divergence "
+            "is corrected before any middleware op runs."
+        )
 
 
 class TestRunModeA:
@@ -2434,6 +2719,109 @@ class TestRunModeA:
         # Backup sibling exists
         siblings = list((tmp_path / "pl").iterdir())
         assert any(".bak." in p.name for p in siblings)
+
+
+class TestAlignUserAccountToWallet:
+    """`_align_user_account_to_wallet` force-rewrites `user.json`'s hash
+    to match `operate_app.password` so middleware's
+    `ask_password_if_needed` (validates against `user.json`) and our
+    own wallet validation (validates against the keyfile) accept the
+    same input. Without this, divergence between the two — observed in
+    the wild on a QA's install — silently routes through middleware,
+    overwrites `_wallet_manager.password`, and breaks every signing op
+    downstream.
+    """
+
+    @staticmethod
+    def _make_app(*, password: str | None, user_account: Any) -> Any:
+        return types.SimpleNamespace(password=password, user_account=user_account)
+
+    def test_noop_when_user_account_missing(self) -> None:
+        """No `user.json` → middleware will create one in
+        `ask_password_if_needed`'s create-new branch using the
+        `OPERATE_PASSWORD` env var we plumb in `stop_via_middleware`."""
+        from scripts.pearl_migration.wallet import (
+            align_user_account_to_wallet,
+        )
+
+        app = self._make_app(password="pw_wallet", user_account=None)
+        align_user_account_to_wallet(app)
+        # Nothing to assert beyond "didn't crash on None".
+
+    def test_raises_when_password_unset(self) -> None:
+        """`password is None` only fires on a programming bug — every
+        production caller establishes the wallet password before
+        invoking alignment. Raise rather than warn-and-continue: a
+        silent skip would leave `user.json` diverged and resurface as
+        the original "Cannot load private key" failure deep in
+        middleware, which is exactly the regression this helper is
+        meant to prevent.
+        """
+        from scripts.pearl_migration.wallet import (
+            align_user_account_to_wallet,
+        )
+
+        forced: dict[str, Any] = {}
+        ua = types.SimpleNamespace(
+            is_valid=lambda pw: False,
+            force_update=lambda pw: forced.setdefault("called_with", pw),
+        )
+        app = self._make_app(password=None, user_account=ua)
+
+        with pytest.raises(AssertionError, match="programming error"):
+            align_user_account_to_wallet(app)
+        assert forced == {}, "force_update must NOT run when password is None"
+
+    def test_noop_when_already_aligned(self) -> None:
+        """Common case: `user.json` already validates the wallet password.
+        Calling `force_update` would be a wasted argon2 hash + disk write."""
+        from scripts.pearl_migration.wallet import (
+            align_user_account_to_wallet,
+        )
+
+        forced: dict[str, Any] = {}
+
+        def force_update(pw: str) -> None:
+            forced["called_with"] = pw
+
+        ua = types.SimpleNamespace(
+            is_valid=lambda pw: pw == "pw_wallet",
+            force_update=force_update,
+        )
+        app = self._make_app(password="pw_wallet", user_account=ua)
+
+        align_user_account_to_wallet(app)
+        assert forced == {}
+
+    def test_force_updates_when_diverged(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Diverged install: `user.json`'s hash is for `pw_user`, wallet
+        is for `pw_wallet`. After alignment `force_update(pw_wallet)`
+        is called and the user-visible info line names the action so a
+        QA reading the log knows their `user.json` was rewritten.
+        """
+        from scripts.pearl_migration.wallet import (
+            align_user_account_to_wallet,
+        )
+
+        forced: dict[str, Any] = {}
+
+        def force_update(pw: str) -> None:
+            forced["called_with"] = pw
+
+        ua = types.SimpleNamespace(
+            is_valid=lambda pw: pw == "pw_user",
+            force_update=force_update,
+        )
+        app = self._make_app(password="pw_wallet", user_account=ua)
+
+        align_user_account_to_wallet(app)
+
+        assert forced == {"called_with": "pw_wallet"}
+        out = capsys.readouterr().out
+        assert "user.json password" in out
+        assert "aligning" in out.lower()
 
 
 class TestFormatExcChain:
@@ -4713,7 +5101,9 @@ class TestRunModeB:
         monkeypatch.setattr(
             m, "_load_wallet",
             lambda store, label: (
-                types.SimpleNamespace(password=next(passwords)), "WALLET",
+                types.SimpleNamespace(
+                    password=next(passwords), user_account=None,
+                ), "WALLET",
             ),
         )
         align_calls: list[dict[str, Any]] = []
@@ -4754,7 +5144,9 @@ class TestRunModeB:
         monkeypatch.setattr(
             m, "_load_wallet",
             lambda store, label: (
-                types.SimpleNamespace(password=next(passwords)), "WALLET",
+                types.SimpleNamespace(
+                    password=next(passwords), user_account=None,
+                ), "WALLET",
             ),
         )
         align_called = {"n": 0}
@@ -4767,6 +5159,85 @@ class TestRunModeB:
         with pytest.raises(SystemExit):
             m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
         assert align_called["n"] == 0
+
+    def test_password_align_failure_fatals_with_recovery_message(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """If `align_quickstart_password` raises (e.g. disk-full mid
+        rotation, or `force_update` fails on user.json after rotation),
+        `_run_mode_b` must convert the exception into `fatal(...)` with
+        a recovery hint — letting it propagate as a raw traceback would
+        bury the specific `warn` printed inside `align_quickstart_password`
+        that tells the user which recovery path applies.
+        """
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        passwords = iter(["qs-pw", "pearl-pw"])
+        monkeypatch.setattr(
+            m, "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(
+                    password=next(passwords), user_account=None,
+                ), "WALLET",
+            ),
+        )
+
+        def boom(**kw: Any) -> None:
+            raise OSError("disk full")
+        monkeypatch.setattr(m, "align_quickstart_password", boom)
+        monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
+
+        with pytest.raises(SystemExit):
+            m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
+
+        out = capsys.readouterr()
+        combined = out.out + out.err
+        assert "password alignment failed" in combined, combined
+        assert "disk full" in combined, combined
+        assert "nothing on-chain has changed" in combined, combined
+
+    def test_password_align_failure_does_not_swallow_programming_bugs(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`_reraise_if_programming_bug` must run before `fatal(...)`
+        so a `TypeError` / `AttributeError` from a middleware refactor
+        surfaces as a real traceback, not as a `fatal(...)` clean exit
+        that hides the bug under a "user error" framing.
+        """
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        passwords = iter(["qs-pw", "pearl-pw"])
+        monkeypatch.setattr(
+            m, "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(
+                    password=next(passwords), user_account=None,
+                ), "WALLET",
+            ),
+        )
+
+        def attribute_bug(**kw: Any) -> None:
+            raise AttributeError("middleware refactor: .password no longer exists")
+        monkeypatch.setattr(m, "align_quickstart_password", attribute_bug)
+        monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
+
+        with pytest.raises(AttributeError, match="middleware refactor"):
+            m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
 
     def test_dry_run_short_circuits(
         self, orch: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -4796,7 +5267,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -4833,7 +5304,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         def boom(**kw: Any) -> None:
             raise m._Unmigratable(
@@ -4875,7 +5346,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
@@ -4914,7 +5385,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
@@ -4941,7 +5412,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -4990,7 +5461,7 @@ class TestRunModeB:
             chain_configs={"gnosis": chain_config},
         )
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -5039,7 +5510,7 @@ class TestRunModeB:
                               chain_configs={"gnosis": cc_b})
 
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",
@@ -5098,7 +5569,7 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw"), "WALLET"))
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(m, "merge_service",

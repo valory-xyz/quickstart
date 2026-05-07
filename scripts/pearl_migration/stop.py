@@ -14,12 +14,36 @@ if TYPE_CHECKING:
 def stop_via_middleware(operate: "OperateApp", config_path: str) -> None:
     """Defer to the middleware's quickstart `stop_service` flow.
 
-    This composes down the docker stack the way `./stop_service.sh` does,
-    so middleware bookkeeping (DeploymentStatus etc.) is updated correctly.
+    Composes down the docker stack the way `./stop_service.sh` does,
+    so middleware bookkeeping (DeploymentStatus etc.) is updated.
+
+    Middleware's `stop_service` calls `ask_password_if_needed`, which
+    interactively re-prompts for a password we've already validated.
+    Set `OPERATE_PASSWORD` plus `ATTENDED=false` for the duration of
+    the call so middleware reads the password from the env (only when
+    BOTH are set; otherwise `ask_or_get_from_env` raises) and skips
+    the redundant prompt. Restore the env afterwards so unattended
+    mode doesn't leak into post-stop steps. Callers must ensure
+    `user.json`'s hash already matches `operate.password` — see
+    `align_user_account_to_wallet` for the full divergence background;
+    a diverged hash would loop forever in unattended mode.
     """
+    import os
+
     from operate.quickstart.stop_service import stop_service
 
-    stop_service(operate=operate, config_path=config_path)
+    saved_env = {k: os.environ.get(k) for k in ("OPERATE_PASSWORD", "ATTENDED")}
+    if operate.password is not None:
+        os.environ["OPERATE_PASSWORD"] = operate.password
+        os.environ["ATTENDED"] = "false"
+    try:
+        stop_service(operate=operate, config_path=config_path)
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def force_remove_known_containers() -> List[str]:
