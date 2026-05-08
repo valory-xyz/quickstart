@@ -2545,40 +2545,37 @@ pycryptodome = ">=3.10.1,<4.0.0"
 
 [[package]]
 name = "open-aea-ledger-ethereum"
-version = "2.2.3"
+version = "2.1.0"
 description = "Python package wrapping the public and private key cryptography and ledger api of Ethereum."
 optional = false
-python-versions = "<3.15,>=3.10"
+python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "open_aea_ledger_ethereum-2.2.3-py3-none-any.whl", hash = "sha256:1f4cbf53e4df6c447ef6104aadbc9bfe60746f9182f9267e2ca45b7a24017546"},
-    {file = "open_aea_ledger_ethereum-2.2.3.tar.gz", hash = "sha256:e69a4730a9ebeb7bb11c84766e69b05d03c0a8596a04971682721b73af61f40f"},
+    {file = "open_aea_ledger_ethereum-2.1.0-py3-none-any.whl", hash = "sha256:04670f26a86670052af9e4e2e675631d2ac8e40b5cae5143d9808ca36e96172d"},
+    {file = "open_aea_ledger_ethereum-2.1.0.tar.gz", hash = "sha256:56f6ca96036e7afa5ae69958455ad23087d712fbc04a0c05c23704e7449a4bd3"},
 ]
 
 [package.dependencies]
 eth-account = ">=0.13.0,<0.14.0"
+ipfshttpclient = "0.8.0a2"
 open-aea = ">=2.0.0,<3.0.0"
-requests = ">=2.32.5,<3"
 web3 = ">=7.0.0,<8"
-
-[package.extras]
-test-tools = ["docker (==7.1.0)", "pytest (>=7.0,<10)"]
 
 [[package]]
 name = "open-aea-ledger-ethereum-flashbots"
-version = "2.2.0"
+version = "2.1.0"
 description = "Python package extending the default open-aea ethereum ledger plugin to add support for flashbots."
 optional = false
-python-versions = "<3.15,>=3.10"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "open_aea_ledger_ethereum_flashbots-2.2.0-py3-none-any.whl", hash = "sha256:be89c84a7fd5b44dc5992e54525a044fe09849c2084e51a9abfa6b13574df6e3"},
-    {file = "open_aea_ledger_ethereum_flashbots-2.2.0.tar.gz", hash = "sha256:427fcf2911bd3d95df3de2a76fb147a87c8f1cd8f383b0498143a11de25e2d22"},
+    {file = "open_aea_ledger_ethereum_flashbots-2.1.0-py3-none-any.whl", hash = "sha256:800acd6c5a22db7052d53576f719925de89626c147cf1a68982b643a2a11d45e"},
+    {file = "open_aea_ledger_ethereum_flashbots-2.1.0.tar.gz", hash = "sha256:20b7cce44c91636aec32fe311dc466ec79ab01644f9e4b8b4036c12300d43b69"},
 ]
 
 [package.dependencies]
-open-aea-flashbots = ">=2.0.0,<3.0.0"
-open-aea-ledger-ethereum = ">=2.2.0,<2.3.0"
+open-aea-flashbots = ">=2.1.0,<2.2.0"
+open-aea-ledger-ethereum = ">=2.1.0,<2.2.0"
 
 [[package]]
 name = "open-autonomy"
@@ -4503,4 +4500,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "ab4813e62186f003c16cceecd7e95d105a13e92ab4258f12abbdfd3de1515bc1"
+content-hash = "ce98b87f61c6fb6284303d3c115a38459ce809057a28e1b4649181646b36251b"
