@@ -49,7 +49,7 @@ from typing import (
     Type,
 )
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.operate_types import Chain, OnChainState
 from operate.quickstart.utils import (
     print_section,
@@ -307,6 +307,7 @@ from scripts.pearl_migration.filesystem import (
     fresh_copy_store,
     merge_service,
     rename_source_for_rollback,
+    reset_services_staking_to_no_staking,
 )
 from scripts.pearl_migration.prompts import (
     ask_password_validating,
@@ -591,6 +592,18 @@ def _run_mode_a(disc: Discovery, dry_run: bool) -> MigrationOutcome:
     fix_root_ownership(disc.quickstart)
 
     fresh_copy_store(disc.quickstart, disc.pearl.root)
+    # Match Mode B: pin every migrated service's `staking_program_id` to
+    # `no_staking` so Pearl doesn't try to re-apply quickstart's staking
+    # template. Done on the destination so the source `.operate/` we're
+    # about to rename stays an untouched rollback. Re-running is a no-op.
+    updated = reset_services_staking_to_no_staking(
+        OperateStore(root=disc.pearl.root),
+    )
+    if updated:
+        info(
+            f"Reset staking_program_id to no_staking for {len(updated)} "
+            f"service(s): {', '.join(updated)}.",
+        )
     print()
     info("Renaming source `.operate/` so a re-run won't pick it up.")
     rename_source_for_rollback(disc.quickstart)
@@ -1244,6 +1257,30 @@ def _migrate_one_service(
             qs_master_safe=qs_master_safe, pearl_master_safe=pearl_master_safe,
             sid=sid, chain_str=chain_str,
             ensure_signable=_ensure_signable,
+        )
+
+    # All chains migrated. Pin the service's local config to `no_staking`
+    # so Pearl sees the post-migration on-chain reality (PRE_REGISTRATION,
+    # NFT owned by Pearl Safe). It's required because Pearl's FE expects it
+    # to continue the onbarding of this agent.
+    for chain_config in service.chain_configs.values():
+        chain_config.chain_data.user_params.staking_program_id = (
+            NO_STAKING_PROGRAM_ID
+        )
+    try:
+        service.store()
+    except OSError as exc:
+        # On-chain ops have committed; a `_Unmigratable` here skips the
+        # filesystem copy (`merge_service`) and surfaces in the summary
+        # so the user can re-run after fixing the disk/permission issue.
+        raise _Unmigratable(
+            service_id=sid, chain=None,
+            reason=(
+                "on-chain migration committed but local "
+                f"`staking_program_id` write failed: {exc}. Re-run after "
+                "resolving the disk/permission issue; the on-chain steps "
+                "are idempotent."
+            ),
         )
 
 

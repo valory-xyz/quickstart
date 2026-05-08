@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
+from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.services.service import Service
 
 from .detect import OperateStore
@@ -224,6 +225,37 @@ def merge_service(
         keys_skipped=keys_skipped,
         backups_made=backups,
     )
+
+
+def reset_services_staking_to_no_staking(store: OperateStore) -> List[str]:
+    """Pin every service's `staking_program_id` to `no_staking` and persist.
+
+    Uses `OperateStore.services()` (which returns middleware `Service`
+    instances via `Service.load(path)`) and the inherited
+    `LocalResource.store()` — the same mechanism Mode B uses inline in
+    `_migrate_one_service`. Mode A calls this on the destination AFTER
+    `fresh_copy_store` so the source `.operate/` we're about to rename
+    stays an untouched rollback.
+
+    Returns the list of `service_config_id`s that were rewritten.
+    Already-`no_staking` services don't trigger a `store()` so a re-run
+    is a no-op (no spurious mtime bump). Services that fail to load are
+    surfaced via `OperateStore.failed_services()` per existing convention
+    and silently skipped here — re-checking via `services()` would warn
+    about them twice.
+    """
+    updated: List[str] = []
+    for svc in store.services():
+        changed = False
+        for chain_config in svc.chain_configs.values():
+            user_params = chain_config.chain_data.user_params
+            if user_params.staking_program_id != NO_STAKING_PROGRAM_ID:
+                user_params.staking_program_id = NO_STAKING_PROGRAM_ID
+                changed = True
+        if changed:
+            svc.store()
+            updated.append(svc.service_config_id)
+    return updated
 
 
 def rename_source_for_rollback(src: OperateStore) -> Path:

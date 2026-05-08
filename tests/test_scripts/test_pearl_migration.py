@@ -1499,6 +1499,120 @@ class TestFilesystemExtras:
             pytest.fail("MissingAgentKey must be an OSError subclass")
 
 
+class TestResetServicesStakingToNoStaking:
+    """Mode A's equivalent of the in-memory reset that Mode B does via
+    `service.store()` inside `_migrate_one_service`. Both modes must
+    leave Pearl with `staking_program_id = no_staking` so it doesn't
+    re-apply quickstart's staking template post-migration. Implementation
+    reuses `OperateStore.services()` + `Service.store()` — same path Mode B
+    takes — rather than custom JSON munging, so all schema migrations and
+    atomic-write semantics stay in middleware code."""
+
+    def _fake_svc(
+        self,
+        sid: str,
+        *,
+        programs: dict[str, str],
+        store_calls: list[str],
+    ) -> Any:
+        chain_configs = {
+            chain: types.SimpleNamespace(
+                chain_data=types.SimpleNamespace(
+                    user_params=types.SimpleNamespace(
+                        staking_program_id=program,
+                    ),
+                ),
+            )
+            for chain, program in programs.items()
+        }
+        svc = types.SimpleNamespace(
+            service_config_id=sid,
+            chain_configs=chain_configs,
+        )
+        svc.store = lambda: store_calls.append(sid)
+        return svc
+
+    def test_rewrites_every_chain_and_calls_store_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store_calls: list[str] = []
+        svc = self._fake_svc(
+            "sc-aaa",
+            programs={"gnosis": "qs_alpha", "optimism": "qs_beta"},
+            store_calls=store_calls,
+        )
+        store = detect.OperateStore(root=tmp_path)
+        monkeypatch.setattr(
+            detect.OperateStore, "services", lambda self: [svc],
+        )
+        updated = filesystem.reset_services_staking_to_no_staking(store)
+        assert updated == ["sc-aaa"]
+        for chain_config in svc.chain_configs.values():
+            assert (
+                chain_config.chain_data.user_params.staking_program_id
+                == "no_staking"
+            )
+        assert store_calls == ["sc-aaa"], "Service.store() called once per service"
+
+    def test_already_no_staking_is_noop_and_skips_store(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Re-running a migration must not write already-`no_staking`
+        configs — that would touch the file's mtime for no reason and
+        thrash backup/sync tooling."""
+        store_calls: list[str] = []
+        svc = self._fake_svc(
+            "sc-aaa",
+            programs={"gnosis": "no_staking"},
+            store_calls=store_calls,
+        )
+        monkeypatch.setattr(
+            detect.OperateStore, "services", lambda self: [svc],
+        )
+        updated = filesystem.reset_services_staking_to_no_staking(
+            detect.OperateStore(root=tmp_path),
+        )
+        assert updated == []
+        assert store_calls == []
+
+    def test_partial_reset_when_some_chains_already_no_staking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A service spanning multiple chains where one is already
+        `no_staking` and another is not still triggers `store()` — the
+        single un-reset chain is enough to require a write."""
+        store_calls: list[str] = []
+        svc = self._fake_svc(
+            "sc-mixed",
+            programs={"gnosis": "no_staking", "optimism": "qs_beta"},
+            store_calls=store_calls,
+        )
+        monkeypatch.setattr(
+            detect.OperateStore, "services", lambda self: [svc],
+        )
+        updated = filesystem.reset_services_staking_to_no_staking(
+            detect.OperateStore(root=tmp_path),
+        )
+        assert updated == ["sc-mixed"]
+        assert store_calls == ["sc-mixed"]
+        # Both chains end up `no_staking` regardless of pre-state.
+        for chain_config in svc.chain_configs.values():
+            assert (
+                chain_config.chain_data.user_params.staking_program_id
+                == "no_staking"
+            )
+
+    def test_returns_empty_when_no_services(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            detect.OperateStore, "services", lambda self: [],
+        )
+        assert filesystem.reset_services_staking_to_no_staking(
+            detect.OperateStore(root=tmp_path),
+        ) == []
+
+
 # ---------------------------------------------------------------------------
 # prompts.py — extras
 # ---------------------------------------------------------------------------
@@ -2693,6 +2807,56 @@ class TestRunModeA:
         with pytest.raises(SystemExit):
             m._run_mode_a(disc=d, dry_run=False)
 
+    def test_real_run_invokes_staking_reset_against_dest_store(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Mode A (no on-chain step) MUST also leave Pearl with
+        `staking_program_id = no_staking` — symmetric with Mode B's
+        in-memory `service.store()` reset. Verifies wiring: the helper
+        is called against an `OperateStore` rooted at the destination,
+        AFTER `fresh_copy_store` and BEFORE `rename_source_for_rollback`
+        (so the helper sees the freshly-copied dest, and the soon-to-be-
+        renamed source stays an untouched rollback)."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"
+        _write_service(qs_root, "sc-aaa", agent_addresses=["0xa"])
+        _write_key(qs_root, "0xa")
+        _write_wallet(qs_root)
+        pl_root = tmp_path / "pl/.operate"
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root.resolve()),
+            pearl=detect.OperateStore(root=pl_root.resolve()),
+            mode=detect.Mode.FRESH_COPY,
+        )
+        monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+        monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+        # Capture call ordering: the helper must run AFTER the copy
+        # (so dest exists) and BEFORE the source rename (so source is
+        # still at qs_root for any subsequent cleanup).
+        events: list[tuple[str, Any]] = []
+        original_copy = m.fresh_copy_store
+        def spy_copy(src: Any, dest: Path) -> None:
+            events.append(("copy", dest))
+            return original_copy(src, dest)
+        def spy_reset(store: Any) -> list[str]:
+            events.append(("reset", store.root))
+            assert pl_root.resolve().exists(), "reset must run after copy"
+            return ["sc-aaa"]
+        original_rename = m.rename_source_for_rollback
+        def spy_rename(src: Any) -> Path:
+            events.append(("rename", src.root))
+            return original_rename(src)
+        monkeypatch.setattr(m, "fresh_copy_store", spy_copy)
+        monkeypatch.setattr(m, "reset_services_staking_to_no_staking", spy_reset)
+        monkeypatch.setattr(m, "rename_source_for_rollback", spy_rename)
+
+        m._run_mode_a(disc=d, dry_run=False)
+
+        kinds = [e[0] for e in events]
+        assert kinds == ["copy", "reset", "rename"]
+        # Helper was handed an OperateStore rooted at the destination.
+        assert events[1][1] == pl_root.resolve()
+
     def test_real_run_backs_up_existing_empty_pearl(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -3550,12 +3714,24 @@ class TestMigrateOneService:
     def _make_service_obj(
         self, fake_chain_cls: Any, *, multisig: str = "0xms", token: int = 7,
     ) -> Any:
-        chain_data = types.SimpleNamespace(token=token, multisig=multisig)
+        # `user_params` and `store` are required by the post-loop staking
+        # reset in `_migrate_one_service`; pre-populating them with a
+        # non-`no_staking` id lets tests assert the reset actually fired.
+        chain_data = types.SimpleNamespace(
+            token=token,
+            multisig=multisig,
+            user_params=types.SimpleNamespace(
+                staking_program_id="quickstart_beta",
+            ),
+        )
         ledger_config = types.SimpleNamespace(rpc="http://rpc")
         chain_config = types.SimpleNamespace(
             chain_data=chain_data, ledger_config=ledger_config,
         )
-        return types.SimpleNamespace(chain_configs={"gnosis": chain_config})
+        return types.SimpleNamespace(
+            chain_configs={"gnosis": chain_config},
+            store=lambda: None,
+        )
 
     def _setup_manager(
         self, FakeChain: Any, FakeOnChainState: Any,
@@ -3906,15 +4082,22 @@ class TestMigrateOneService:
         m, FakeChain, FakeOnChainState = orch
         # Two distinct chain_configs, distinguished by RPC.
         cc_g = types.SimpleNamespace(
-            chain_data=types.SimpleNamespace(token=1, multisig="0xms-g"),
+            chain_data=types.SimpleNamespace(
+                token=1, multisig="0xms-g",
+                user_params=types.SimpleNamespace(staking_program_id="qsp"),
+            ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/gnosis"),
         )
         cc_o = types.SimpleNamespace(
-            chain_data=types.SimpleNamespace(token=2, multisig="0xms-o"),
+            chain_data=types.SimpleNamespace(
+                token=2, multisig="0xms-o",
+                user_params=types.SimpleNamespace(staking_program_id="qsp"),
+            ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/optimism"),
         )
         svc_obj = types.SimpleNamespace(
             chain_configs={"gnosis": cc_g, "optimism": cc_o},
+            store=lambda: None,
         )
 
         # Record which ledger_config each manager.get_eth_safe_tx_builder
@@ -4003,15 +4186,22 @@ class TestMigrateOneService:
         guard, leaving the late-binding risk on steps 2/3 unverified."""
         m, FakeChain, FakeOnChainState = orch
         cc_g = types.SimpleNamespace(
-            chain_data=types.SimpleNamespace(token=1, multisig="0xms-g"),
+            chain_data=types.SimpleNamespace(
+                token=1, multisig="0xms-g",
+                user_params=types.SimpleNamespace(staking_program_id="qsp"),
+            ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/gnosis"),
         )
         cc_o = types.SimpleNamespace(
-            chain_data=types.SimpleNamespace(token=2, multisig="0xms-o"),
+            chain_data=types.SimpleNamespace(
+                token=2, multisig="0xms-o",
+                user_params=types.SimpleNamespace(staking_program_id="qsp"),
+            ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/optimism"),
         )
         svc_obj = types.SimpleNamespace(
             chain_configs={"gnosis": cc_g, "optimism": cc_o},
+            store=lambda: None,
         )
 
         # Each call to get_eth_safe_tx_builder gets a fresh ledger handle
@@ -4629,6 +4819,113 @@ class TestMigrateOneService:
             config_path=None,
         )
         assert called == []  # config_path None bypasses stop_via_middleware
+
+    def test_resets_staking_program_id_to_no_staking_after_success(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """After all on-chain steps succeed, every chain's
+        `user_params.staking_program_id` is pinned to `no_staking` and the
+        update is persisted via `service.store()` — so Pearl reads the
+        post-migration on-chain reality (PRE_REGISTRATION + Pearl-owned
+        NFT) instead of inheriting quickstart's staking template."""
+        m, FakeChain, FakeOnChainState = orch
+        _, manager = self._setup_manager(FakeChain, FakeOnChainState)
+
+        # Replace the auto-built single-chain svc_obj with a two-chain one
+        # so we can assert ALL chains get reset, not just the first.
+        cc_g = types.SimpleNamespace(
+            chain_data=types.SimpleNamespace(
+                token=1, multisig="0xms-g",
+                user_params=types.SimpleNamespace(staking_program_id="qsp_g"),
+            ),
+            ledger_config=types.SimpleNamespace(rpc="http://rpc/g"),
+        )
+        cc_o = types.SimpleNamespace(
+            chain_data=types.SimpleNamespace(
+                token=2, multisig="0xms-o",
+                user_params=types.SimpleNamespace(staking_program_id="qsp_o"),
+            ),
+            ledger_config=types.SimpleNamespace(rpc="http://rpc/o"),
+        )
+        store_calls: list[Any] = []
+        svc_obj = types.SimpleNamespace(
+            chain_configs={"gnosis": cc_g, "optimism": cc_o},
+            store=lambda: store_calls.append(True),
+        )
+        manager.load = lambda service_config_id: svc_obj  # type: ignore[attr-defined]
+        # Two chains -> the autouse stub returns PRE_REGISTRATION on the
+        # second probe per chain; we need 4 entries total so terminate is
+        # skipped on both chains.
+        manager._get_on_chain_state = (  # type: ignore[attr-defined]
+            lambda s, c: FakeOnChainState.PRE_REGISTRATION
+        )
+        qs_app = types.SimpleNamespace(service_manager=lambda: manager)
+
+        monkeypatch.setattr(m, "stop_via_middleware",
+                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+        # NFT already on Pearl, Safe owner already swapped — keeps the
+        # test focused on the post-loop staking reset, not on-chain branches.
+        monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
+        monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
+
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        m._migrate_one_service(
+            svc=ref, qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR", address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={FakeChain.GNOSIS: "0xqs", FakeChain.OPTIMISM: "0xqs"},
+            ),
+            pearl_wallet=types.SimpleNamespace(
+                safes={FakeChain.GNOSIS: "0xpl", FakeChain.OPTIMISM: "0xpl"},
+            ),
+            config_path=None,
+        )
+        assert cc_g.chain_data.user_params.staking_program_id == "no_staking"
+        assert cc_o.chain_data.user_params.staking_program_id == "no_staking"
+        assert store_calls == [True], "service.store() must be called once"
+
+    def test_staking_reset_store_oserror_raises_unmigratable(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If `service.store()` fails after on-chain ops have committed,
+        a `_Unmigratable` is raised so the filesystem copy is skipped and
+        the user sees the disk-write failure in the summary — instead of
+        silently propagating an OSError that aborts the whole batch."""
+        m, FakeChain, FakeOnChainState = orch
+        _, manager = self._setup_manager(FakeChain, FakeOnChainState)
+
+        def boom() -> None:
+            raise OSError("disk full")
+
+        # Override the auto-built svc_obj's store with a failing variant.
+        manager.load("anything").store = boom  # type: ignore[misc]
+
+        qs_app = types.SimpleNamespace(service_manager=lambda: manager)
+        monkeypatch.setattr(m, "stop_via_middleware",
+                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+        monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
+        monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
+
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        with pytest.raises(m._Unmigratable) as ei:
+            m._migrate_one_service(
+                svc=ref, qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR", address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
+                pearl_wallet=types.SimpleNamespace(
+                    safes={FakeChain.GNOSIS: "0xpl"},
+                ),
+                config_path=None,
+            )
+        assert ei.value.chain is None
+        assert "staking_program_id" in ei.value.reason
+        assert "disk full" in ei.value.reason
 
 
 class TestPearlSafeFundsWait:
