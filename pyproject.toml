@@ -18,7 +18,11 @@ halo = "^0.0.31"
 web3 = "^7.14.1"
 docker = "^7.1.0"
 psutil = "^5.9.8"
-open-aea-ledger-ethereum = "^2.1.0"
+# Pinned to 2.2.3 — 2.2.4 returns plain dict tx receipts where 2.2.3
+# returned AttrDicts, breaking `autonomy/chain/tx.py:258 settle()`'s
+# `.blockNumber` access. Drop the pin once open-aea / open-autonomy ship
+# a fix that handles dict-shaped receipts.
+open-aea-ledger-ethereum = "2.2.3"
 open-autonomy = "0.21.13"
 
 [tool.poetry.group.dev.dependencies]
