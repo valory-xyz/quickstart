@@ -1445,12 +1445,12 @@ def _final_prompt(outcome: MigrationOutcome) -> None:
         print()
         print("  Copy `~/.operate/` from this machine to `~/.operate` on the other")
         print("  machine (same path). Pearl's bundled middleware will auto-migrate")
-        print("  any schema differences on first launch. Then start Pearl on that")
-        print("  machine and enter your master password.")
+        print("  any schema differences on first launch. Then start the latest version")
+        print("  of Pearl on that machine and enter your master password.")
     else:
         print()
-        print("  Start Pearl now and enter your master password. Your migrated")
-        print("  services will appear in the dashboard.")
+        print("  Start the latest version of Pearl now and enter your master password.")
+        print("  Your migrated services will appear in the dashboard.")
 
 
 # ---------------------------------------------------------------------------

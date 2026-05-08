@@ -5898,7 +5898,7 @@ class TestFinalPrompt:
         m, *_ = orch
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
         m._final_prompt(m.MigrationOutcome(migrated=(_fake_service("sc-aaa"),)))
-        assert "Start Pearl" in capsys.readouterr().out
+        assert "Start the latest version of Pearl" in capsys.readouterr().out
 
     def test_no_default_arg_required(self, orch: Any) -> None:
         """`_final_prompt` must require an explicit outcome — the previous
