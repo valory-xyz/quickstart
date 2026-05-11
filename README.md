@@ -3,7 +3,9 @@
 >
 > We are moving to [Pearl](https://pearl.you) as the primary way to run agents on Olas. Pearl supports all the same agents and now also runs on Raspberry Pi.
 >
-> If you are currently running agents on Quickstart, please complete the following steps before 4 May 2026:
+> **The fastest way to migrate is `./migrate_to_pearl.sh`** — it carries your existing service(s), agent keys, master wallet, and on-chain state straight into Pearl's `~/.operate/` so you don't lose your service NFT, your agent's history, or your remaining funds. See [Migrate to Pearl](#migrate-to-pearl) below.
+>
+> If you'd rather migrate manually, the long way is:
 >
 > 1. Stop your running agents
 > 2. Withdraw your funds from Quickstart
@@ -14,6 +16,55 @@
 # Olas AI agents - Quickstart
 
 A quickstart to run Olas AI agents
+
+## Migrate to Pearl
+
+`./migrate_to_pearl.sh` moves your quickstart-managed service(s) into Pearl's `~/.operate/` so Pearl can pick up where Quickstart left off — same on-chain service NFT, same agent EOAs, same persistent runtime state, same remaining funds.
+
+### Usage
+
+```bash
+chmod +x migrate_to_pearl.sh
+
+# Migrate everything in this quickstart's `.operate/`. If only one service
+# is present it's auto-selected; otherwise you'll be asked to pick one or all.
+./migrate_to_pearl.sh
+
+# Or restrict to a single service config (same arg shape as run_service.sh):
+./migrate_to_pearl.sh configs/config_predict_trader.json
+
+# Useful flags:
+./migrate_to_pearl.sh --dry-run                   # discover only, no changes
+./migrate_to_pearl.sh --pearl-home /custom/path   # override the target home
+./migrate_to_pearl.sh --quickstart-home ./.operate
+./migrate_to_pearl.sh --help
+```
+
+### What it does
+
+The script auto-detects which of two modes applies:
+
+- **Fresh copy** — Pearl's `~/.operate/` does not exist (or has no master wallet yet). The whole `.operate/` directory is copied over. Pearl uses your existing master wallet on first launch — same password, same Safes.
+- **Merge** — Pearl already has its own master wallet. Per service it stops the deployment, unstakes/terminates on-chain, transfers the **service NFT** from your quickstart master Safe to Pearl's master Safe, swaps the **service Safe owner** to Pearl's master Safe, then copies the service files. Once all services succeed it drains your quickstart **master Safe + EOA** balances into Pearl's master Safe + EOA per chain.
+
+If any service can't be unstaked yet (e.g. minimum staking duration not elapsed), that service is skipped with a clear message and the master-wallet drains are skipped too — funds stay available for a follow-up run.
+
+### Requirements
+
+Same as `run_service.sh`: Python `>=3.10,<3.15`, Poetry, Docker. The script must be able to talk to the chain RPCs configured for each migrated service. Pearl must **not** be running (the script will refuse if it detects Pearl's daemon on `127.0.0.1:8765`).
+
+### Re-runs and rollback
+
+The script is safe to re-run. Every step checks the actual source of truth before acting (on-chain ownership, Safe owners, balances, file existence), so a re-run after a partial failure resumes from the first incomplete step rather than redoing everything. On collision (e.g. you're retrying a previous migration that already wrote some files), you're prompted to **skip** or **overwrite-with-backup** (`*.bak.<timestamp>`).
+
+After a successful merge, the script offers to rename your source `.operate/` to `.operate.migrated.<timestamp>` so a re-run won't pick it up but the data is preserved as a rollback. Nothing is deleted.
+
+### After migration
+
+The script ends with a yes/no question:
+
+- **"different machine"** → it tells you to copy `~/.operate/` to `~/.operate` on the destination machine. Pearl's bundled middleware will auto-migrate any schema differences on first launch.
+- **"same machine"** → just start Pearl and enter your master password. Your migrated services appear in the dashboard.
 
 ## Compatible Systems
 

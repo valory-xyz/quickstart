@@ -191,6 +191,143 @@ jobs:
           docker logs $container
         done
 
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      migration: ${{ steps.filter.outputs.migration }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need history so the base..head diff resolves on PRs
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Always run on manual dispatch.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Only `pull_request` provides usable BASE/HEAD SHAs. If anyone
+          # adds a `push:` (or other) trigger later, fail loudly rather
+          # than silently misfiring against empty SHAs.
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "::error::changes filter doesn't support event '$EVENT'; add an explicit branch."
+            exit 1
+          fi
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "::error::missing BASE_SHA/HEAD_SHA on pull_request event."
+            exit 1
+          fi
+
+          # Only run the e2e migration job when files that affect it
+          # actually change. poetry.lock is the authoritative pin for the
+          # middleware version (and everything else); any version bump
+          # lands there even if pyproject.toml is also touched.
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -qE \
+            '^(migrate_to_pearl\.sh$|scripts/pearl_migration/|tests/test_migrate_to_pearl\.py$|poetry\.lock$|\.github/workflows/python-tests\.yml$)'; then
+            echo "migration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migration=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e-test-migrate-to-pearl:
+    needs: changes
+    if: needs.changes.outputs.migration == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
+      MODE_RPC: ${{ secrets.MODE_RPC }}
+      OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
+      BASE_RPC: ${{ secrets.BASE_RPC }}
+      TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker
+      run: |
+        sudo systemctl stop docker || true
+        sudo systemctl stop docker.socket || true
+        sudo apt-get remove -y docker docker-engine docker.io containerd runc
+        sudo apt-get update
+        sudo apt-get install -y \
+          apt-transport-https \
+          ca-certificates \
+          curl \
+          gnupg \
+          lsb-release jq
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+          $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        sudo systemctl start docker
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git
+
+    - name: Clean Python cache
+      run: |
+        sudo rm -rf ~/.cache/pip
+        sudo rm -rf ~/.cache/poetry
+        sudo rm -rf .pytest_cache
+        sudo rm -rf .venv
+        sudo rm -rf poetry.lock
+
+    - name: Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+
+    - name: Configure Poetry
+      run: |
+        poetry config virtualenvs.create true
+        poetry config virtualenvs.in-project true
+
+    - name: Create .env file
+      run: |
+        echo "GNOSIS_RPC=${GNOSIS_RPC}" > .env
+        echo "MODE_RPC=${MODE_RPC}" >> .env
+        echo "OPTIMISM_RPC=${OPTIMISM_RPC}" >> .env
+        echo "BASE_RPC=${BASE_RPC}" >> .env
+        echo "TEST_PASSWORD=${TEST_PASSWORD}" >> .env
+
+    - name: Install project dependencies
+      run: |
+        python -m pip install --upgrade pip
+        poetry env use python3.14
+        poetry install --no-interaction
+        poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
+
+    - name: Run test
+      # 90 minutes: deploys 4 services across 2 quickstarts, runs 2 migrations
+      # (Mode A then Mode B with on-chain transfers + drains), then redeploys
+      # all 4 from the merged Pearl `.operate` to verify they start.
+      timeout-minutes: 90
+      run: PYTHONPATH=tests:. poetry run pytest -v tests/test_migrate_to_pearl.py -s --log-cli-level=INFO
+
+    - name: Debug container failure
+      if: failure()
+      run: |
+        docker ps -a
+        for container in $(docker ps -aq); do
+          echo "=== Logs for $container ==="
+          docker logs $container
+        done
+
   unit-tests:
     runs-on: ubuntu-24.04
     strategy:
@@ -241,6 +378,7 @@ jobs:
         PYTHONPATH=. poetry run pytest -v tests \
           --ignore=tests/test_run_service.py \
           --ignore=tests/test_staking_service.py \
+          --ignore=tests/test_migrate_to_pearl.py \
           --cov=scripts \
           --cov-fail-under=100 \
           --cov-report=term-missing \
