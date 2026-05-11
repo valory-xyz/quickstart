@@ -62,10 +62,24 @@ command -v docker >/dev/null 2>&1 ||
   exit 1
 }
 
-docker rm -f abci0 node0 trader_abci_0 trader_tm_0 &> /dev/null ||
+# Verify docker daemon is up (independently of whether any containers exist
+# to clean up — the prior `docker rm -f <names>` form would exit "Docker is
+# not running" whenever the named containers happened to be absent).
+docker info &> /dev/null ||
 { echo >&2 "Docker is not running!";
   exit 1
 }
+
+# Remove any leftover quickstart-managed containers. Fragments mirror
+# scripts/pearl_migration/status.py:QUICKSTART_CONTAINER_FRAGMENTS so both
+# entrypoints converge on the same notion of "what's a quickstart container".
+# `_abci_0` / `_tm_0` catch the per-service variants the middleware emits
+# (`trader_abci_0`, `meme_factory_tm_0`, ...); `abci0` / `node0` catch the
+# pre-`<service>_` legacy names.
+qs_containers=$(docker ps -a --format '{{.Names}}' | grep -E 'abci0|node0|_abci_0|_tm_0' || true)
+if [ -n "$qs_containers" ]; then
+    docker rm -f $qs_containers &> /dev/null
+fi
 
 # own the data directory (if required)
 # this is for migrating from an old version of the agents (using open-autonomy <0.19.9), which used to save these files as root

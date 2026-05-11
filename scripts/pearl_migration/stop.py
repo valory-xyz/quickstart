@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING, List
 
-from .status import QUICKSTART_CONTAINER_NAMES, docker_quickstart_containers
+from .status import QUICKSTART_CONTAINER_FRAGMENTS, docker_quickstart_containers
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -50,8 +50,8 @@ def force_remove_known_containers() -> List[str]:
     """Best-effort cleanup of any quickstart containers still around.
 
     Mirrors the `docker rm -f` block at the top of `run_service.sh`
-    (matching the suffix patterns in `QUICKSTART_CONTAINER_NAMES`) so a
-    half-stopped deployment can't conflict with Pearl picking the
+    (matching the substring fragments in `QUICKSTART_CONTAINER_FRAGMENTS`)
+    so a half-stopped deployment can't conflict with Pearl picking the
     migrated services up.
 
     Returns the list of container names that were forcibly removed.
@@ -87,7 +87,7 @@ def force_remove_known_containers() -> List[str]:
 
 
 __all__ = [
-    "QUICKSTART_CONTAINER_NAMES",
+    "QUICKSTART_CONTAINER_FRAGMENTS",
     "force_remove_known_containers",
     "stop_via_middleware",
 ]

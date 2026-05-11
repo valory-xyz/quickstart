@@ -688,10 +688,21 @@ class MigrationOutcome:
     migrated: Tuple[Service, ...] = ()
     unmigratable: Tuple["_Unmigratable", ...] = ()
     drain_failures: Tuple[_DrainFailure, ...] = ()
+    # True when the user migrated only a subset of the quickstart's
+    # services (e.g. via `--quickstart-config <path>` or by picking a
+    # single entry from the multi-service prompt). The master Safe / EOA
+    # drain is skipped in that case so the unselected services still
+    # have funds for gas, and the source `.operate/` is left in place
+    # so a later run can pick the rest up.
+    subset_selected: bool = False
 
     @property
     def is_complete(self) -> bool:
-        return not self.unmigratable and not self.drain_failures
+        return (
+            not self.unmigratable
+            and not self.drain_failures
+            and not self.subset_selected
+        )
 
     @property
     def migrated_count(self) -> int:
@@ -703,15 +714,26 @@ def _run_mode_b(
     services: List[Service],
     config_path: Optional[str],
     dry_run: bool,
+    subset_selected: bool = False,
 ) -> MigrationOutcome:
     """Returns the structured `MigrationOutcome`. `outcome.is_complete` False
-    suppresses the source-`.operate/` rename so the user can resume."""
+    suppresses the source-`.operate/` rename so the user can resume.
+
+    `subset_selected` is the caller's signal that `services` is only some
+    of what the quickstart store currently exposes (the user picked via
+    `--quickstart-config` or by selecting a single entry from the
+    multi-service prompt). When True, the master-wallet drain is skipped
+    so the unselected services keep their shared gas funds, and the
+    source `.operate/` is left in place so a later run can pick the rest
+    up. Defaults to False — the dominant production path and what
+    existing single-service test fixtures rely on.
+    """
     print_section("MERGE")
     info(f"Will migrate {len(services)} service(s): " + ", ".join(s.name for s in services))
 
     if dry_run:
         info("[dry-run] Stopping at discovery; no on-chain or filesystem actions taken.")
-        return MigrationOutcome()
+        return MigrationOutcome(subset_selected=subset_selected)
 
     # If `OperateStore.services()` dropped any malformed configs we MUST NOT
     # drain — the dropped service's NFT/Safe would be orphaned with empty
@@ -838,6 +860,13 @@ def _run_mode_b(
             "Skipping the master-Safe and master-EOA drains so funds remain "
             "available for completing those migrations later.",
         )
+    elif subset_selected:
+        print()
+        warn(
+            "Only a subset of the quickstart's services was migrated. "
+            "Skipping the master-Safe and master-EOA drains so the "
+            "remaining quickstart services keep their gas funds.",
+        )
     else:
         drain_failures = _drain_master(
             qs_wallet=qs_wallet, pearl_wallet=pearl_wallet,
@@ -848,6 +877,7 @@ def _run_mode_b(
         migrated=tuple(migrated),
         unmigratable=tuple(unmigratable),
         drain_failures=tuple(drain_failures),
+        subset_selected=subset_selected,
     )
 
     # ---- final summary -------------------------------------------------------
@@ -855,7 +885,9 @@ def _run_mode_b(
 
     # ---- rename source -------------------------------------------------------
     # Never rename when the migration is incomplete: the user needs the
-    # source `.operate/` discoverable to resume.
+    # source `.operate/` discoverable to resume — whether "incomplete"
+    # means failures (`unmigratable` / `drain_failures`) or a deliberate
+    # subset selection (the unselected services still live in the source).
     if migrated and outcome.is_complete:
         print()
         if yes_no(
@@ -864,10 +896,14 @@ def _run_mode_b(
         ):
             rename_source_for_rollback(disc.quickstart)
     elif not outcome.is_complete:
+        if outcome.subset_selected and not outcome.unmigratable and not outcome.drain_failures:
+            reason = "remaining services still live in the source"
+        else:
+            reason = "migration incomplete"
         info(
-            "Source `.operate/` left in place (migration incomplete) — "
+            f"Source `.operate/` left in place ({reason}) — "
             f"re-run `migrate_to_pearl.sh` from {disc.quickstart.root.parent} "
-            "after addressing the issues above.",
+            "when ready to continue.",
         )
 
     return outcome
@@ -898,6 +934,17 @@ def _print_migration_summary(outcome: MigrationOutcome) -> None:
             "  Funds may still be present on the quickstart wallet on these "
             "chains. Re-run after resolving the underlying issue (RPC, gas, "
             "etc.) to retry the drain.",
+        )
+    if outcome.subset_selected and not outcome.unmigratable:
+        # Only surface the subset note when there's no unmigratable list
+        # competing for the user's attention — unmigratable failures imply
+        # their own re-run, and stacking another "re-run for the rest"
+        # message on top would muddle the next action.
+        info(
+            "  subset migration: master-Safe and master-EOA drains were "
+            "skipped because not every quickstart service was selected. "
+            "Re-run later to migrate the remaining services and "
+            "drain the shared master wallet.",
         )
 
 
@@ -1431,6 +1478,18 @@ def _final_prompt(outcome: MigrationOutcome) -> None:
         # — the source `.operate/` is still authoritative; copying Pearl's
         # half-state to another machine would just propagate the partial
         # state. Print clear remediation guidance and return.
+        if (
+            outcome.subset_selected
+            and not outcome.unmigratable
+            and not outcome.drain_failures
+        ):
+            print_section("Selected services migrated; remaining services left in source.")
+            print()
+            print("  The migrated services will appear in Pearl. The source")
+            print("  quickstart `.operate/` is preserved with the unselected")
+            print("  services intact — re-run `migrate_to_pearl.sh` when")
+            print("  you're ready to migrate the rest and drain the master wallet.")
+            return
         print_section("Migration incomplete — see warnings above.")
         print()
         print("  Some services or drains were left incomplete. The source")
@@ -1482,11 +1541,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         outcome = _run_mode_a(disc=disc, dry_run=args.dry_run)
     else:
         services = _select_services(disc.quickstart, args.config_path)
+        # Compare ids (not Service objects) because `OperateStore.services()`
+        # returns freshly-loaded instances on every call, so identity
+        # comparison would always be False. The lookup is cheap (a sorted
+        # `iterdir` + per-dir `Service.load`) and only runs once at startup.
+        selected_ids = {s.service_config_id for s in services}
+        available_ids = {s.service_config_id for s in disc.quickstart.services()}
         outcome = _run_mode_b(
             disc=disc,
             services=services,
             config_path=args.config_path,
             dry_run=args.dry_run,
+            subset_selected=selected_ids != available_ids,
         )
 
     if not args.dry_run:

@@ -473,6 +473,31 @@ class TestStatusOSChecks:
         monkeypatch.setattr(status.subprocess, "run", lambda *a, **k: completed)
         assert status.docker_quickstart_containers() == ["abci0", "node0"]
 
+    def test_docker_quickstart_containers_matches_per_service_substrings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Container names are `{service_name_clean}_abci_{idx}` and
+        `{service_name_clean}_tm_{idx}` per `autonomy.deploy.base`. Exact-set
+        matching against the literal fragments would silently skip these
+        per-service variants (`trader_abci_0`, `meme_factory_tm_0`, ...) and
+        let the migration race a still-running deployment. Substring matching
+        on `_abci_0` / `_tm_0` catches them all."""
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=(
+                "trader_abci_0\n"
+                "trader_tm_0\n"
+                "meme_factory_abci_0\n"
+                "unrelated_postgres\n"
+            ),
+        )
+        monkeypatch.setattr(status.subprocess, "run", lambda *a, **k: completed)
+        assert status.docker_quickstart_containers() == [
+            "meme_factory_abci_0",
+            "trader_abci_0",
+            "trader_tm_0",
+        ]
+
     def test_docker_quickstart_containers_handles_missing_docker(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -4757,6 +4782,41 @@ class TestMigrateOneService:
         assert "fully migrated: 4 service(s)" in out
         assert "Migration incomplete" not in out
 
+    def test_print_summary_subset_only_shows_subset_note(
+        self, orch: Any, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """When the only reason for incompleteness is a subset selection
+        (no unmigratable, no drain failures), the summary surfaces the
+        dedicated 'subset migration:' note so the user understands
+        precisely why drain was skipped."""
+        m, *_ = orch
+        outcome = m.MigrationOutcome(
+            migrated=tuple(_fake_service(f"sc-{i}") for i in range(2)),
+            subset_selected=True,
+        )
+        m._print_migration_summary(outcome)
+        out = capsys.readouterr().out
+        assert "Migration incomplete" in out
+        assert "subset migration:" in out
+        assert "drains were skipped" in out
+
+    def test_print_summary_subset_with_unmigratable_omits_subset_note(
+        self, orch: Any, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Subset note is suppressed when there's also an unmigratable list
+        — stacking 're-run for the rest' on top of 're-run after fixing
+        the failure' would muddle the user's next action."""
+        m, *_ = orch
+        outcome = m.MigrationOutcome(
+            unmigratable=(m._Unmigratable(
+                service_id="sc-aaa", chain="gnosis", reason="boom",
+            ),),
+            subset_selected=True,
+        )
+        m._print_migration_summary(outcome)
+        out = capsys.readouterr().out
+        assert "subset migration:" not in out
+
     def test_print_summary_formats_each_failure_line(
         self, orch: Any, capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -5585,6 +5645,71 @@ class TestRunModeB:
         assert drain_called["n"] == 1
         assert rename_called["n"] == 1
 
+    def test_subset_selection_skips_drain_and_rename(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`subset_selected=True` (user picked a single service from many,
+        or passed `--quickstart-config`) must skip the master-Safe and
+        master-EOA drains so the unselected services keep their shared
+        gas funds, and must NOT rename the source `.operate/` because
+        the unselected services still live there."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        monkeypatch.setattr(m, "_load_wallet",
+                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+        monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
+        monkeypatch.setattr(m, "merge_service",
+                            lambda service, src, dest: types.SimpleNamespace())
+        called = {"drain": 0, "rename": 0}
+        monkeypatch.setattr(m, "_drain_master",
+                            lambda **kw: called.update(drain=called["drain"] + 1) or [])
+        monkeypatch.setattr(m, "rename_source_for_rollback",
+                            lambda store: called.update(rename=called["rename"] + 1) or store.root)
+        monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
+
+        outcome = m._run_mode_b(
+            disc=d, services=[ref], config_path=None, dry_run=False,
+            subset_selected=True,
+        )
+
+        assert called["drain"] == 0
+        assert called["rename"] == 0
+        assert outcome.subset_selected is True
+        assert outcome.is_complete is False
+        out = capsys.readouterr().out
+        assert "Only a subset of the quickstart's services was migrated" in out
+        assert "subset migration:" in out
+        assert "remaining services still live in the source" in out
+
+    def test_subset_selection_dry_run_records_subset_flag(
+        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Dry-run must still surface `subset_selected` so the caller can
+        skip the post-run prompts even when no on-chain work happened."""
+        m, *_ = orch
+        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        d = detect.Discovery(
+            quickstart=detect.OperateStore(root=qs_root),
+            pearl=detect.OperateStore(root=pl_root),
+            mode=detect.Mode.MERGE,
+        )
+        ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
+        outcome = m._run_mode_b(
+            disc=d, services=[ref], config_path=None, dry_run=True,
+            subset_selected=True,
+        )
+        assert outcome.subset_selected is True
+
     def test_unmigratable_skips_drain(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -5927,6 +6052,31 @@ class TestFinalPrompt:
         out = capsys.readouterr().out
         assert "Migration incomplete" in out
         assert "Resolve the issues" in out
+        assert called["n"] == 0
+
+    def test_subset_selection_uses_dedicated_message(
+        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Subset-only incompleteness gets its own message — phrasing
+        the same situation as a generic 'Migration incomplete — Resolve
+        the issues' would be misleading because the user intentionally
+        chose to migrate part of the quickstart."""
+        m, *_ = orch
+        called = {"n": 0}
+        monkeypatch.setattr(m, "yes_no",
+                            lambda *a, **k: called.update(n=called["n"] + 1) or False)
+        outcome = m.MigrationOutcome(
+            migrated=(_fake_service("sc-aaa"),),
+            subset_selected=True,
+        )
+        m._final_prompt(outcome)
+        out = capsys.readouterr().out
+        assert "Selected services migrated" in out
+        assert "remaining services left in source" in out
+        assert "re-run `migrate_to_pearl.sh`" in out
+        # Don't ask the "different machine?" question — copying Pearl's
+        # half-state to another machine without the source is incoherent.
         assert called["n"] == 0
 
 

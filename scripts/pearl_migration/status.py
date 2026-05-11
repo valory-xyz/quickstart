@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 PEARL_DAEMON_PORT = 8765
-QUICKSTART_CONTAINER_NAMES = ("abci0", "node0", "_abci_0", "_tm_0")
+# Substring fragments used to detect quickstart-managed containers. The
+# middleware names ABCI / Tendermint containers as `<service>_abci_<idx>`
+# and `<service>_tm_<idx>` (see `autonomy/deploy/base.py:get_abci_container_name`),
+# so the fragments `_abci_0` and `_tm_0` catch the per-service variants
+# (`trader_abci_0`, `meme_factory_tm_0`, ...). `abci0` / `node0` are the
+# old monolithic names from pre-`<service>_` deployments — kept so legacy
+# installs are still detected.
+QUICKSTART_CONTAINER_FRAGMENTS = ("abci0", "node0", "_abci_0", "_tm_0")
 
 
 def pearl_daemon_running(host: str = "127.0.0.1", port: int = PEARL_DAEMON_PORT) -> bool:
@@ -66,8 +73,15 @@ def docker_quickstart_containers() -> List[str]:
             f"`docker ps` exited {result.returncode}: {stderr}. "
             "Cannot tell whether quickstart containers are still running."
         )
-    names = set(result.stdout.split())
-    return sorted(n for n in QUICKSTART_CONTAINER_NAMES if n in names)
+    # Substring match — `_abci_0` / `_tm_0` are fragments, not exact names
+    # (see comment on `QUICKSTART_CONTAINER_FRAGMENTS`). Exact-set matching
+    # would silently skip per-service containers like `trader_abci_0` and
+    # let the migration race a still-running deployment.
+    names = result.stdout.split()
+    return sorted(
+        name for name in names
+        if any(frag in name for frag in QUICKSTART_CONTAINER_FRAGMENTS)
+    )
 
 
 def is_root_owned(path: Path) -> bool:
