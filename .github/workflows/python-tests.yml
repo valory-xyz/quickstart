@@ -390,3 +390,25 @@ jobs:
       with:
         name: unit-test-coverage-xml-${{ matrix.python-version }}
         path: coverage-unit.xml
+
+  all-checks-passed:
+    # Single aggregate gate referenced by branch protection. When adding or
+    # removing a mandatory job, update the `needs:` list here instead of
+    # editing branch protection contexts.
+    name: All checks passed
+    if: always()
+    runs-on: ubuntu-24.04
+    needs:
+      - setup
+      - e2e-test-run-service
+      - e2e-test-staking
+      - changes
+      - e2e-test-migrate-to-pearl
+      - unit-tests
+    steps:
+      - name: Verify all dependencies succeeded or were skipped
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled."
+            exit 1
+          fi
