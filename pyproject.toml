@@ -10,22 +10,27 @@ include = []
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.15"
-olas-operate-middleware = "0.15.16"
+olas-operate-middleware = "0.15.20"
 tqdm = "4.67.3"
-python-dotenv = "0.21.1"
+python-dotenv = "1.2.2"
 gql = {version = "3.5.0", extras = ["requests"]}
 halo = "0.0.31"
-web3 = "7.14.1"
+web3 = "7.16.0"
 docker = "7.1.0"
 psutil = "5.9.8"
-open-aea = "2.1.0"
-open-aea-ledger-ethereum = "2.1.0"
-open-autonomy = "0.21.13"
+open-aea = "2.2.6"
+open-aea-ledger-ethereum = "2.2.6"
+open-autonomy = "0.21.22"
 
 [tool.poetry.group.dev.dependencies]
 pexpect = "4.9.0"
 
 [tool.pytest.ini_options]
+# anchorpy ships a pytest plugin (via open-autonomy -> open-aea-ledger-solana ->
+# anchorpy) that imports pytest_xprocess at startup, but xprocess is only in
+# anchorpy's [pytest] extra and is never installed. Disable the plugin so
+# pytest can boot.
+addopts = "-p no:pytest_anchorpy"
 markers = [
 	"e2e: end-to-end tests that may use real network/external systems",
 	"integration: integration tests that may use networked dependencies",
