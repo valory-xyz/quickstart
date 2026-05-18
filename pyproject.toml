@@ -26,7 +26,7 @@ open-autonomy = "0.21.22"
 pexpect = "4.9.0"
 
 [tool.pytest.ini_options]
-# anchorpy ships a pytest plugin (via open-aea[all] -> open-aea-ledger-solana ->
+# anchorpy ships a pytest plugin (via open-autonomy -> open-aea-ledger-solana ->
 # anchorpy) that imports pytest_xprocess at startup, but xprocess is only in
 # anchorpy's [pytest] extra and is never installed. Disable the plugin so
 # pytest can boot.
