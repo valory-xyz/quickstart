@@ -35,5 +35,5 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-uv sync --no-default-groups --no-cache --frozen
+uv sync --no-default-groups --inexact --frozen
 uv run python -m scripts.pearl_migration.migrate_to_pearl "$@"

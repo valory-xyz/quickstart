@@ -102,5 +102,5 @@ if [ -d ".operate/services" ]; then
 fi
 
 # Install dependencies and run the agent through the middleware
-uv sync --no-default-groups --no-cache --frozen
+uv sync --no-default-groups --inexact --frozen
 uv run python -m operate.cli quickstart $@
