@@ -985,10 +985,22 @@ class TempDirMixin:
         # Create a temporary directory for stop_service
         self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
         
-        # Copy necessary files to temp directory
-        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True, 
-                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__', 
-                                                '*.pyc', 'logs', '*.log', '.env'))
+        # Copy necessary files to temp directory. Exclude `.venv`: a
+        # copied venv's pyvenv.cfg / shebangs still point at the source
+        # path so any `uv sync --inexact` against the copy preserves the
+        # broken state, which made `operate.cli quickstop` silently
+        # no-op against the test's docker containers. Mirror the
+        # symlink trick from test_migrate_to_pearl.py:_copy_repo so the
+        # in-tempdir scripts reuse the source venv directly.
+        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__',
+                                                '*.pyc', 'logs', '*.log', '.env', '.venv'))
+        src_venv = Path('.venv').resolve()
+        if src_venv.is_dir():
+            link = Path(self.temp_dir.name) / '.venv'
+            if link.exists() or link.is_symlink():
+                link.unlink()
+            link.symlink_to(src_venv)
 
         os.chdir(self.temp_dir.name)
         self.logger.info(f"Changed working directory to: {self.temp_dir.name}")
