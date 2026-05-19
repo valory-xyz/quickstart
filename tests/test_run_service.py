@@ -33,7 +33,15 @@ load_dotenv()
 
 STARTUP_WAIT = 10
 SERVICE_INIT_WAIT = 60
-CONTAINER_STOP_WAIT = 20
+# `operate.cli quickstop` returns success as soon as it issues the
+# docker stop, but Tendermint + ABCI containers take 30-45s to flush
+# state and shut down cleanly. The previous 20s wait happened to pass
+# under Poetry because each `poetry install --only main --no-cache`
+# inside stop_service.sh added another 30-60s of overhead before the
+# assertion; uv is fast enough that we hit the assertion before
+# containers finish. Bump to 60s as the minimum safe wait until
+# quickstop is taught to block on container shutdown.
+CONTAINER_STOP_WAIT = 60
 require_extra_coins = False
 
 # Handle the distutils warning
