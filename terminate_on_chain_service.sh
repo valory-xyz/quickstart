@@ -24,5 +24,5 @@ export PYTHONUTF8=1
 
 set -e  # Exit script on first error
 
-poetry install --only main --no-cache
-poetry run python -m operate.cli terminate $@
+uv sync --no-default-groups --no-cache --frozen
+uv run python -m operate.cli terminate $@
