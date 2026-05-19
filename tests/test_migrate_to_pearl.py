@@ -92,9 +92,10 @@ def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
 
     `.venv` is symlinked rather than copied: a deep copy via shutil
     dereferences interpreter symlinks and silently drops parts of the
-    site-packages tree, and a fresh `poetry install` in `dest` triggers
-    PEP 517 sdist rebuilds (halo, python-baseconv) that fail under
-    Poetry 2.4 + setuptools >= 80. Sharing the runner's venv avoids
+    site-packages tree, and a fresh `uv sync` in `dest` would create
+    a new interpreter with a `dest`-rooted `pyvenv.cfg`, which makes
+    `operate.cli` silently no-op against the live docker containers
+    started from the source tree. Sharing the runner's venv avoids
     both pitfalls."""
     shutil.copytree(
         ".", dest, dirs_exist_ok=True,

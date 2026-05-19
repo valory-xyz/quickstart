@@ -52,8 +52,8 @@ if ! [[ $($PYTHON_CMD --version) =~ ^(Python\ 3\.10)|(Python\ 3\.11)|(Python\ 3\
 fi
 echo "`$PYTHON_CMD --version` is compatible"
 
-command -v poetry >/dev/null 2>&1 ||
-{ echo >&2 "Poetry is not installed!";
+command -v uv >/dev/null 2>&1 ||
+{ echo >&2 "uv is not installed (https://docs.astral.sh/uv/getting-started/installation/).";
   exit 1
 }
 
@@ -101,7 +101,6 @@ if [ -d ".operate/services" ]; then
     done
 fi
 
-# Install dependencies and run the agent througth the middleware
-poetry install --only main --no-cache
-poetry run pip install --upgrade packaging  # TODO: update packaging version from open-aea
-poetry run python -m operate.cli quickstart $@
+# Install dependencies and run the agent through the middleware
+uv sync --no-default-groups --inexact --frozen
+uv run python -m operate.cli quickstart "$@"

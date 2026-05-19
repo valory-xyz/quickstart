@@ -28,12 +28,12 @@ export PYTHONUTF8=1
 set -euo pipefail   # exit on error / undefined var / pipeline failure
 
 # Tooling pre-checks — the script signs on-chain transactions, so failing
-# fast on a missing prerequisite is much better than a half-applied poetry
-# install or a confusing import error halfway through.
-if ! command -v poetry >/dev/null 2>&1; then
-    echo >&2 "Poetry is not installed (https://python-poetry.org/docs/)."
+# fast on a missing prerequisite is much better than a half-applied sync
+# or a confusing import error halfway through.
+if ! command -v uv >/dev/null 2>&1; then
+    echo >&2 "uv is not installed (https://docs.astral.sh/uv/getting-started/installation/)."
     exit 1
 fi
 
-poetry install --only main --no-cache
-poetry run python -m scripts.pearl_migration.migrate_to_pearl "$@"
+uv sync --no-default-groups --inexact --frozen
+uv run python -m scripts.pearl_migration.migrate_to_pearl "$@"
