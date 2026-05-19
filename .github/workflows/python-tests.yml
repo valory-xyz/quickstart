@@ -298,11 +298,14 @@ jobs:
         sudo apt-get install -y git
 
     - name: Install project dependencies
-      run: uv sync --all-groups --frozen
+      # Pin uv's interpreter to the matrix Python so a different
+      # `>=3.10,<3.15`-compatible Python on PATH can't silently
+      # collapse the cross-version matrix to a single interpreter.
+      run: uv sync --all-groups --frozen --python ${{ matrix.python-version }}
 
     - name: Run unit tests
       run: |
-        PYTHONPATH=. uv run pytest -v tests \
+        PYTHONPATH=. uv run --python ${{ matrix.python-version }} pytest -v tests \
           --ignore=tests/test_run_service.py \
           --ignore=tests/test_staking_service.py \
           --ignore=tests/test_migrate_to_pearl.py \
