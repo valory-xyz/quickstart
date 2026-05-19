@@ -51,7 +51,7 @@ If any service can't be unstaked yet (e.g. minimum staking duration not elapsed)
 
 ### Requirements
 
-Same as `run_service.sh`: Python `>=3.10,<3.15`, uv, Docker. The script must be able to talk to the chain RPCs configured for each migrated service. Pearl must **not** be running (the script will refuse if it detects Pearl's daemon on `127.0.0.1:8765`).
+Same as `run_service.sh`: Python `>=3.10,<3.15`, Poetry, Docker. The script must be able to talk to the chain RPCs configured for each migrated service. Pearl must **not** be running (the script will refuse if it detects Pearl's daemon on `127.0.0.1:8765`).
 
 ### Re-runs and rollback
 
@@ -78,7 +78,7 @@ The script ends with a yes/no question:
 Ensure your machine satisfies the requirements:
 
 - Python `>=3.10,<3.15`
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- [Poetry](https://python-poetry.org/docs/) `>=1.8.3`
 - [Docker Compose](https://docs.docker.com/compose/install/)
 
 ## Resource Requirements
@@ -283,21 +283,31 @@ Execute the following steps in a PowerShell terminal:
 
 3. Close and re-open the PowerShell terminal.
 
-4. Install [uv](https://docs.astral.sh/uv/getting-started/installation/):
+4. Install [Poetry](https://python-poetry.org/docs/):
 
     ```bash
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    curl.exe -sSL https://install.python-poetry.org | python -
     ```
 
-5. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/):
+5. Add Poetry to your user's path:
+
+    ```bash
+    $existingUserPath = (Get-Item -Path HKCU:\Environment).GetValue("PATH", $null, "DoNotExpandEnvironmentNames")
+
+    $newUserPath = "$existingUserPath;$Env:APPDATA\Python\Scripts"
+
+    [System.Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+    ```
+
+6. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/):
 
     ```bash
     winget install -e --id Docker.DockerDesktop
     ```
 
-6. Log out of your Windows session and then log back in.
+7. Log out of your Windows session and then log back in.
 
-7. Open [Docker Desktop](https://www.docker.com/products/docker-desktop/) and leave it opened in the background.
+8. Open [Docker Desktop](https://www.docker.com/products/docker-desktop/) and leave it opened in the background.
 
 Now, open a Git Bash terminal and follow the instructions in the "[Run the script](#run-the-script)" section as well as the subsequent sections. You might need to install Microsoft Visual C++ 14.0 or greater.
 
