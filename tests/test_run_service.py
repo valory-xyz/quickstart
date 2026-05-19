@@ -33,15 +33,14 @@ load_dotenv()
 
 STARTUP_WAIT = 10
 SERVICE_INIT_WAIT = 60
-# `operate.cli quickstop` returns success as soon as it issues the
-# docker stop, but Tendermint + ABCI containers take 30-45s to flush
-# state and shut down cleanly. The previous 20s wait happened to pass
-# under Poetry because each `poetry install --only main --no-cache`
-# inside stop_service.sh added another 30-60s of overhead before the
-# assertion; uv is fast enough that we hit the assertion before
-# containers finish. Bump to 60s as the minimum safe wait until
-# quickstop is taught to block on container shutdown.
-CONTAINER_STOP_WAIT = 60
+# Max seconds to wait for containers to actually stop after
+# `operate.cli quickstop`. quickstop returns as soon as it issues the
+# docker stop call; Tendermint + ABCI containers then take some time
+# to flush state and exit. Consumed by `_wait_for_containers_stopped`,
+# which polls every 2s and returns as soon as the containers are
+# gone, so green CI is fast and red CI fails decisively rather than
+# racing a fixed sleep.
+CONTAINER_STOP_WAIT = 120
 require_extra_coins = False
 
 # Handle the distutils warning
@@ -428,6 +427,29 @@ def check_shutdown_logs(logger: logging.Logger, config_path: str) -> bool:
         logger.error(f"Error checking shutdown logs: {str(e)}")
         return False
 
+def _wait_for_containers_stopped(
+    container_name: str, timeout: int, logger: logging.Logger
+) -> bool:
+    """Poll docker until containers matching `container_name` are gone.
+
+    Returns True once no containers remain (early-exit on green), False
+    after `timeout` seconds. Replaces a flat `time.sleep(timeout)`
+    which either flaked when containers were slow to shut down or
+    wasted CI time when they finished fast.
+    """
+    client = docker.from_env()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        containers = client.containers.list(filters={"name": container_name})
+        if not containers:
+            return True
+        time.sleep(2)
+    logger.warning(
+        f"Containers matching {container_name!r} still running after {timeout}s"
+    )
+    return False
+
+
 def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logger) -> bool:
     """
     Stop service only if it exists, with verification.
@@ -462,8 +484,8 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
             cwd=temp_dir
         )
         process.expect(pexpect.EOF)
-        time.sleep(CONTAINER_STOP_WAIT)
-        
+        _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, logger)
+
         # Check if any containers are still running
         remaining_containers = client.containers.list(filters={"name": container_name})
         if remaining_containers:
@@ -839,12 +861,12 @@ class BaseTestService:
             # Always try to stop the service first
             try:
                 cls.stop_service()
-                time.sleep(CONTAINER_STOP_WAIT)
-                
-                # Verify all containers are stopped
-                client = docker.from_env()
                 service_config = get_service_config(cls.config_path)
                 container_name = service_config["container_name"]
+                _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, cls.logger)
+
+                # Verify all containers are stopped
+                client = docker.from_env()
                 containers = client.containers.list(filters={"name": container_name})
                 
                 if containers:
@@ -908,7 +930,7 @@ class BaseTestService:
                 while retries > 0:
                     if check_docker_status(cls.logger, cls.config_path):
                         break
-                    time.sleep(CONTAINER_STOP_WAIT)
+                    time.sleep(STARTUP_WAIT)
                     retries -= 1
                     
                 if retries == 0:
@@ -964,14 +986,18 @@ class BaseTestService:
         """Test service shutdown logs"""
         self.logger.info("Testing shutdown logs...")
         self.stop_service()
-        time.sleep(CONTAINER_STOP_WAIT)
-        
-        client = docker.from_env()
         service_config = get_service_config(self.config_path)
         container_name = service_config["container_name"]
-        
+        stopped = _wait_for_containers_stopped(
+            container_name, CONTAINER_STOP_WAIT, self.logger
+        )
+
+        client = docker.from_env()
         containers = client.containers.list(filters={"name": container_name})
-        assert len(containers) == 0, f"Containers with name {container_name} are still running"
+        assert stopped and len(containers) == 0, (
+            f"Containers with name {container_name} are still running "
+            f"after {CONTAINER_STOP_WAIT}s"
+        )
         assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
 
 class TempDirMixin:
@@ -995,12 +1021,33 @@ class TempDirMixin:
         shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__',
                                                 '*.pyc', 'logs', '*.log', '.env', '.venv'))
+        # Symlinks aren't reliably writable on Windows (Developer Mode
+        # / admin required), so refuse to run on platforms that can't
+        # set up the in-tempdir venv link. The repo's CI runs on
+        # ubuntu-24.04 only; this just makes that explicit for local
+        # invocations.
+        if os.name != 'posix':
+            pytest.skip(
+                "test_run_service requires symlink support; only POSIX "
+                "platforms are supported. Run on Linux or macOS."
+            )
         src_venv = Path('.venv').resolve()
-        if src_venv.is_dir():
-            link = Path(self.temp_dir.name) / '.venv'
-            if link.exists() or link.is_symlink():
-                link.unlink()
-            link.symlink_to(src_venv)
+        if not src_venv.is_dir():
+            # The in-tempdir scripts call `uv run ...` against a venv at
+            # `<tempdir>/.venv`. Silently letting that venv be missing
+            # would land us back at the broken-pyvenv-cfg state where
+            # `uv sync --inexact` creates a fresh interpreter inside the
+            # tempdir and `operate.cli quickstop` no-ops against the
+            # docker containers. Fail loudly instead.
+            raise RuntimeError(
+                f"Expected source venv at {src_venv}. Run "
+                "`uv sync --all-groups --frozen` from the repo root "
+                "before invoking the e2e suite."
+            )
+        link = Path(self.temp_dir.name) / '.venv'
+        if link.exists() or link.is_symlink():
+            link.unlink()
+        link.symlink_to(src_venv)
 
         os.chdir(self.temp_dir.name)
         self.logger.info(f"Changed working directory to: {self.temp_dir.name}")
