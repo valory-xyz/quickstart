@@ -25,4 +25,4 @@ export PYTHONUTF8=1
 set -e  # Exit script on first error
 
 uv sync --no-default-groups --inexact --frozen
-uv run python -m operate.cli terminate $@
+uv run python -m operate.cli terminate "$@"

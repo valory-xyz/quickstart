@@ -103,4 +103,4 @@ fi
 
 # Install dependencies and run the agent through the middleware
 uv sync --no-default-groups --inexact --frozen
-uv run python -m operate.cli quickstart $@
+uv run python -m operate.cli quickstart "$@"

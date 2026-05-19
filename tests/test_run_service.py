@@ -484,7 +484,8 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
             cwd=temp_dir
         )
         process.expect(pexpect.EOF)
-        _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, logger)
+        if not _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, logger):
+            return False
 
         # Check if any containers are still running
         remaining_containers = client.containers.list(filters={"name": container_name})
@@ -863,7 +864,17 @@ class BaseTestService:
                 cls.stop_service()
                 service_config = get_service_config(cls.config_path)
                 container_name = service_config["container_name"]
-                _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, cls.logger)
+                # Don't trust the docker.containers.list() fallback below
+                # to catch every straggler. Surface the poll timeout
+                # loudly so live containers from one test class don't
+                # leak into the next CI job under the wrong name.
+                if not _wait_for_containers_stopped(
+                    container_name, CONTAINER_STOP_WAIT, cls.logger
+                ):
+                    raise RuntimeError(
+                        f"Containers {container_name} did not stop within "
+                        f"{CONTAINER_STOP_WAIT}s during teardown"
+                    )
 
                 # Verify all containers are stopped
                 client = docker.from_env()
@@ -1008,37 +1019,36 @@ class TempDirMixin:
 
     def setup_class(self):
         """Setup for class-level tests."""
-        # Create a temporary directory for stop_service
-        self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
-        
-        # Copy necessary files to temp directory. Exclude `.venv`: a
-        # copied venv's pyvenv.cfg / shebangs still point at the source
-        # path so any `uv sync --inexact` against the copy preserves the
-        # broken state, which made `operate.cli quickstop` silently
-        # no-op against the test's docker containers. Mirror the
-        # symlink trick from test_migrate_to_pearl.py:_copy_repo so the
-        # in-tempdir scripts reuse the source venv directly.
-        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__',
-                                                '*.pyc', 'logs', '*.log', '.env', '.venv'))
-        # Symlinks aren't reliably writable on Windows (Developer Mode
-        # / admin required), so refuse to run on platforms that can't
-        # set up the in-tempdir venv link. The repo's CI runs on
-        # ubuntu-24.04 only; this just makes that explicit for local
-        # invocations.
+        # The setup below symlinks the source `.venv` into the tempdir
+        # so the in-tempdir scripts reuse the runner's interpreter
+        # instead of letting `uv sync --inexact` create a fresh one
+        # with a tempdir-rooted `pyvenv.cfg` (which would no-op
+        # `operate.cli quickstop` against the test's docker
+        # containers). Symlink creation isn't reliably writable on
+        # Windows (Developer Mode / admin required), and the repo's CI
+        # runs on ubuntu-24.04 only — skip cleanly before doing any
+        # tempdir I/O so unsupported platforms don't pay the copy cost.
         if os.name != 'posix':
             pytest.skip(
                 "test_run_service requires symlink support; only POSIX "
                 "platforms are supported. Run on Linux or macOS."
             )
+
+        # Create a temporary directory for stop_service
+        self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
+
+        # Exclude `.venv` from the copy and symlink it back in below;
+        # see the docstring on the POSIX guard above for why.
+        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__',
+                                                '*.pyc', 'logs', '*.log', '.env', '.venv'))
         src_venv = Path('.venv').resolve()
         if not src_venv.is_dir():
-            # The in-tempdir scripts call `uv run ...` against a venv at
-            # `<tempdir>/.venv`. Silently letting that venv be missing
-            # would land us back at the broken-pyvenv-cfg state where
-            # `uv sync --inexact` creates a fresh interpreter inside the
-            # tempdir and `operate.cli quickstop` no-ops against the
-            # docker containers. Fail loudly instead.
+            # Without an existing source venv, `uv sync --inexact`
+            # inside the tempdir would create a fresh one with a
+            # tempdir-rooted `pyvenv.cfg`, and `operate.cli quickstop`
+            # would silently no-op against the docker containers. Fail
+            # loudly instead.
             raise RuntimeError(
                 f"Expected source venv at {src_venv}. Run "
                 "`uv sync --all-groups --frozen` from the repo root "
