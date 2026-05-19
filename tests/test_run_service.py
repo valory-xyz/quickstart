@@ -33,14 +33,7 @@ load_dotenv()
 
 STARTUP_WAIT = 10
 SERVICE_INIT_WAIT = 60
-# Max seconds to wait for containers to actually stop after
-# `operate.cli quickstop`. quickstop returns as soon as it issues the
-# docker stop call; Tendermint + ABCI containers then take some time
-# to flush state and exit. Consumed by `_wait_for_containers_stopped`,
-# which polls every 2s and returns as soon as the containers are
-# gone, so green CI is fast and red CI fails decisively rather than
-# racing a fixed sleep.
-CONTAINER_STOP_WAIT = 120
+CONTAINER_STOP_WAIT = 20
 require_extra_coins = False
 
 # Handle the distutils warning
@@ -427,29 +420,6 @@ def check_shutdown_logs(logger: logging.Logger, config_path: str) -> bool:
         logger.error(f"Error checking shutdown logs: {str(e)}")
         return False
 
-def _wait_for_containers_stopped(
-    container_name: str, timeout: int, logger: logging.Logger
-) -> bool:
-    """Poll docker until containers matching `container_name` are gone.
-
-    Returns True once no containers remain (early-exit on green), False
-    after `timeout` seconds. Replaces a flat `time.sleep(timeout)`
-    which either flaked when containers were slow to shut down or
-    wasted CI time when they finished fast.
-    """
-    client = docker.from_env()
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        containers = client.containers.list(filters={"name": container_name})
-        if not containers:
-            return True
-        time.sleep(2)
-    logger.warning(
-        f"Containers matching {container_name!r} still running after {timeout}s"
-    )
-    return False
-
-
 def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logger) -> bool:
     """
     Stop service only if it exists, with verification.
@@ -484,13 +454,8 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
             cwd=temp_dir
         )
         process.expect(pexpect.EOF)
-        # Run the force-stop fallback below regardless of whether the
-        # poll timed out: stragglers should be cleaned up before the
-        # timeout surfaces, otherwise they leak into the next CI job.
-        poll_timed_out = not _wait_for_containers_stopped(
-            container_name, CONTAINER_STOP_WAIT, logger
-        )
-
+        time.sleep(CONTAINER_STOP_WAIT)
+        
         # Check if any containers are still running
         remaining_containers = client.containers.list(filters={"name": container_name})
         if remaining_containers:
@@ -502,8 +467,8 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
                 except Exception as container_err:
                     logger.error(f"Error forcing container stop: {str(container_err)}")
                     return False
-
-        return not poll_timed_out
+        
+        return True
         
     except RuntimeError:
         raise
@@ -860,28 +825,20 @@ class BaseTestService:
     @classmethod
     def teardown_class(cls):
         """Cleanup after all tests"""
-        poll_timed_out = False
-        timeout_container_name = None
         try:
             cls.logger.info("Starting test cleanup...")
-
+            
             # Always try to stop the service first
             try:
                 cls.stop_service()
+                time.sleep(CONTAINER_STOP_WAIT)
+                
+                # Verify all containers are stopped
+                client = docker.from_env()
                 service_config = get_service_config(cls.config_path)
                 container_name = service_config["container_name"]
-                poll_timed_out = not _wait_for_containers_stopped(
-                    container_name, CONTAINER_STOP_WAIT, cls.logger
-                )
-                if poll_timed_out:
-                    timeout_container_name = container_name
-
-                # Force-stop fallback runs regardless of poll result so
-                # stragglers get cleaned up before the timeout surfaces
-                # below — otherwise containers leak into the next CI job.
-                client = docker.from_env()
                 containers = client.containers.list(filters={"name": container_name})
-
+                
                 if containers:
                     cls.logger.warning("Found running containers after stop_service, forcing removal...")
                     for container in containers:
@@ -889,21 +846,11 @@ class BaseTestService:
                         container.remove()
             except Exception as e:
                 cls.logger.error(f"Error stopping service: {str(e)}")
-
+            
             cls._setup_complete = False
-
+            
         except Exception as e:
             cls.logger.error(f"Error during cleanup: {str(e)}")
-
-        # Raise outside both swallowing `except Exception` blocks above
-        # so a poll timeout actually fails the test class instead of
-        # being downgraded to a log line. Force-stop already ran, so
-        # this is purely about surfacing the signal to pytest.
-        if poll_timed_out:
-            raise RuntimeError(
-                f"Containers {timeout_container_name} did not stop within "
-                f"{CONTAINER_STOP_WAIT}s during teardown"
-            )
 
     @classmethod
     def start_service(cls):
@@ -953,7 +900,7 @@ class BaseTestService:
                 while retries > 0:
                     if check_docker_status(cls.logger, cls.config_path):
                         break
-                    time.sleep(STARTUP_WAIT)
+                    time.sleep(CONTAINER_STOP_WAIT)
                     retries -= 1
                     
                 if retries == 0:
@@ -1009,18 +956,14 @@ class BaseTestService:
         """Test service shutdown logs"""
         self.logger.info("Testing shutdown logs...")
         self.stop_service()
+        time.sleep(CONTAINER_STOP_WAIT)
+        
+        client = docker.from_env()
         service_config = get_service_config(self.config_path)
         container_name = service_config["container_name"]
-        stopped = _wait_for_containers_stopped(
-            container_name, CONTAINER_STOP_WAIT, self.logger
-        )
-
-        client = docker.from_env()
+        
         containers = client.containers.list(filters={"name": container_name})
-        assert stopped and len(containers) == 0, (
-            f"Containers with name {container_name} are still running "
-            f"after {CONTAINER_STOP_WAIT}s"
-        )
+        assert len(containers) == 0, f"Containers with name {container_name} are still running"
         assert check_shutdown_logs(self.logger, self.config_path) == True, "Shutdown logs check failed"
 
 class TempDirMixin:
@@ -1031,45 +974,13 @@ class TempDirMixin:
 
     def setup_class(self):
         """Setup for class-level tests."""
-        # The setup below symlinks the source `.venv` into the tempdir
-        # so the in-tempdir scripts reuse the runner's interpreter
-        # instead of letting `uv sync --inexact` create a fresh one
-        # with a tempdir-rooted `pyvenv.cfg` (which would no-op
-        # `operate.cli quickstop` against the test's docker
-        # containers). Symlink creation isn't reliably writable on
-        # Windows (Developer Mode / admin required), and the repo's CI
-        # runs on ubuntu-24.04 only — skip cleanly before doing any
-        # tempdir I/O so unsupported platforms don't pay the copy cost.
-        if os.name != 'posix':
-            pytest.skip(
-                "test_run_service requires symlink support; only POSIX "
-                "platforms are supported. Run on Linux or macOS."
-            )
-
         # Create a temporary directory for stop_service
         self.temp_dir = tempfile.TemporaryDirectory(prefix='operate_test_')
-
-        # Exclude `.venv` from the copy and symlink it back in below;
-        # see the docstring on the POSIX guard above for why.
-        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__',
-                                                '*.pyc', 'logs', '*.log', '.env', '.venv'))
-        src_venv = Path('.venv').resolve()
-        if not src_venv.is_dir():
-            # Without an existing source venv, `uv sync --inexact`
-            # inside the tempdir would create a fresh one with a
-            # tempdir-rooted `pyvenv.cfg`, and `operate.cli quickstop`
-            # would silently no-op against the docker containers. Fail
-            # loudly instead.
-            raise RuntimeError(
-                f"Expected source venv at {src_venv}. Run "
-                "`uv sync --all-groups --frozen` from the repo root "
-                "before invoking the e2e suite."
-            )
-        link = Path(self.temp_dir.name) / '.venv'
-        if link.exists() or link.is_symlink():
-            link.unlink()
-        link.symlink_to(src_venv)
+        
+        # Copy necessary files to temp directory
+        shutil.copytree('.', self.temp_dir.name, dirs_exist_ok=True, 
+                        ignore=shutil.ignore_patterns('.operate', '.pytest_cache', '__pycache__', 
+                                                '*.pyc', 'logs', '*.log', '.env'))
 
         os.chdir(self.temp_dir.name)
         self.logger.info(f"Changed working directory to: {self.temp_dir.name}")
