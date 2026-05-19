@@ -484,8 +484,12 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
             cwd=temp_dir
         )
         process.expect(pexpect.EOF)
-        if not _wait_for_containers_stopped(container_name, CONTAINER_STOP_WAIT, logger):
-            return False
+        # Run the force-stop fallback below regardless of whether the
+        # poll timed out: stragglers should be cleaned up before the
+        # timeout surfaces, otherwise they leak into the next CI job.
+        poll_timed_out = not _wait_for_containers_stopped(
+            container_name, CONTAINER_STOP_WAIT, logger
+        )
 
         # Check if any containers are still running
         remaining_containers = client.containers.list(filters={"name": container_name})
@@ -498,8 +502,8 @@ def ensure_service_stopped(config_path: str, temp_dir: str, logger: logging.Logg
                 except Exception as container_err:
                     logger.error(f"Error forcing container stop: {str(container_err)}")
                     return False
-        
-        return True
+
+        return not poll_timed_out
         
     except RuntimeError:
         raise
@@ -856,30 +860,28 @@ class BaseTestService:
     @classmethod
     def teardown_class(cls):
         """Cleanup after all tests"""
+        poll_timed_out = False
+        timeout_container_name = None
         try:
             cls.logger.info("Starting test cleanup...")
-            
+
             # Always try to stop the service first
             try:
                 cls.stop_service()
                 service_config = get_service_config(cls.config_path)
                 container_name = service_config["container_name"]
-                # Don't trust the docker.containers.list() fallback below
-                # to catch every straggler. Surface the poll timeout
-                # loudly so live containers from one test class don't
-                # leak into the next CI job under the wrong name.
-                if not _wait_for_containers_stopped(
+                poll_timed_out = not _wait_for_containers_stopped(
                     container_name, CONTAINER_STOP_WAIT, cls.logger
-                ):
-                    raise RuntimeError(
-                        f"Containers {container_name} did not stop within "
-                        f"{CONTAINER_STOP_WAIT}s during teardown"
-                    )
+                )
+                if poll_timed_out:
+                    timeout_container_name = container_name
 
-                # Verify all containers are stopped
+                # Force-stop fallback runs regardless of poll result so
+                # stragglers get cleaned up before the timeout surfaces
+                # below — otherwise containers leak into the next CI job.
                 client = docker.from_env()
                 containers = client.containers.list(filters={"name": container_name})
-                
+
                 if containers:
                     cls.logger.warning("Found running containers after stop_service, forcing removal...")
                     for container in containers:
@@ -887,11 +889,21 @@ class BaseTestService:
                         container.remove()
             except Exception as e:
                 cls.logger.error(f"Error stopping service: {str(e)}")
-            
+
             cls._setup_complete = False
-            
+
         except Exception as e:
             cls.logger.error(f"Error during cleanup: {str(e)}")
+
+        # Raise outside both swallowing `except Exception` blocks above
+        # so a poll timeout actually fails the test class instead of
+        # being downgraded to a log line. Force-stop already ran, so
+        # this is purely about surfacing the signal to pytest.
+        if poll_timed_out:
+            raise RuntimeError(
+                f"Containers {timeout_container_name} did not stop within "
+                f"{CONTAINER_STOP_WAIT}s during teardown"
+            )
 
     @classmethod
     def start_service(cls):
