@@ -17,13 +17,17 @@ work that applies here:
 
 - `pyproject.toml` is on PEP 621 with `tool.uv.package = false`.
 - `poetry.lock` removed, `uv.lock` present.
-- All 8 operator shell scripts (`run_service.sh`, `stop_service.sh`,
+- 9 operator shell scripts (`run_service.sh`, `stop_service.sh`,
   `analyse_logs.sh`, `claim_staking_rewards.sh`, `reset_configs.sh`,
   `reset_password.sh`, `reset_staking.sh`,
-  `terminate_on_chain_service.sh`) use `uv sync` and `uv run` instead
-  of `poetry install` and `poetry run`.
+  `terminate_on_chain_service.sh`, `migrate_to_pearl.sh`) use
+  `uv sync` and `uv run` instead of `poetry install` and `poetry
+  run`. `extract_private_keys.sh` is pure bash and intentionally
+  not touched (it doesn't invoke a Python interpreter).
 
-Nothing in this PR touches those.
+Nothing in this PR touches the shell-script bodies. But PR #172 did
+leave 7 stale `poetry` invocations behind in `scripts/*/README.md`
+that this PR cleans up — see in-scope section 6.
 
 ## What's in scope
 
@@ -40,6 +44,7 @@ dev = [
     "pytest==9.0.3",
     "pytest-cov==7.1.0",
     "tomte[cli, tests]==0.7.0",
+    "tox-uv==1.16.0",  ; pin set empirically at implementation time
 ]
 
 [tool.tomte]
@@ -48,9 +53,18 @@ tomte_dep_pin = "==0.7.0"
 # based on actual lint output against current scripts/ and tests/.
 ```
 
-The check_dependencies_extra_excludes and pylint disables will be set
-empirically. Quickstart has only `scripts/` and `tests/` to lint, so
-the list should stay short.
+Note on tomte extras. The `[cli]` extra already pulls `tox` (checked
+tomte v0.7.0 `pyproject.toml`), so `tomte[cli, tests]==0.7.0` is
+enough for `tomte tox` to find the `tox` binary. The asymmetry vs
+trader's CI install line (`pip install 'tomte[tox,cli]==0.7.0'
+tox-uv`) is `tox-uv`, which isn't in any tomte extra and which the
+`tomte tox` wrapper expects when uv-managed envs are used. Adding
+`tox-uv` to the dev group keeps local `uv run tomte tox -e <env>`
+working out of the box.
+
+The `check_dependencies_extra_excludes` and pylint disables will be
+set empirically. Quickstart has only `scripts/` and `tests/` to lint,
+so the list should stay short.
 
 ### 2. Add a minimal `tox.ini`
 
@@ -115,7 +129,7 @@ run_no_staking_tests:
 test: test-install run_no_staking_tests
 ```
 
-Confirmed: no references from README, CI, or any `.sh` script. The 8
+Confirmed: no references from README, CI, or any `.sh` script. The 9
 operator shell scripts already cover install + run. Per reviewer
 feedback, the Makefile gets deleted outright at implementation time.
 
@@ -126,18 +140,20 @@ Current `.github/workflows/python-tests.yml` is 344 lines. It runs
 matrix. It does no linting. No `black`, `isort`, `flake8`, `mypy`,
 `pylint`, `darglint`, `bandit`, `safety`.
 
-Add a `linter_checks` job that mirrors trader's `common_checks.yaml`:
+Add a `linter_checks` job that mirrors trader's `common_checks.yaml`.
+Pin action versions to match the rest of the workflow (`checkout@v4`,
+`setup-python@v5`):
 
 ```yaml
 linter_checks:
   runs-on: ubuntu-24.04
   steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: "3.10"
     - name: Install dependencies
-      run: pip install 'tomte[tox,cli]==0.7.0' tox-uv
+      run: pip install 'tomte[cli, tests]==0.7.0' tox-uv
     - name: Code checks
       run: tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
     - name: Security checks
@@ -146,12 +162,21 @@ linter_checks:
       run: tomte tox -e liccheck
 ```
 
-The four existing jobs (`setup`, `e2e-test-run-service`,
-`e2e-test-staking`, the pearl-migration test, `unit-tests`) stay as
-they are. They already use uv correctly.
+Also append `- linter_checks` to the `needs:` list of the
+`all-checks-passed` aggregate gate at the bottom of the workflow
+(currently line 324, needs list at lines 331-337). Branch protection
+references `all-checks-passed`, so without this addition the new job
+runs but is advisory only.
 
-Expected drop: ~344 lines is mostly the four big jobs. The linter job
-adds ~20 lines net.
+The six existing jobs (`setup`, `e2e-test-run-service`,
+`e2e-test-staking`, `changes`, `e2e-test-migrate-to-pearl`,
+`unit-tests`) stay as they are. They already use uv correctly. The
+`all-checks-passed` aggregate gate gets one new line in its `needs:`
+list.
+
+Net delta: roughly +22 lines (the new `linter_checks` job plus the
+one-line update to `all-checks-passed.needs`). Nothing gets removed
+from the workflow.
 
 ### 5. CONTRIBUTING.md slim down
 
@@ -175,6 +200,26 @@ Plan (per reviewer):
 After the trim, `CONTRIBUTING.md` ends up at the stub plus the
 existing schema section (~85 lines, down from 135).
 
+### 6. Replace stale `poetry` references in `scripts/*/README.md`
+
+PR #172 updated the eight (now nine, counting `migrate_to_pearl.sh`)
+root shell scripts to use `uv` but missed seven stale `poetry`
+invocations in two sub-READMEs:
+
+- `scripts/predict_trader/README.md` lines 16, 22, 28: three
+  `poetry run python -m scripts.predict_trader.<tool> ...`
+  copy-paste commands.
+- `scripts/predict_trader/README.md` lines 197 and 198: a
+  `poetry install` + `poetry run python -m
+  scripts.predict_trader.migrate_legacy_quickstart` pair.
+- `scripts/optimus/README.md` lines 18 and 19: the same
+  `poetry install` + `poetry run python -m
+  scripts.optimus.migrate_legacy_optimus` pair.
+
+All seven get rewritten to the equivalent `uv sync --no-default-groups
+--inexact --frozen` (or just `uv run`) command at implementation
+time. Pure doc fix, no behaviour change.
+
 ## What's explicitly out of scope
 
 - **`pyproject.toml` and lockfile work**. Done in PR #172.
@@ -188,8 +233,9 @@ existing schema section (~85 lines, down from 135).
   Adding one is a separate security task.
 - **README rewrite**. Only one section gets added (the config schema
   moved from CONTRIBUTING.md). The rest stays as-is.
-- **Removing any `.sh` script**. All 8 are referenced from README as
-  the public operator interface.
+- **Removing any `.sh` script**. All 10 are referenced from README
+  or are operator entry points (the 9 `uv`-using scripts plus the
+  pure-bash `extract_private_keys.sh`).
 - **Touching `scripts/pearl_migration/`**. It's recently added and
   actively used.
 
@@ -204,20 +250,28 @@ existing schema section (~85 lines, down from 135).
 
 Implementation lands as commits on this same branch in this order:
 
-1. Add tomte to dev deps and `[tool.tomte]` to `pyproject.toml`.
-   Run `uv lock` to refresh `uv.lock`.
+1. Add tomte and `tox-uv` to dev deps and `[tool.tomte]` to
+   `pyproject.toml`. Run `uv lock` to refresh `uv.lock`.
 2. Add `tox.ini` (with `[tomte-extensions]`, `[pytest]`, `[Licenses]`,
    `[Authorized Packages]` blocks). Run
    `tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e
    pylint -e darglint -e bandit -e safety -e liccheck` locally. Fix
-   lint output.
+   lint output until every env is green.
 3. Delete the Makefile.
-4. Add the `linter_checks` CI job (including the `liccheck` step).
+4. Add the `linter_checks` CI job (including the `liccheck` step)
+   and append `- linter_checks` to `all-checks-passed.needs`.
 5. Slim `CONTRIBUTING.md` (workflow section becomes a stub, schema
    stays).
-6. Delete this `CLEANUP_PLAN.md`.
+6. Replace the 7 stale `poetry` invocations in
+   `scripts/predict_trader/README.md` and
+   `scripts/optimus/README.md` with their `uv` equivalents.
+7. Delete this `CLEANUP_PLAN.md`.
 
-Expected total diff (commits 1 to 6): ~200 lines added (`tox.ini`,
-`[tool.tomte]` block, CI job), ~80 lines removed
+Sequencing constraint: commit 4 (CI gate) must only be pushed after
+commit 2 has every lint env green locally. Otherwise the branch
+lands red on its own newly-added gate.
+
+Expected total diff (commits 1 to 7): ~200 lines added (`tox.ini`,
+`[tool.tomte]` block, CI job, doc rewrites), ~80 lines removed
 (`CONTRIBUTING.md` workflow stub, `Makefile` deletion, plus the
 mechanical `uv.lock` delta).
