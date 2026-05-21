@@ -29,8 +29,9 @@ Nothing in this PR touches those.
 
 ### 1. Add tomte and a `[tool.tomte]` block to `pyproject.toml`
 
-Tomte is not in `[dependency-groups].dev` today. Add it pinned to the
-same version trader is on (v0.7.0):
+Tomte is not in `[dependency-groups].dev` today. Add it pinned to
+v0.7.0 (also the version trader is on). v0.7.0 is published on PyPI,
+so a regular `==` pin is fine. No need for the git URL form:
 
 ```toml
 [dependency-groups]
@@ -38,11 +39,11 @@ dev = [
     "pexpect==4.9.0",
     "pytest==9.0.3",
     "pytest-cov==7.1.0",
-    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0",
+    "tomte[cli, tests]==0.7.0",
 ]
 
 [tool.tomte]
-tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@v0.7.0"
+tomte_dep_pin = "==0.7.0"
 # extra excludes / pylint disables added at implementation time
 # based on actual lint output against current scripts/ and tests/.
 ```
@@ -54,11 +55,12 @@ the list should stay short.
 ### 2. Add a minimal `tox.ini`
 
 Quickstart has no `tox.ini` today. Add one that follows the trader
-shape: a thin `[tomte-extensions]` block plus any per-repo overrides.
-Drops AEA-only envs (`check-hash`, `check-packages`,
-`check-abciapp-specs`, `check-handlers`, `liccheck`,
-`check-third-party-hashes`) because quickstart has no `packages/`
-directory.
+shape: a thin `[tomte-extensions]` block, a `[Licenses]` block for
+`liccheck`, and any per-repo overrides. Drops AEA-only envs
+(`check-hash`, `check-packages`, `check-abciapp-specs`,
+`check-handlers`, `check-third-party-hashes`) because quickstart has
+no `packages/` directory. `liccheck` stays in scope (it reads
+`[Licenses]` and `[Authorized Packages]`, not AEA state).
 
 Draft:
 
@@ -71,6 +73,23 @@ extra_pylint_disables = C0114,C0115,C0116,R0801
 [pytest]
 tomte_defaults = true
 addopts = -p no:pytest_anchorpy
+
+[Licenses]
+authorized_licenses =
+    bsd
+    new bsd
+    bsd license
+    apache
+    apache 2.0
+    apache software
+    mit
+    mit license
+    python software foundation license
+unauthorized_licenses =
+    gpl v3
+
+[Authorized Packages]
+; per-repo allowlist filled at implementation time, mirroring trader's pattern
 ```
 
 The `-p no:pytest_anchorpy` line stays because the same anchorpy
@@ -78,7 +97,7 @@ issue that `pyproject.toml` already addresses still applies under
 `tomte tox`. If lint surfaces missing imports, add minimal `[mypy-*]`
 blocks at implementation time.
 
-### 3. Fix the Makefile
+### 3. Delete the Makefile
 
 The Makefile is the one file PR #172 didn't update. It still uses
 poetry:
@@ -96,15 +115,9 @@ run_no_staking_tests:
 test: test-install run_no_staking_tests
 ```
 
-Two options for the reviewer to pick:
-
-- **Option A (keep, fix):** rewrite to use `uv sync` and `uv run
-  pytest`. One line per target.
-- **Option B (drop):** delete the Makefile. It's not referenced from
-  README, CI, or any other script. The 8 shell scripts already cover
-  install + run.
-
-Recommendation: Option B. Open to feedback.
+Confirmed: no references from README, CI, or any `.sh` script. The 8
+operator shell scripts already cover install + run. Per reviewer
+feedback, the Makefile gets deleted outright at implementation time.
 
 ### 4. Wire CI to run `tomte tox` for lint envs
 
@@ -124,11 +137,13 @@ linter_checks:
       with:
         python-version: "3.10"
     - name: Install dependencies
-      run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
+      run: pip install 'tomte[tox,cli]==0.7.0' tox-uv
     - name: Code checks
       run: tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
     - name: Security checks
       run: tomte tox -p -e safety -e bandit
+    - name: License compatibility check
+      run: tomte tox -e liccheck
 ```
 
 The four existing jobs (`setup`, `e2e-test-run-service`,
@@ -150,15 +165,15 @@ Current `CONTRIBUTING.md` is 135 lines with two distinct sections:
 - A `config.json` schema reference (lines 60ish to 135). This is
   quickstart-specific and useful.
 
-Plan:
+Plan (per reviewer):
 
 - Replace the workflow section with a ~10-line stub linking to the
   canonical `open-autonomy/CONTRIBUTING.md`.
-- Move the schema reference into `README.md` (it sits naturally next
-  to the existing config explanation there) or into a new
-  `docs/config_schema.md`. Open question, recommendation is README.md.
+- Keep the `config.json` schema reference where it is, in
+  `CONTRIBUTING.md`. No move.
 
-After the move, `CONTRIBUTING.md` ends up ~15 lines.
+After the trim, `CONTRIBUTING.md` ends up at the stub plus the
+existing schema section (~85 lines, down from 135).
 
 ## What's explicitly out of scope
 
@@ -178,13 +193,12 @@ After the move, `CONTRIBUTING.md` ends up ~15 lines.
 - **Touching `scripts/pearl_migration/`**. It's recently added and
   actively used.
 
-## Open questions for the reviewer
+## Reviewer decisions resolved
 
-1. **Makefile: keep or drop?** Recommendation: drop. It's not
-   referenced anywhere and the shell scripts cover install + run.
-2. **Config schema doc: move to `README.md` or to a new
-   `docs/config_schema.md`?** Recommendation: `README.md` so it
-   lives next to the existing config explanation.
+- Tomte pin: PyPI `==0.7.0` form, not the git URL.
+- `liccheck`: kept in scope.
+- Makefile: deleted outright.
+- Config schema doc: stays in `CONTRIBUTING.md` (no move).
 
 ## Sequencing once approved
 
@@ -192,15 +206,18 @@ Implementation lands as commits on this same branch in this order:
 
 1. Add tomte to dev deps and `[tool.tomte]` to `pyproject.toml`.
    Run `uv lock` to refresh `uv.lock`.
-2. Add `tox.ini`. Run `tomte tox -p -e black-check -e isort-check -e
-   flake8 -e mypy -e pylint -e darglint` locally. Fix lint output.
-3. Apply the Makefile decision (drop or rewrite).
-4. Add the `linter_checks` CI job.
-5. Slim `CONTRIBUTING.md` and move the schema section per the
-   reviewer's pick.
+2. Add `tox.ini` (with `[tomte-extensions]`, `[pytest]`, `[Licenses]`,
+   `[Authorized Packages]` blocks). Run
+   `tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e
+   pylint -e darglint -e bandit -e safety -e liccheck` locally. Fix
+   lint output.
+3. Delete the Makefile.
+4. Add the `linter_checks` CI job (including the `liccheck` step).
+5. Slim `CONTRIBUTING.md` (workflow section becomes a stub, schema
+   stays).
 6. Delete this `CLEANUP_PLAN.md`.
 
-Expected total diff (commits 1 to 6): ~250 lines added (tox.ini,
-`[tool.tomte]` block, CI job, README section), ~120 lines removed
-(CONTRIBUTING.md trimmed, Makefile possibly dropped, `uv.lock`
-delta is mechanical).
+Expected total diff (commits 1 to 6): ~200 lines added (`tox.ini`,
+`[tool.tomte]` block, CI job), ~80 lines removed
+(`CONTRIBUTING.md` workflow stub, `Makefile` deletion, plus the
+mechanical `uv.lock` delta).
