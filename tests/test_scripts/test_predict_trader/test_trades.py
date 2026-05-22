@@ -205,23 +205,43 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 
 
 @pytest.mark.parametrize(
-    "failure_kind, mock_kwargs",
+    "failure_kind, mock_kwargs, expected_cause",
     [
         # Network failure: requests raises before a response is received.
-        ("network", {"exc": requests.ConnectionError("boom")}),
-        # HTTP error: 500 response with raise_for_status raising HTTPError.
-        ("http", {"status_code": 500, "text": "internal error"}),
+        (
+            "network",
+            {"exc": requests.ConnectionError("boom")},
+            requests.ConnectionError,
+        ),
+        # HTTP error path: 500 response with a JSON body. Body is valid JSON
+        # so `.json()` would succeed; only `raise_for_status()` can produce
+        # the failure. If a future refactor drops `raise_for_status`, this
+        # case stops raising and the test fails — guarding that branch
+        # specifically rather than the generic "any failure" outcome.
+        (
+            "http",
+            {"status_code": 500, "json": {"errors": ["internal"]}},
+            requests.HTTPError,
+        ),
         # Body is not JSON (e.g. a Cloudflare HTML error page on 200).
         # `requests.JSONDecodeError` subclasses RequestException so the
         # helper's except clause catches it.
-        ("body", {"status_code": 200, "text": "<html>oops</html>"}),
+        (
+            "body",
+            {"status_code": 200, "text": "<html>oops</html>"},
+            requests.JSONDecodeError,
+        ),
     ],
 )
 def test_post_subgraph_query_raises_runtimeerror(
-    requests_mock, failure_kind: str, mock_kwargs: dict[str, Any]
+    requests_mock,
+    failure_kind: str,
+    mock_kwargs: dict[str, Any],
+    expected_cause: type,
 ) -> None:
     """Each failure mode (network, HTTP error, malformed body) must
-    surface as RuntimeError with the URL and label in the message."""
+    surface as RuntimeError with the URL and label in the message, and
+    the original exception must be preserved as `__cause__`."""
     url = "https://example.invalid/subgraph"
     requests_mock.post(url, **mock_kwargs)
 
@@ -231,6 +251,12 @@ def test_post_subgraph_query_raises_runtimeerror(
     msg = str(exc_info.value)
     assert "test subgraph query failed" in msg, (failure_kind, msg)
     assert url in msg, (failure_kind, msg)
+    # Asserting on the cause type proves each parametrised case actually
+    # exercises a distinct branch of the helper (network / HTTP / decode).
+    assert isinstance(exc_info.value.__cause__, expected_cause), (
+        failure_kind,
+        type(exc_info.value.__cause__).__name__,
+    )
 
 
 def test_unit_conversion_helpers() -> None:

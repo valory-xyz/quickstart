@@ -48,7 +48,9 @@ DEFAULT_TO_DATE = "2038-01-19T03:14:07"
 # Must match the `name` field in `configs/config_predict_trader.json`.
 # `load_local_config` looks the service up by exact name — if either
 # side (this constant or the JSON value) changes, update the other.
-# The test_rank_traders.py mock asserts equality so a drift fails CI.
+# The test_rank_traders.py mock asserts the script's call site passes
+# this constant; a drift between this value and the JSON's `name` is
+# NOT covered by CI and will only surface at production runtime.
 PREDICT_TRADER_SERVICE_NAME: Final[str] = "Trader Agent"
 
 
