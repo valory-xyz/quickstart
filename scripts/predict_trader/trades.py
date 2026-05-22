@@ -326,20 +326,30 @@ def _to_content(q: str) -> Dict[str, Any]:
     return finalized_query
 
 
-def _redact_subgraph_url(url: str) -> str:
-    """Strip the billable API key segment out of a Graph gateway URL.
+# Matches the billable key segment after `/api/` in The Graph gateway
+# URLs, regardless of whether the surrounding string is the full URL
+# (`https://<host>/api/<KEY>/subgraphs/...`, as in `HTTPError.__str__`)
+# or only the path (`/api/<KEY>/subgraphs/...`, as embedded by
+# `urllib3.MaxRetryError` inside `ConnectionError`/`Timeout`/`SSLError`).
+# The key segment is everything up to the next `/` or whitespace.
+_SUBGRAPH_KEY_RE = re.compile(r"(/api/)[^/\s]+")
 
-    The Graph's gateway URL embeds the key as
-    `https://<host>/api/<KEY>/subgraphs/id/<id>`. The key has to stay
-    out of `RuntimeError` messages, traceback prints, and CI logs, so
-    the helpers below redact it before any string interpolation.
+
+def _redact_subgraph_key(text: str) -> str:
+    """Replace any `/api/<key>` segment in `text` with `/api/<redacted>`.
+
+    Handles both forms in which the key surfaces:
+    - Full URL in `requests.HTTPError.__str__`:
+      `... for url: https://<host>/api/<KEY>/subgraphs/...`
+    - Path-only in `urllib3.MaxRetryError` (the cause inside
+      `requests.ConnectionError` / `Timeout` / `SSLError`):
+      `HTTPSConnectionPool(host=..., port=...): ... with url:
+      /api/<KEY>/subgraphs/... (Caused by ...)`
+
+    A single regex covers both, so the key cannot reach an error
+    message via either branch.
     """
-    marker = "/api/"
-    if marker not in url:
-        return url
-    prefix, _, rest = url.partition(marker)
-    _key, slash, tail = rest.partition("/")
-    return prefix + marker + "<redacted>" + (slash + tail if slash else "")
+    return _SUBGRAPH_KEY_RE.sub(r"\1<redacted>", text)
 
 
 def _post_subgraph_query(
@@ -353,21 +363,21 @@ def _post_subgraph_query(
     single `RuntimeError("<label> subgraph query failed for <url>: ...")`
     instead of three different opaque tracebacks. `requests.JSONDecodeError`
     is a subclass of `requests.RequestException`, so the same except
-    clause covers JSON-decode failures. The URL is run through
-    `_redact_subgraph_url` so the gateway API key never reaches the
-    error message — `requests.exceptions.HTTPError.__str__` would
-    otherwise embed the full request URL too.
+    clause covers JSON-decode failures.
+
+    The URL and the wrapped exception's `str()` both get scrubbed with
+    `_redact_subgraph_key` so the billable Graph gateway key never
+    reaches the error message — neither via `HTTPError.__str__` (which
+    embeds the full URL) nor via `urllib3.MaxRetryError` (which embeds
+    just the path).
     """
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
         res.raise_for_status()
         return res.json()
     except requests.RequestException as exc:
-        safe_url = _redact_subgraph_url(url)
-        # `exc`'s str() may include the full URL (the HTTPError case does);
-        # rewrite the message body too so the key doesn't leak via the
-        # cause chain.
-        safe_exc_msg = str(exc).replace(url, safe_url)
+        safe_url = _redact_subgraph_key(url)
+        safe_exc_msg = _redact_subgraph_key(str(exc))
         raise RuntimeError(
             f"{label} subgraph query failed for {safe_url}: {safe_exc_msg}"
         ) from exc
