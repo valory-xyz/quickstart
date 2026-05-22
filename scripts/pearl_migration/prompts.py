@@ -126,22 +126,22 @@ def collision(target: Path, kind: str) -> CollisionChoice:
 
 
 def backup_suffix() -> str:
-    """Timestamp suffix used for `.bak.<ts>` paths."""
+    """Return `bak.<unix_ts>` so two concurrent backups can't collide."""
     return f"bak.{int(time.time())}"
 
 
 def info(msg: str) -> None:
-    """Print an informational line to stdout, prefixed with a bullet marker."""
+    """Print `msg` as an info line to stdout."""
     print(f"  - {msg}")
 
 
 def warn(msg: str) -> None:
-    """Print a warning line to stdout, prefixed with `!`."""
+    """Print `msg` as a warning line to stdout."""
     print(f"  ! {msg}")
 
 
 def fatal(msg: str, code: int = 1) -> None:
-    """Print a fatal-error line to stderr and exit with `code` (default 1)."""
+    """Print `msg` to stderr and exit with `code` (default 1)."""
     print(f"  X {msg}", file=sys.stderr)
     sys.exit(code)
 

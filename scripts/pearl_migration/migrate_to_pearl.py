@@ -1336,9 +1336,12 @@ def _migrate_one_service(
             Called lazily, only inside branches that actually sign. Resumed
             runs that find every step already done skip this entirely.
 
-            Loop-variables (`qs_master_safe`, `chain_str`) are bound via
-            default args so the closure captures the current iteration's
-            values, not whatever the loop ends on.
+            `_qs_safe` and `_chain` use default-arg binding to capture the
+            loop-iteration's `qs_master_safe` / `chain_str` at definition
+            time. The closure is invoked synchronously within the same
+            iteration today, so the binding is defensive: it survives a
+            future refactor that defers the call to after the loop ends.
+            See B023 in the bugbear ruleset for the underlying pitfall.
             """
             try:
                 t = safe_threshold(ledger_api=_ledger_api(), safe=_qs_safe)

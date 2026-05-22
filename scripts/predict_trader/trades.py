@@ -354,7 +354,10 @@ def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
                 creationTimestamp_gt=creationTimestamp_gt,
             )
             content_json = _to_content(query)
-            res = requests.post(url, headers=headers, json=content_json, timeout=30)
+            try:
+                res = requests.post(url, headers=headers, json=content_json, timeout=30)
+            except requests.RequestException as exc:
+                raise RuntimeError(f"omen subgraph query failed: {exc}") from exc
             result_json = res.json()
             trades = result_json.get("data", {}).get("fpmmTrades", [])
 
@@ -394,7 +397,12 @@ def _query_conditional_tokens_gc_subgraph(creator: str) -> Dict[str, Any]:
             userPositions_id_gt=userPositions_id_gt,
         )
         content_json = {"query": query}
-        res = requests.post(url, headers=headers, json=content_json, timeout=30)
+        try:
+            res = requests.post(url, headers=headers, json=content_json, timeout=30)
+        except requests.RequestException as exc:
+            raise RuntimeError(
+                f"conditional-tokens subgraph query failed: {exc}"
+            ) from exc
         result_json = res.json()
         user_data = result_json.get("data", {}).get("user", {})
 

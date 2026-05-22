@@ -36,7 +36,7 @@ from operate.services.service import Service
 
 
 def get_subgraph_api_key() -> str:
-    """Get subgraph api key."""
+    """Read the persisted subgraph API key from OPERATE_HOME/subgraph_api_key.txt."""
     subgraph_api_key_path = OPERATE_HOME / "subgraph_api_key.txt"
     if subgraph_api_key_path.exists():
         return subgraph_api_key_path.read_text()
@@ -50,7 +50,7 @@ def get_subgraph_api_key() -> str:
 def get_service_from_config(
     config_path: Path, operate: Optional[OperateApp] = None
 ) -> Service:
-    """Get service safe."""
+    """Return the Service the given config_path maps to via the operate manager."""
     if not config_path.exists():
         print("No trader agent config found!")
         sys.exit(1)

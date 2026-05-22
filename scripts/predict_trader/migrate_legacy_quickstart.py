@@ -84,7 +84,12 @@ def decrypt_private_keys(eoa: Path, password: str) -> dict[str, str]:
     """Decrypt the EOA file (with or without password) and return its key payload."""
     if not password:
         private_key = "0x" + eoa.read_text()
-        # pylint: disable=no-value-for-parameter  # eth_account.Account uses a metaclass; pylint can't see the classmethod
+        # `Account.from_key` is bound via eth-account's `@combomethod` descriptor;
+        # pylint sees the bound `self` slot and thinks `private_key` is missing.
+        # Block-style disable + enable scopes the suppression to the one call
+        # (a trailing same-line suppression lands on the wrapped closing paren
+        # after black reformats and stops applying to the call itself).
+        # pylint: disable=no-value-for-parameter
         account: LocalAccount = Account.from_key(private_key)
         # pylint: enable=no-value-for-parameter
         address = account.address

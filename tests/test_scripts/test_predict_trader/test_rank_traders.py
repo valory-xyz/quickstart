@@ -211,9 +211,12 @@ def test_main_execution_path(
     class _Config:
         rpc = {rank_traders.Chain.GNOSIS.value: "http://rpc"}
 
-    monkeypatch.setattr(
-        run_service, "load_local_config", lambda **_kwargs: _Config()
-    )
+    # Positional, no defaults: a regression that reverts to
+    # `load_local_config()` (zero args) raises TypeError and the test fails.
+    def _fake_load_local_config(operate, service_name):  # noqa: ARG001
+        return _Config()
+
+    monkeypatch.setattr(run_service, "load_local_config", _fake_load_local_config)
     operate_home = tmp_path / ".operate"
     operate_home.mkdir(parents=True)
     (operate_home / "subgraph_api_key.txt").write_text("dummy_key", encoding="utf-8")

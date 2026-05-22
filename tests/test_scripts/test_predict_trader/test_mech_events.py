@@ -51,7 +51,10 @@ def test_populate_ipfs_contents_falls_back_to_non_metadata_url(
 
     calls: list[str] = []
 
-    def _fake_get(url: str, timeout: int = 30) -> _Response:  # noqa: ARG001
+    # `timeout` is positional with no default so the production code MUST
+    # pass it; dropping `timeout=30` from a `requests.get` call raises
+    # TypeError and the test fails (catching the W3101 regression).
+    def _fake_get(url: str, timeout: int) -> _Response:  # noqa: ARG001
         calls.append(url)
         if url.endswith("/metadata.json"):
             return _Response(json.JSONDecodeError("bad", "doc", 0))
@@ -284,7 +287,10 @@ def test_populate_ipfs_contents_uses_ipfs_hash_bytes(
 
     called: list[str] = []
 
-    def _fake_get(url: str, timeout: int = 30) -> _Response:  # noqa: ARG001
+    # `timeout` is positional with no default so the production code MUST
+    # pass it; dropping `timeout=30` from a `requests.get` call raises
+    # TypeError and the test fails (catching the W3101 regression).
+    def _fake_get(url: str, timeout: int) -> _Response:  # noqa: ARG001
         called.append(url)
         return _Response({"ok": True})
 
