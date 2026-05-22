@@ -54,7 +54,14 @@ def test_populate_ipfs_contents_falls_back_to_non_metadata_url(
     # `timeout` is positional with no default so the production code MUST
     # pass it; dropping `timeout=30` from a `requests.get` call raises
     # TypeError and the test fails (catching the W3101 regression).
-    def _fake_get(url: str, timeout: int) -> _Response:  # noqa: ARG001
+    # `timeout` is positional with no default so a regression that drops
+    # `timeout=` from `requests.get(...)` raises TypeError and the test
+    # fails (catching the W3101 regression). `**_kwargs` keeps the mock
+    # forward-compatible if production legitimately adds another kwarg
+    # like `headers=` later.
+    def _fake_get(  # noqa: ARG001
+        url: str, timeout: int, **_kwargs: Any
+    ) -> _Response:
         calls.append(url)
         if url.endswith("/metadata.json"):
             return _Response(json.JSONDecodeError("bad", "doc", 0))
@@ -290,7 +297,14 @@ def test_populate_ipfs_contents_uses_ipfs_hash_bytes(
     # `timeout` is positional with no default so the production code MUST
     # pass it; dropping `timeout=30` from a `requests.get` call raises
     # TypeError and the test fails (catching the W3101 regression).
-    def _fake_get(url: str, timeout: int) -> _Response:  # noqa: ARG001
+    # `timeout` is positional with no default so a regression that drops
+    # `timeout=` from `requests.get(...)` raises TypeError and the test
+    # fails (catching the W3101 regression). `**_kwargs` keeps the mock
+    # forward-compatible if production legitimately adds another kwarg
+    # like `headers=` later.
+    def _fake_get(  # noqa: ARG001
+        url: str, timeout: int, **_kwargs: Any
+    ) -> _Response:
         called.append(url)
         return _Response({"ok": True})
 

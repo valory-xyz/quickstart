@@ -24,7 +24,7 @@ import sys
 from argparse import ArgumentParser
 from collections import defaultdict
 from string import Template
-from typing import Any
+from typing import Any, Final
 
 import requests
 from operate.cli import OperateApp
@@ -45,10 +45,11 @@ FPMM_CREATOR = "0x89c5cc945dd550bcffb72fe42bff002429f46fec"
 DEFAULT_FROM_DATE = "2024-12-01T00:00:00"
 DEFAULT_TO_DATE = "2038-01-19T03:14:07"
 
-# Matches the `name` field in `configs/config_predict_trader.json`. If
-# that JSON is renamed, update this constant too — `load_local_config`
-# looks the service up by exact name.
-PREDICT_TRADER_SERVICE_NAME = "Trader Agent"
+# Must match the `name` field in `configs/config_predict_trader.json`.
+# `load_local_config` looks the service up by exact name — if either
+# side (this constant or the JSON value) changes, update the other.
+# The test_rank_traders.py mock asserts equality so a drift fails CI.
+PREDICT_TRADER_SERVICE_NAME: Final[str] = "Trader Agent"
 
 
 headers = {

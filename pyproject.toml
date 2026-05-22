@@ -66,10 +66,10 @@ pytest_targets = ["tests"]
 #   pytest_xprocess at startup, but xprocess is only in anchorpy's
 #   [pytest] extra and is never installed. Disabling the plugin lets
 #   pytest boot.
-# `-p no:randomly`: tomte[tests]==0.7.0 pulls in pytest-randomly which
-#   shuffles test order by default. tests/test_migrate_to_pearl.py uses
-#   numeric `test_NN_*` naming because each test depends on state set up
-#   by the previous one (e.g. test_03_*_mode_b asserts pearl_home from
+# `-p no:randomly`: tomte[tests] pulls in pytest-randomly which shuffles
+#   test order by default. tests/test_migrate_to_pearl.py uses numeric
+#   `test_NN_*` naming because each test depends on state set up by the
+#   previous one (e.g. test_03_*_mode_b asserts pearl_home from
 #   test_02_*_mode_a). Disable the plugin so the sequential order holds.
 addopts = "-p no:pytest_anchorpy -p no:randomly"
 markers = [

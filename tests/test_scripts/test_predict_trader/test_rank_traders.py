@@ -213,7 +213,10 @@ def test_main_execution_path(
 
     # Positional, no defaults: a regression that reverts to
     # `load_local_config()` (zero args) raises TypeError and the test fails.
+    # Asserting on `service_name` also catches drift between
+    # `PREDICT_TRADER_SERVICE_NAME` and the value the JSON config expects.
     def _fake_load_local_config(operate, service_name):  # noqa: ARG001
+        assert service_name == rank_traders.PREDICT_TRADER_SERVICE_NAME
         return _Config()
 
     monkeypatch.setattr(run_service, "load_local_config", _fake_load_local_config)

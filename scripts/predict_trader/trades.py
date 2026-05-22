@@ -326,6 +326,27 @@ def _to_content(q: str) -> Dict[str, Any]:
     return finalized_query
 
 
+def _post_subgraph_query(
+    url: str, payload: Dict[str, Any], *, label: str
+) -> Dict[str, Any]:
+    """POST a subgraph query and return its parsed JSON body.
+
+    Wraps `requests.post`, `raise_for_status`, and `.json()` in one
+    try-block so a network failure, a 4xx/5xx response (e.g. the gateway
+    returning an HTML error page), or a malformed body all surface as a
+    single `RuntimeError("<label> subgraph query failed for <url>: ...")`
+    instead of three different opaque tracebacks. `requests.JSONDecodeError`
+    is a subclass of `requests.RequestException`, so the same except
+    clause covers JSON-decode failures.
+    """
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res.raise_for_status()
+        return res.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"{label} subgraph query failed for {url}: {exc}") from exc
+
+
 def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
     creator: str,
     from_timestamp: float = DEFAULT_FROM_TIMESTAMP,
@@ -354,11 +375,7 @@ def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
                 creationTimestamp_gt=creationTimestamp_gt,
             )
             content_json = _to_content(query)
-            try:
-                res = requests.post(url, headers=headers, json=content_json, timeout=30)
-            except requests.RequestException as exc:
-                raise RuntimeError(f"omen subgraph query failed: {exc}") from exc
-            result_json = res.json()
+            result_json = _post_subgraph_query(url, content_json, label="omen")
             trades = result_json.get("data", {}).get("fpmmTrades", [])
 
             if not trades:
@@ -397,13 +414,9 @@ def _query_conditional_tokens_gc_subgraph(creator: str) -> Dict[str, Any]:
             userPositions_id_gt=userPositions_id_gt,
         )
         content_json = {"query": query}
-        try:
-            res = requests.post(url, headers=headers, json=content_json, timeout=30)
-        except requests.RequestException as exc:
-            raise RuntimeError(
-                f"conditional-tokens subgraph query failed: {exc}"
-            ) from exc
-        result_json = res.json()
+        result_json = _post_subgraph_query(
+            url, content_json, label="conditional-tokens"
+        )
         user_data = result_json.get("data", {}).get("user", {})
 
         if not user_data:

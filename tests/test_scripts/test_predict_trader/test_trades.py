@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
 from scripts import utils as scripts_utils
 from scripts.predict_trader import trades
 
@@ -201,6 +202,35 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
     result = trades._query_conditional_tokens_gc_subgraph("0xabc")
 
     assert result == {"data": {"user": None}}
+
+
+@pytest.mark.parametrize(
+    "failure_kind, mock_kwargs",
+    [
+        # Network failure: requests raises before a response is received.
+        ("network", {"exc": requests.ConnectionError("boom")}),
+        # HTTP error: 500 response with raise_for_status raising HTTPError.
+        ("http", {"status_code": 500, "text": "internal error"}),
+        # Body is not JSON (e.g. a Cloudflare HTML error page on 200).
+        # `requests.JSONDecodeError` subclasses RequestException so the
+        # helper's except clause catches it.
+        ("body", {"status_code": 200, "text": "<html>oops</html>"}),
+    ],
+)
+def test_post_subgraph_query_raises_runtimeerror(
+    requests_mock, failure_kind: str, mock_kwargs: dict[str, Any]
+) -> None:
+    """Each failure mode (network, HTTP error, malformed body) must
+    surface as RuntimeError with the URL and label in the message."""
+    url = "https://example.invalid/subgraph"
+    requests_mock.post(url, **mock_kwargs)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        trades._post_subgraph_query(url, {"query": "{}"}, label="test")
+
+    msg = str(exc_info.value)
+    assert "test subgraph query failed" in msg, (failure_kind, msg)
+    assert url in msg, (failure_kind, msg)
 
 
 def test_unit_conversion_helpers() -> None:
