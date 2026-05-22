@@ -204,7 +204,17 @@ def test_main_execution_path(
 	class _Config:
 		rpc = {rank_traders.Chain.GNOSIS.value: "http://rpc"}
 
-	monkeypatch.setattr(run_service, "load_local_config", lambda: _Config())
+	# Positional, no defaults: a regression that reverts to
+	# `load_local_config()` (zero args) raises TypeError and the test fails.
+	# Asserting on `service_name` also catches drift between the script's
+	# call site and `PREDICT_TRADER_SERVICE_NAME`. (Drift between the
+	# constant value and the JSON's `name` field is NOT covered here — see
+	# the production-side comment on `PREDICT_TRADER_SERVICE_NAME` for why.)
+	def _fake_load_local_config(operate, service_name):  # noqa: ARG001
+		assert service_name == rank_traders.PREDICT_TRADER_SERVICE_NAME
+		return _Config()
+
+	monkeypatch.setattr(run_service, "load_local_config", _fake_load_local_config)
 	operate_home = tmp_path / ".operate"
 	operate_home.mkdir(parents=True)
 	(operate_home / "subgraph_api_key.txt").write_text("dummy_key", encoding="utf-8")

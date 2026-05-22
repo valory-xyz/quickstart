@@ -24,8 +24,7 @@ from .prompts import CollisionChoice, backup_suffix, collision, info, warn
 
 
 class MissingAgentKey(OSError):
-    """Raised by `merge_service` when an agent key referenced by the
-    service config is not present at the source `keys/` dir.
+    """Raised when `merge_service` can't find an agent key referenced by the service config.
 
     Subclasses `OSError` so the existing `(OSError, shutil.Error)` catch
     in `_run_mode_b` aggregates it into `MigrationOutcome.unmigratable`
@@ -41,6 +40,8 @@ class MissingAgentKey(OSError):
 
 @dataclass
 class CopyOutcome:
+    """Per-service outcome of a quickstart-to-pearl filesystem merge."""
+
     service_id: str
     service_copied: bool
     service_skipped: bool
@@ -100,7 +101,7 @@ def fix_root_ownership(store: OperateStore) -> None:
             f"'sudo chown -RP {uid}:{gid}'. You may be prompted for your sudo password."
         )
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B607  # `sudo` looked up via PATH is the desired UX
                 # Plain interactive `sudo` (no `-n`): legacy
                 # `run_service.sh` does the same and prints the same
                 # "Please enter sudo password" notice. Using `-n` here

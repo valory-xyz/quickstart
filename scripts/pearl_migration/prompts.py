@@ -20,6 +20,8 @@ from operate.quickstart.utils import ask_or_get_from_env, ask_yes_or_no
 
 
 class CollisionChoice(Enum):
+    """User's resolution for a filesystem collision on a per-service merge."""
+
     SKIP = "skip"
     OVERWRITE_WITH_BACKUP = "overwrite"
 
@@ -62,11 +64,13 @@ def yes_no(question: str, default: Optional[bool] = None) -> bool:
 
 def _attended() -> bool:
     import os
+
     return os.environ.get("ATTENDED", "true").lower() == "true"
 
 
 def password(
-    prompt: str = "Password: ", env_var_name: str = "OPERATE_PASSWORD",
+    prompt: str = "Password: ",
+    env_var_name: str = "OPERATE_PASSWORD",
 ) -> str:
     """Password prompt, defers to middleware's `ask_or_get_from_env`.
 
@@ -99,8 +103,12 @@ def collision(target: Path, kind: str) -> CollisionChoice:
         "    This usually means you're re-running a migration that previously "
         "got partway. Pick how to handle it:"
     )
-    print("      1) Skip — leave the destination untouched (safe if it's the migrated copy).")
-    print("      2) Overwrite with backup — rename existing to .bak.<ts> then copy fresh.")
+    print(
+        "      1) Skip — leave the destination untouched (safe if it's the migrated copy)."
+    )
+    print(
+        "      2) Overwrite with backup — rename existing to .bak.<ts> then copy fresh."
+    )
     while True:
         try:
             raw = input("    Choice [1/2]: ").strip()
@@ -118,19 +126,22 @@ def collision(target: Path, kind: str) -> CollisionChoice:
 
 
 def backup_suffix() -> str:
-    """Timestamp suffix used for `.bak.<ts>` paths."""
+    """Return `bak.<unix_ts>` so two concurrent backups can't collide."""
     return f"bak.{int(time.time())}"
 
 
 def info(msg: str) -> None:
+    """Print `msg` as an info line to stdout."""
     print(f"  - {msg}")
 
 
 def warn(msg: str) -> None:
+    """Print `msg` as a warning line to stdout."""
     print(f"  ! {msg}")
 
 
 def fatal(msg: str, code: int = 1) -> None:
+    """Print `msg` to stderr and exit with `code` (default 1)."""
     print(f"  X {msg}", file=sys.stderr)
     sys.exit(code)
 

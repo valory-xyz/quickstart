@@ -3,10 +3,12 @@
 import datetime
 import runpy
 import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
 
 from scripts.predict_trader import trades
 from scripts import utils as scripts_utils
@@ -184,6 +186,112 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 	result = trades._query_conditional_tokens_gc_subgraph("0xabc")
 
 	assert result == {"data": {"user": None}}
+
+
+@pytest.mark.parametrize(
+	"failure_kind, mock_kwargs, expected_type_name",
+	[
+		# Network failure: simulate the urllib3-shaped str() that
+		# `requests.ConnectionError` produces in practice — the relative
+		# path embeds the key. A naive `str(exc).replace(<full url>, ...)`
+		# is a no-op against this shape, so the assertion below would catch
+		# that regression.
+		(
+			"network",
+			{
+				"exc": requests.ConnectionError(
+					"HTTPSConnectionPool(host='gateway-arbitrum.network.thegraph.com', "
+					"port=443): Max retries exceeded with url: "
+					"/api/SECRET_KEY_VALUE/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNc "
+					"(Caused by NewConnectionError(...))"
+				)
+			},
+			"ConnectionError",
+		),
+		# HTTP error path: 500 response with a JSON body. Body is valid JSON
+		# so `.json()` would succeed; only `raise_for_status()` can produce
+		# the failure. If a future refactor drops `raise_for_status`, this
+		# case stops raising and the test fails — guarding that branch
+		# specifically rather than the generic "any failure" outcome.
+		# HTTPError's __str__ embeds the full URL ("... for url: <full>")
+		# so this case also covers the full-URL-form leak path.
+		(
+			"http",
+			{"status_code": 500, "json": {"errors": ["internal"]}},
+			"HTTPError",
+		),
+		# Body is not JSON (e.g. a Cloudflare HTML error page on 200).
+		# `requests.JSONDecodeError` subclasses RequestException so the
+		# helper's except clause catches it.
+		(
+			"body",
+			{"status_code": 200, "text": "<html>oops</html>"},
+			"JSONDecodeError",
+		),
+	],
+)
+def test_post_subgraph_query_raises_runtimeerror(
+	requests_mock,
+	failure_kind: str,
+	mock_kwargs: dict[str, Any],
+	expected_type_name: str,
+) -> None:
+	"""Each failure mode (network, HTTP error, malformed body) must
+	surface as RuntimeError with the redacted URL, label, and original
+	exception class name in the message, the billable API-key segment
+	scrubbed from BOTH forms (full URL via HTTPError, path-only via
+	urllib3.MaxRetryError inside ConnectionError), and — critically —
+	no key reaching the rendered traceback via `__cause__`/`__context__`.
+	`_post_subgraph_query` uses `from None` to suppress the cause chain;
+	this test exercises `traceback.format_exception` so that any future
+	revert to `from exc` (which would leak the cause's unredacted str)
+	fails here."""
+	url = (
+		"https://gateway-arbitrum.network.thegraph.com"
+		"/api/SECRET_KEY_VALUE/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNc"
+	)
+	requests_mock.post(url, **mock_kwargs)
+
+	with pytest.raises(RuntimeError) as exc_info:
+		trades._post_subgraph_query(url, {"query": "{}"}, label="test")
+
+	msg = str(exc_info.value)
+	assert "test subgraph query failed" in msg, (failure_kind, msg)
+	# Original exception class is named in the message so debugging
+	# info isn't lost when the cause chain is suppressed.
+	assert expected_type_name in msg, (failure_kind, msg)
+	# The redacted form must appear in the message; the raw key must
+	# NOT — anywhere in the message, including the wrapped exception's
+	# string.
+	assert "/api/<redacted>/" in msg, (failure_kind, msg)
+	assert "SECRET_KEY_VALUE" not in msg, (failure_kind, msg)
+	# Cause chain suppression (`raise ... from None`) means the cause
+	# object — whose unredacted str() carries the key — must not reach
+	# the rendered traceback Python would print to stderr / CI logs.
+	rendered = "".join(traceback.format_exception(exc_info.value))
+	assert "SECRET_KEY_VALUE" not in rendered, (failure_kind, rendered)
+	assert exc_info.value.__cause__ is None, failure_kind
+
+
+def test_redact_subgraph_key_handles_non_gateway_strings() -> None:
+	"""Strings without an `/api/<key>/` segment should pass through unchanged."""
+	plain = "https://example.invalid/some/path"
+	assert trades._redact_subgraph_key(plain) == plain
+
+
+def test_redact_subgraph_key_scrubs_path_only_form() -> None:
+	"""Path-only form (as embedded by urllib3 errors) must also redact.
+
+	`requests.ConnectionError` wraps a `urllib3.MaxRetryError` whose
+	str() carries only `/api/<KEY>/...`, not the full URL. The single
+	regex must cover both shapes.
+	"""
+	urllib3_shaped = (
+		"HTTPSConnectionPool(host='x', port=443): Max retries exceeded "
+		"with url: /api/SECRET_KEY/subgraphs/id/abc (Caused by ...)"
+	)
+	assert "SECRET_KEY" not in trades._redact_subgraph_key(urllib3_shaped)
+	assert "/api/<redacted>/" in trades._redact_subgraph_key(urllib3_shaped)
 
 
 def test_unit_conversion_helpers() -> None:

@@ -22,20 +22,19 @@
 
 import json
 import os
-import traceback
-import requests
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from tqdm import tqdm
 from typing import Any, ClassVar, Dict, Optional
 
+import requests
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
+from tqdm import tqdm
 from web3.datastructures import AttributeDict
-
 
 SCRIPT_PATH = Path(__file__).resolve().parent
 MECH_EVENTS_JSON_PATH = Path(SCRIPT_PATH.parents[1], "data", "mech_events.json")
@@ -47,14 +46,15 @@ MECH_EVENTS_DB_VERSION = 3
 DEFAULT_MECH_FEE = 10000000000000000
 DEFAULT_FROM_TIMESTAMP = 0
 DEFAULT_TO_TIMESTAMP = 2147483647
-MECH_SUBGRAPH_URL_TEMPLATE = "https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis"
+MECH_SUBGRAPH_URL_TEMPLATE = (
+    "https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis"
+)
 SUBGRAPH_HEADERS = {
     "Accept": "application/json, multipart/mixed",
     "Content-Type": "application/json",
 }
 QUERY_BATCH_SIZE = 1000
-MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE = Template(
-    """
+MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE = Template("""
     query mech_events_subgraph_query($sender: String, $id_gt: ID, $first: Int)  {
         ${subgraph_event_set_name}(
             where: {sender: $sender, id_gt: $id_gt}
@@ -69,20 +69,20 @@ MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE = Template(
             transactionHash
             blockNumber
             blockTimestamp
-            
+
             # Fetch from legacy mech request
             mechRequest {
                 ipfsHash
             }
-            
+
             # Fetch from marketplace request
             marketplaceRequest {
                 ipfsHashBytes
             }
         }
     }
-    """
-)
+    """)
+
 
 @dataclass
 class MechBaseEvent:  # pylint: disable=too-many-instance-attributes
@@ -131,12 +131,14 @@ class MechBaseEvent:  # pylint: disable=too-many-instance-attributes
         elif self.ipfs_hash_bytes:
             url = f"{IPFS_ADDRESS}{CID_PREFIX}{self.ipfs_hash_bytes}"
         else:
-            print(f"WARNING: No IPFS hash found for Mech event {self.event_name} with ID {self.event_id}.")
+            print(
+                f"WARNING: No IPFS hash found for Mech event {self.event_name} with ID {self.event_id}."
+            )
             return
 
         for _url in [f"{url}/metadata.json", url]:
             try:
-                response = requests.get(_url)
+                response = requests.get(_url, timeout=30)
                 response.raise_for_status()
                 self.ipfs_contents = response.json()
                 self.ipfs_link = _url
@@ -145,7 +147,7 @@ class MechBaseEvent:  # pylint: disable=too-many-instance-attributes
 
             except Exception:  # pylint: disable=broad-except
                 print(traceback.format_exc())
-                input(f"Press Enter to continue...")
+                input("Press Enter to continue...")
 
 
 @dataclass
@@ -164,8 +166,14 @@ class MechRequest(MechBaseEvent):
         super().__init__(
             event_id=event["id"],
             sender=event["sender"]["id"],
-            ipfs_hash=event["mechRequest"]["ipfsHash"] if event["mechRequest"] else None,
-            ipfs_hash_bytes=event["marketplaceRequest"]["ipfsHashBytes"] if event["marketplaceRequest"] else None,
+            ipfs_hash=(
+                event["mechRequest"]["ipfsHash"] if event["mechRequest"] else None
+            ),
+            ipfs_hash_bytes=(
+                event["marketplaceRequest"]["ipfsHashBytes"]
+                if event["marketplaceRequest"]
+                else None
+            ),
             transaction_hash=event["transactionHash"],
             block_number=int(event["blockNumber"]),
             block_timestamp=int(event["blockTimestamp"]),
@@ -186,7 +194,9 @@ def _read_mech_events_data_from_file() -> Dict[str, Any]:
         if mech_events_data.get("db_version", 0) < MECH_EVENTS_DB_VERSION:
             current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
             old_db_filename = f"mech_events.{current_time}.old.json"
-            os.rename(MECH_EVENTS_JSON_PATH, MECH_EVENTS_JSON_PATH.parent / old_db_filename)
+            os.rename(
+                MECH_EVENTS_JSON_PATH, MECH_EVENTS_JSON_PATH.parent / old_db_filename
+            )
             mech_events_data = {}
             mech_events_data["db_version"] = MECH_EVENTS_DB_VERSION
     except FileNotFoundError:
@@ -227,7 +237,9 @@ def _query_mech_events_subgraph(
 
     subgraph_event_set_name = f"{event_cls.subgraph_event_name}s"
     all_results: dict[str, Any] = {"data": {subgraph_event_set_name: []}}
-    query = MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE.safe_substitute(subgraph_event_set_name=subgraph_event_set_name)
+    query = MECH_EVENTS_SUBGRAPH_QUERY_TEMPLATE.safe_substitute(
+        subgraph_event_set_name=subgraph_event_set_name
+    )
     id_gt = ""
     while True:
         variables = {
@@ -277,13 +289,9 @@ def _update_mech_events_db(
             miniters=1,
             desc="        Processing",
         ):
-            if subgraph_event[
-                "id"
-            ] not in stored_events or not stored_events.get(
+            if subgraph_event["id"] not in stored_events or not stored_events.get(
                 subgraph_event["id"], {}
-            ).get(
-                "ipfs_contents"
-            ):
+            ).get("ipfs_contents"):
                 mech_event = event_cls(subgraph_event)  # type: ignore
                 stored_events[mech_event.event_id] = mech_event.__dict__
 

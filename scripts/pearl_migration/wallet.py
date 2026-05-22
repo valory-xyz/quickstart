@@ -24,6 +24,7 @@ user may remove it once Pearl has launched; on failure it is the only
 recovery artifact, so removing it before the issue is resolved would
 be unrecoverable.
 """
+
 from __future__ import annotations
 
 import json

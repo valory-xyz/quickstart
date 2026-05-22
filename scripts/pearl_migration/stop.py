@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from typing import TYPE_CHECKING, List
+from typing import List, TYPE_CHECKING
 
 from .status import QUICKSTART_CONTAINER_FRAGMENTS, docker_quickstart_containers
 
@@ -70,7 +70,7 @@ def force_remove_known_containers() -> List[str]:
     if not leftovers:
         return []
     try:
-        subprocess.run(
+        subprocess.run(  # nosec B607  # `docker` looked up via PATH is the desired UX
             ["docker", "rm", "-f", *leftovers],
             check=True,
             capture_output=True,

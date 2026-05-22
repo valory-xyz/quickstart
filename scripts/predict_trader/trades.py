@@ -22,7 +22,6 @@
 
 import datetime
 import re
-import requests
 import sys
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
 from collections import defaultdict
@@ -31,12 +30,12 @@ from pathlib import Path
 from string import Template
 from typing import Any, Dict, Optional
 
+import requests
 from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import ask_password_if_needed, load_local_config
 from scripts.predict_trader.mech_events import get_mech_requests
 from scripts.utils import get_service_from_config, get_subgraph_api_key
-
 
 IRRELEVANT_TOOLS = [
     "openai-text-davinci-002",
@@ -55,7 +54,7 @@ DUST_THRESHOLD = 10000000000000
 INVALID_ANSWER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 FPMM_CREATORS = (
     "0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec",
-    "0xFfc8029154ECD55ABED15BD428bA596E7D23f557"
+    "0xFfc8029154ECD55ABED15BD428bA596E7D23f557",
 )
 DEFAULT_FROM_DATE = "1970-01-01T00:00:00"
 DEFAULT_TO_DATE = "2038-01-19T03:14:07"
@@ -71,8 +70,7 @@ headers = {
 }
 
 
-omen_xdai_trades_query = Template(
-    """
+omen_xdai_trades_query = Template("""
     {
         fpmmTrades(
             where: {
@@ -122,12 +120,10 @@ omen_xdai_trades_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 
-conditional_tokens_gc_user_query = Template(
-    """
+conditional_tokens_gc_user_query = Template("""
     {
         user(id: "${id}") {
             userPositions(
@@ -148,8 +144,7 @@ conditional_tokens_gc_user_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 
 class MarketState(Enum):
@@ -214,12 +209,15 @@ def get_balance(address: str, rpc_url: str, block_identifier: str = "latest") ->
         "params": [address, block_identifier],
         "id": 1,
     }
-    response = requests.post(rpc_url, headers=headers, json=data)
+    response = requests.post(rpc_url, headers=headers, json=data, timeout=30)
     return int(response.json().get("result"), 16)
 
 
 def get_token_balance(
-    gnosis_address: str, token_contract_address: str, rpc_url: str, block_identifier: str = "latest"
+    gnosis_address: str,
+    token_contract_address: str,
+    rpc_url: str,
+    block_identifier: str = "latest",
 ) -> int:
     """Get the token balance of an address in wei."""
     function_selector = "70a08231"  # function selector for balanceOf(address)
@@ -234,7 +232,7 @@ def get_token_balance(
         "params": [{"to": token_contract_address, "data": data}, block_identifier],
         "id": 1,
     }
-    response = requests.post(rpc_url, json=payload)
+    response = requests.post(rpc_url, json=payload, timeout=30)
     result = response.json().get("result", "0x0")
     balance_wei = int(result, 16)  # convert hex to int
     return balance_wei
@@ -293,12 +291,18 @@ def _parse_args() -> Any:
     args = parser.parse_args()
 
     if args.creator is None:
-        template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+        template_path = Path(
+            SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json"
+        )
         if not template_path.exists():
             print("No Safe address found!")
             sys.exit(1)
 
-        args.creator = get_service_from_config(template_path).chain_configs["gnosis"].chain_data.multisig
+        args.creator = (
+            get_service_from_config(template_path)
+            .chain_configs["gnosis"]
+            .chain_data.multisig
+        )
 
     args.from_date = args.from_date.replace(tzinfo=datetime.timezone.utc)
     args.to_date = args.to_date.replace(tzinfo=datetime.timezone.utc)
@@ -320,6 +324,71 @@ def _to_content(q: str) -> Dict[str, Any]:
         "extensions": {"headers": None},
     }
     return finalized_query
+
+
+# Matches the billable key segment after `/api/` in The Graph gateway
+# URLs, regardless of whether the surrounding string is the full URL
+# (`https://<host>/api/<KEY>/subgraphs/...`, as in `HTTPError.__str__`)
+# or only the path (`/api/<KEY>/subgraphs/...`, as embedded by
+# `urllib3.MaxRetryError` inside `ConnectionError`/`Timeout`/`SSLError`).
+# The key segment is everything up to the next `/` or whitespace.
+_SUBGRAPH_KEY_RE = re.compile(r"(/api/)[^/\s]+")
+
+
+def _redact_subgraph_key(text: str) -> str:
+    """Replace any `/api/<key>` segment in `text` with `/api/<redacted>`.
+
+    Handles both forms in which the key surfaces:
+    - Full URL in `requests.HTTPError.__str__`:
+      `... for url: https://<host>/api/<KEY>/subgraphs/...`
+    - Path-only in `urllib3.MaxRetryError` (the cause inside
+      `requests.ConnectionError` / `Timeout` / `SSLError`):
+      `HTTPSConnectionPool(host=..., port=...): ... with url:
+      /api/<KEY>/subgraphs/... (Caused by ...)`
+
+    A single regex covers both, so the key cannot reach an error
+    message via either branch.
+    """
+    return _SUBGRAPH_KEY_RE.sub(r"\1<redacted>", text)
+
+
+def _post_subgraph_query(
+    url: str, payload: Dict[str, Any], *, label: str
+) -> Dict[str, Any]:
+    """POST a subgraph query and return its parsed JSON body.
+
+    Wraps `requests.post`, `raise_for_status`, and `.json()` in one
+    try-block so a network failure, a 4xx/5xx response (e.g. the gateway
+    returning an HTML error page), or a malformed body all surface as a
+    single `RuntimeError("<label> subgraph query failed for <url>: ...")`
+    instead of three different opaque tracebacks. `requests.JSONDecodeError`
+    is a subclass of `requests.RequestException`, so the same except
+    clause covers JSON-decode failures.
+
+    The URL and the wrapped exception's `str()` both get scrubbed with
+    `_redact_subgraph_key` so the billable Graph gateway key never
+    reaches the error message — neither via `HTTPError.__str__` (which
+    embeds the full URL) nor via `urllib3.MaxRetryError` (which embeds
+    just the path).
+
+    Re-raises with `from None` (not `from exc`) so the cause chain is
+    suppressed: keeping `exc` as `__cause__` would let Python's default
+    traceback printer render its unredacted `str()` verbatim, leaking
+    the key into terminal output and CI logs even when the wrapper
+    message itself is clean. The redacted message preserves the URL
+    and the original exception's class name + str for debugging.
+    """
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res.raise_for_status()
+        return res.json()
+    except requests.RequestException as exc:
+        safe_url = _redact_subgraph_key(url)
+        safe_exc_msg = _redact_subgraph_key(str(exc))
+        raise RuntimeError(
+            f"{label} subgraph query failed for {safe_url} "
+            f"({type(exc).__name__}): {safe_exc_msg}"
+        ) from None
 
 
 def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
@@ -350,8 +419,7 @@ def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
                 creationTimestamp_gt=creationTimestamp_gt,
             )
             content_json = _to_content(query)
-            res = requests.post(url, headers=headers, json=content_json)
-            result_json = res.json()
+            result_json = _post_subgraph_query(url, content_json, label="omen")
             trades = result_json.get("data", {}).get("fpmmTrades", [])
 
             if not trades:
@@ -390,8 +458,9 @@ def _query_conditional_tokens_gc_subgraph(creator: str) -> Dict[str, Any]:
             userPositions_id_gt=userPositions_id_gt,
         )
         content_json = {"query": query}
-        res = requests.post(url, headers=headers, json=content_json)
-        result_json = res.json()
+        result_json = _post_subgraph_query(
+            url, content_json, label="conditional-tokens"
+        )
         user_data = result_json.get("data", {}).get("user", {})
 
         if not user_data:
@@ -661,7 +730,7 @@ def _format_table(table: Dict[Any, Dict[Any, Any]]) -> str:
         f"{MarketAttribute.ROI:<{column_width}}"
         + "".join(
             [
-                f"{table[MarketAttribute.ROI][c]*100.0:>{column_width-5}.2f} %   "
+                f"{table[MarketAttribute.ROI][c] * 100.0:>{column_width - 5}.2f} %   "
                 for c in STATS_TABLE_COLS
             ]
         )
@@ -780,18 +849,14 @@ def parse_user(  # pylint: disable=too-many-locals,too-many-statements
                     earnings = 0
                     output += f"  Final answer: {fpmm['outcomes'][current_answer]!r} - The trade was for the loser answer.\n"
 
+                statistics_table[MarketAttribute.EARNINGS][market_status] += earnings
 
-                statistics_table[MarketAttribute.EARNINGS][
-                        market_status
-                    ] += earnings
-                
-                statistics_table[MarketAttribute.NUM_VALID_TRADES][
-                        market_status
-                    ] = statistics_table[MarketAttribute.NUM_TRADES][
-                        market_status
-                    ] - statistics_table[MarketAttribute.NUM_INVALID_MARKET][
+                statistics_table[MarketAttribute.NUM_VALID_TRADES][market_status] = (
+                    statistics_table[MarketAttribute.NUM_TRADES][market_status]
+                    - statistics_table[MarketAttribute.NUM_INVALID_MARKET][
                         market_status
                     ]
+                )
 
                 if 0 < earnings < DUST_THRESHOLD:
                     output += "Earnings are dust.\n"
@@ -856,7 +921,9 @@ def get_mech_statistics(mech_requests: Dict[str, Any]) -> Dict[str, Dict[str, in
 if __name__ == "__main__":
     user_args = _parse_args()
 
-    template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+    template_path = Path(
+        SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json"
+    )
     operate = OperateApp()
     ask_password_if_needed(operate)
     service = get_service_from_config(template_path)

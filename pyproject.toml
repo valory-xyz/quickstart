@@ -27,20 +27,51 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pexpect==4.9.0",
-    "pytest==9.0.3",
-    "pytest-cov==7.1.0",
+    "tomte[cli, tests]==0.7.0",
+    "tox-uv==1.16.0",
 ]
+# Note: pytest, pytest-cov and pytest-asyncio are brought in by
+# tomte[tests] at pinned versions (pytest==8.4.2, pytest-cov==7.0.0,
+# pytest-asyncio==1.3.0). Don't pin them separately or uv will
+# refuse to resolve.
 
 [tool.uv]
 package = false
 default-groups = "all"
 
+# Some tomte testenvs (pylint, py3.x) trigger an editable install via tox.
+# Without a build-system block setuptools falls back to flat-layout
+# auto-discovery and trips on `data/`, `images/`, `configs/` at repo root.
+# Declare an empty package set so the build is a no-op.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
+
+[tool.tomte]
+tomte_dep_pin = "==0.7.0"
+# Quickstart has no Valory `packages/<author>/...` tree (it consumes
+# pre-published packages via `olas-operate-middleware`). Lint scope
+# is `scripts/` only — `tests/` is excluded from lint following
+# trader's pattern (production code lints, tests don't).
+packages_paths = "."
+service_specific_packages = ["scripts"]
+pytest_targets = ["tests"]
+
 [tool.pytest.ini_options]
-# anchorpy ships a pytest plugin (via open-autonomy -> open-aea-ledger-solana ->
-# anchorpy) that imports pytest_xprocess at startup, but xprocess is only in
-# anchorpy's [pytest] extra and is never installed. Disable the plugin so
-# pytest can boot.
-addopts = "-p no:pytest_anchorpy"
+# `-p no:pytest_anchorpy`: anchorpy ships a pytest plugin (via
+#   open-autonomy -> open-aea-ledger-solana -> anchorpy) that imports
+#   pytest_xprocess at startup, but xprocess is only in anchorpy's
+#   [pytest] extra and is never installed. Disabling the plugin lets
+#   pytest boot.
+# `-p no:randomly`: tomte[tests] pulls in pytest-randomly which shuffles
+#   test order by default. tests/test_migrate_to_pearl.py uses numeric
+#   `test_NN_*` naming because each test depends on state set up by the
+#   previous one (e.g. test_03_*_mode_b asserts pearl_home from
+#   test_02_*_mode_a). Disable the plugin so the sequential order holds.
+addopts = "-p no:pytest_anchorpy -p no:randomly"
 markers = [
     "e2e: end-to-end tests that may use real network/external systems",
     "integration: integration tests that may use networked dependencies",

@@ -37,7 +37,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -45,6 +44,7 @@ from typing import (
     Literal,
     NoReturn,
     Optional,
+    TYPE_CHECKING,
     Tuple,
     Type,
 )
@@ -58,6 +58,46 @@ from operate.quickstart.utils import (
 )
 from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
+from scripts.pearl_migration.detect import (
+    Discovery,
+    Mode,
+    OperateStore,
+    discover,
+)
+from scripts.pearl_migration.filesystem import (
+    fix_root_ownership,
+    fresh_copy_store,
+    merge_service,
+    rename_source_for_rollback,
+    reset_services_staking_to_no_staking,
+)
+from scripts.pearl_migration.prompts import (
+    ask_password_validating,
+    fatal,
+    info,
+    warn,
+    yes_no,
+)
+from scripts.pearl_migration.status import (
+    docker_quickstart_containers,
+    pearl_daemon_running,
+    safe_owners,
+    safe_threshold,
+    service_nft_owner,
+)
+from scripts.pearl_migration.stop import (
+    force_remove_known_containers,
+    stop_via_middleware,
+)
+from scripts.pearl_migration.wallet import (
+    align_quickstart_password,
+    align_user_account_to_wallet,
+)
+
+if TYPE_CHECKING:
+    from operate.cli import OperateApp
+    from operate.services.manage import ServiceManager
+    from operate.wallet.master import MasterWallet
 
 # Programming bugs we DO NOT want wrapped as `_Unmigratable("NFT transfer
 # failed: ...")`. Letting these propagate surfaces the real fault (with a
@@ -91,7 +131,11 @@ def _reraise_if_programming_bug(exc: BaseException) -> None:
 
 
 def _wrap_step_failure(
-    *, sid: str, chain: str, prefix: str, exc: BaseException,
+    *,
+    sid: str,
+    chain: str,
+    prefix: str,
+    exc: BaseException,
 ) -> "_Unmigratable":
     """Build the `_Unmigratable` for a step's `except` block.
 
@@ -113,7 +157,8 @@ def _wrap_step_failure(
     """
     _reraise_if_programming_bug(exc)
     return _Unmigratable(
-        service_id=sid, chain=chain,
+        service_id=sid,
+        chain=chain,
         reason=f"{prefix}: {_format_exc_chain(exc)}.",
     )
 
@@ -148,8 +193,10 @@ _FUNDS_POLL_INTERVAL_SECONDS = 5
 
 
 def _is_insufficient_funds_error(exc: BaseException) -> bool:
-    """Detect the middleware's "no funds" failure so we can wait for the
-    user to top up instead of marking the service un-migratable.
+    """Detect the middleware's "no funds" failure so we can wait for a top-up.
+
+    Returning True means the caller should pause and wait for the user
+    to fund the safe instead of marking the service un-migratable.
 
     olas-operate-middleware raises a plain `RuntimeError` (no dedicated
     exception class) when an EOA can't pay gas — message-matching is the
@@ -159,10 +206,7 @@ def _is_insufficient_funds_error(exc: BaseException) -> bool:
     than looping forever on an unrelated error.
     """
     msg = str(exc).lower()
-    return (
-        "does not have any funds" in msg
-        or "insufficient funds" in msg
-    )
+    return "does not have any funds" in msg or "insufficient funds" in msg
 
 
 def _wait_for_native_funds(
@@ -228,8 +272,7 @@ def _retry_on_funds_shortage(
     recipient_name: str,
     log_indent: str = "    ",
 ) -> Any:
-    """Run `fn`, blocking on insufficient-funds errors with a
-    wait-and-retry loop against `address`.
+    """Run `fn` and block on insufficient-funds errors with a retry loop against `address`.
 
     Used at the four signing sites where the middleware actually
     propagates funds errors: `_step_terminate`, `_step_transfer_nft`,
@@ -270,8 +313,7 @@ def _create_pearl_safe_with_funds_wait(
     ledger_api: Any,
     log_indent: str = "    ",
 ) -> None:
-    """Create the Pearl master Safe on `chain`, blocking on insufficient
-    funds with a wait-and-retry loop.
+    """Create the Pearl master Safe on `chain`, blocking on insufficient funds.
 
     On non-funds errors the original exception is re-raised so the caller
     can wrap it with the right granularity (`_Unmigratable` per-service
@@ -287,50 +329,6 @@ def _create_pearl_safe_with_funds_wait(
         recipient_name="Pearl master EOA",
         log_indent=log_indent,
     )
-
-
-from scripts.pearl_migration.detect import (
-    Discovery,
-    Mode,
-    OperateStore,
-    discover,
-)
-
-if TYPE_CHECKING:
-    from operate.cli import OperateApp
-    from operate.services.manage import ServiceManager
-    from operate.services.service import Service
-    from operate.operate_types import Chain
-    from operate.wallet.master import MasterWallet
-from scripts.pearl_migration.filesystem import (
-    fix_root_ownership,
-    fresh_copy_store,
-    merge_service,
-    rename_source_for_rollback,
-    reset_services_staking_to_no_staking,
-)
-from scripts.pearl_migration.prompts import (
-    ask_password_validating,
-    fatal,
-    info,
-    warn,
-    yes_no,
-)
-from scripts.pearl_migration.status import (
-    docker_quickstart_containers,
-    pearl_daemon_running,
-    safe_owners,
-    safe_threshold,
-    service_nft_owner,
-)
-from scripts.pearl_migration.stop import (
-    force_remove_known_containers,
-    stop_via_middleware,
-)
-from scripts.pearl_migration.wallet import (
-    align_quickstart_password,
-    align_user_account_to_wallet,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +375,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 # Service selection
 # ---------------------------------------------------------------------------
 
+
 def _select_services(
     qs: OperateStore,
     config_path: Optional[str],
@@ -400,8 +399,10 @@ def _select_services(
                 # Piped/closed stdin (CI, automation) — re-prompting forever
                 # would hang. Surface as a clean fatal instead of a raw
                 # `EOFError: EOF when reading a line` traceback.
-                fatal("No selection provided (stdin closed). Re-run with "
-                      "`--quickstart-config <path>` or attach a tty.")
+                fatal(
+                    "No selection provided (stdin closed). Re-run with "
+                    "`--quickstart-config <path>` or attach a tty."
+                )
             if raw.isdigit():
                 n = int(raw)
                 if 1 <= n <= len(services):
@@ -412,6 +413,7 @@ def _select_services(
 
     # config_path given: match by 'name' or 'hash'
     import json
+
     try:
         cfg = json.loads(Path(config_path).read_text())
     except (OSError, json.JSONDecodeError) as exc:
@@ -429,6 +431,7 @@ def _select_services(
 # ---------------------------------------------------------------------------
 # Pre-flight
 # ---------------------------------------------------------------------------
+
 
 def _preflight(disc: Discovery) -> None:
     info(f"Quickstart .operate: {disc.quickstart.root}")
@@ -460,8 +463,10 @@ def _preflight(disc: Discovery) -> None:
 # Wallet loading
 # ---------------------------------------------------------------------------
 
+
 def _load_wallet(
-    store: OperateStore, label: str,
+    store: OperateStore,
+    label: str,
 ) -> Tuple["OperateApp", "MasterWallet"]:
     """Prompt for the password for `store` and return (OperateApp, wallet).
 
@@ -500,6 +505,7 @@ def _load_wallet(
 # ---------------------------------------------------------------------------
 # Shared cleanup helper (used by both Mode A and Mode B)
 # ---------------------------------------------------------------------------
+
 
 def _ensure_containers_stopped(
     on_failure: Callable[[str], NoReturn],
@@ -551,10 +557,12 @@ def _ensure_containers_stopped(
 # Mode A — fresh copy
 # ---------------------------------------------------------------------------
 
+
 def _run_mode_a(disc: Discovery, dry_run: bool) -> MigrationOutcome:
-    """Run the fresh-copy mode and return an empty `MigrationOutcome`
-    (which is `is_complete=True` by construction) so the caller can
-    plumb a uniform `MigrationOutcome` through `_final_prompt`.
+    """Run the fresh-copy mode and return an empty `MigrationOutcome`.
+
+    The returned `MigrationOutcome` is `is_complete=True` by construction
+    so the caller can plumb a uniform value through `_final_prompt`.
 
     Mode A has no per-service / per-chain partial-failure state: any
     `OSError` / `shutil.Error` from the copy or rename callees propagates
@@ -567,6 +575,7 @@ def _run_mode_a(disc: Discovery, dry_run: bool) -> MigrationOutcome:
     # If Pearl dir exists but no wallet, back it up so the copy is clean.
     if disc.pearl.root.exists():
         from scripts.pearl_migration.prompts import backup_suffix as _bs
+
         bak = disc.pearl.root.with_name(f"{disc.pearl.root.name}.bak.{_bs()}")
         if dry_run:
             info(f"[dry-run] Would back up empty Pearl dir to {bak}.")
@@ -613,6 +622,7 @@ def _run_mode_a(disc: Discovery, dry_run: bool) -> MigrationOutcome:
 # ---------------------------------------------------------------------------
 # Mode B — merge
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class _Unmigratable(Exception):
@@ -698,6 +708,7 @@ class MigrationOutcome:
 
     @property
     def is_complete(self) -> bool:
+        """True iff every selected service migrated cleanly and all drains succeeded."""
         return (
             not self.unmigratable
             and not self.drain_failures
@@ -706,6 +717,7 @@ class MigrationOutcome:
 
     @property
     def migrated_count(self) -> int:
+        """Number of services successfully migrated in this run."""
         return len(self.migrated)
 
 
@@ -716,8 +728,10 @@ def _run_mode_b(
     dry_run: bool,
     subset_selected: bool = False,
 ) -> MigrationOutcome:
-    """Returns the structured `MigrationOutcome`. `outcome.is_complete` False
-    suppresses the source-`.operate/` rename so the user can resume.
+    """Return the structured `MigrationOutcome` for the merge-mode migration.
+
+    `outcome.is_complete = False` suppresses the source-`.operate/` rename
+    so the user can resume.
 
     `subset_selected` is the caller's signal that `services` is only some
     of what the quickstart store currently exposes (the user picked via
@@ -729,10 +743,15 @@ def _run_mode_b(
     existing single-service test fixtures rely on.
     """
     print_section("MERGE")
-    info(f"Will migrate {len(services)} service(s): " + ", ".join(s.name for s in services))
+    info(
+        f"Will migrate {len(services)} service(s): "
+        + ", ".join(s.name for s in services)
+    )
 
     if dry_run:
-        info("[dry-run] Stopping at discovery; no on-chain or filesystem actions taken.")
+        info(
+            "[dry-run] Stopping at discovery; no on-chain or filesystem actions taken."
+        )
         return MigrationOutcome(subset_selected=subset_selected)
 
     # If `OperateStore.services()` dropped any malformed configs we MUST NOT
@@ -791,8 +810,6 @@ def _run_mode_b(
     # didn't have one yet (using the same RPC the migration was driven by).
     chain_rpcs: dict = {}
 
-    from operate.operate_types import Chain as _Chain
-
     for svc in services:
         print_section(f"Migrating service: {svc.name}  ({svc.service_config_id})")
         # Snapshot the service's chain RPCs up front — used by the drain
@@ -801,7 +818,7 @@ def _run_mode_b(
         # wins (deterministic) but we warn so the user can investigate
         # rather than silently inheriting one over the other.
         for chain_str, chain_config in svc.chain_configs.items():
-            chain_key = _Chain(chain_str)
+            chain_key = Chain(chain_str)
             new_rpc = chain_config.ledger_config.rpc
             existing_rpc = chain_rpcs.get(chain_key)
             if existing_rpc is None:
@@ -838,16 +855,19 @@ def _run_mode_b(
             merge_service(service=svc, src=disc.quickstart, dest=disc.pearl)
         except (OSError, shutil.Error) as exc:
             warn(f"Skipping service {svc.name}: filesystem copy failed: {exc}")
-            unmigratable.append(_Unmigratable(
-                service_id=svc.service_config_id, chain=None,
-                reason=(
-                    f"on-chain migration committed but filesystem copy "
-                    f"failed: {exc}. Manually copy "
-                    f"`services/{svc.service_config_id}/` and the agent "
-                    f"keys (under `keys/`) from {disc.quickstart.root} to "
-                    f"{disc.pearl.root} before launching Pearl."
-                ),
-            ))
+            unmigratable.append(
+                _Unmigratable(
+                    service_id=svc.service_config_id,
+                    chain=None,
+                    reason=(
+                        f"on-chain migration committed but filesystem copy "
+                        f"failed: {exc}. Manually copy "
+                        f"`services/{svc.service_config_id}/` and the agent "
+                        f"keys (under `keys/`) from {disc.quickstart.root} to "
+                        f"{disc.pearl.root} before launching Pearl."
+                    ),
+                )
+            )
             continue
         migrated.append(svc)
 
@@ -869,7 +889,8 @@ def _run_mode_b(
         )
     else:
         drain_failures = _drain_master(
-            qs_wallet=qs_wallet, pearl_wallet=pearl_wallet,
+            qs_wallet=qs_wallet,
+            pearl_wallet=pearl_wallet,
             chain_rpcs=chain_rpcs,
         )
 
@@ -896,7 +917,11 @@ def _run_mode_b(
         ):
             rename_source_for_rollback(disc.quickstart)
     elif not outcome.is_complete:
-        if outcome.subset_selected and not outcome.unmigratable and not outcome.drain_failures:
+        if (
+            outcome.subset_selected
+            and not outcome.unmigratable
+            and not outcome.drain_failures
+        ):
             reason = "remaining services still live in the source"
         else:
             reason = "migration incomplete"
@@ -949,10 +974,15 @@ def _print_migration_summary(outcome: MigrationOutcome) -> None:
 
 
 def _step_terminate(
-    *, manager: "ServiceManager", service: "Service", sid: str, chain_str: str,
-    ensure_signable,                            # callable[[], None]
+    *,
+    manager: "ServiceManager",
+    service: "Service",
+    sid: str,
+    chain_str: str,
+    ensure_signable,  # callable[[], None]
     on_chain_state_cls: OnChainState,
-    ledger_api: Any, qs_address: str,
+    ledger_api: Any,
+    qs_address: str,
 ) -> None:
     """Move on-chain to PRE_REGISTRATION (idempotent).
 
@@ -967,16 +997,20 @@ def _step_terminate(
     try:
         _retry_on_funds_shortage(
             lambda: manager.terminate_service_on_chain_from_safe(
-                service_config_id=sid, chain=chain_str,
+                service_config_id=sid,
+                chain=chain_str,
             ),
-            ledger_api=ledger_api, address=qs_address, chain_str=chain_str,
+            ledger_api=ledger_api,
+            address=qs_address,
+            chain_str=chain_str,
             recipient_name="Quickstart master EOA",
         )
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
-            sid=sid, chain=chain_str,
+            sid=sid,
+            chain=chain_str,
             prefix="could not unstake/terminate; funds left in master "
-                   "Safe/EOA so you can retry",
+            "Safe/EOA so you can retry",
             exc=exc,
         )
     # Verification read after terminate succeeded. Wrap so a transient
@@ -987,24 +1021,32 @@ def _step_terminate(
         on_chain_state = manager._get_on_chain_state(service, chain_str)  # noqa: SLF001
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
-            sid=sid, chain=chain_str,
+            sid=sid,
+            chain=chain_str,
             prefix="terminate succeeded but post-state verification "
-                   "failed (on-chain progressed; re-run will resume from "
-                   "the next step)",
+            "failed (on-chain progressed; re-run will resume from "
+            "the next step)",
             exc=exc,
         )
     if on_chain_state != on_chain_state_cls.PRE_REGISTRATION:
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=f"after terminate, service is in state {on_chain_state.name}, "
-                   "expected PRE_REGISTRATION.",
+            "expected PRE_REGISTRATION.",
         )
 
 
 def _step_transfer_nft(
-    *, ledger_api: Any, qs_wallet: Any, registry_addr: str,
-    qs_master_safe: str, pearl_master_safe: str,
-    token_id: int, sid: str, chain_str: str,
+    *,
+    ledger_api: Any,
+    qs_wallet: Any,
+    registry_addr: str,
+    qs_master_safe: str,
+    pearl_master_safe: str,
+    token_id: int,
+    sid: str,
+    chain_str: str,
     ensure_signable,
 ) -> None:
     """Transfer the service NFT to Pearl's master Safe (idempotent)."""
@@ -1020,32 +1062,39 @@ def _step_transfer_nft(
     )
     if current_owner is None:
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=f"could not read NFT owner for token {token_id}; "
-                   "RPC error or contract revert.",
+            "RPC error or contract revert.",
         )
     if current_owner.lower() == pearl_master_safe.lower():
         info("    NFT already owned by Pearl master Safe; skipping transfer.")
         return
     if current_owner.lower() != qs_master_safe.lower():
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=f"NFT owner is {current_owner}, expected quickstart "
-                   f"({qs_master_safe}) or Pearl ({pearl_master_safe}) Safe.",
+            f"({qs_master_safe}) or Pearl ({pearl_master_safe}) Safe.",
         )
     ensure_signable()
-    info(f"  transferring service NFT {token_id} {qs_master_safe} -> {pearl_master_safe}")
+    info(
+        f"  transferring service NFT {token_id} {qs_master_safe} -> {pearl_master_safe}"
+    )
     try:
         _retry_on_funds_shortage(
             lambda: transfer_service_nft(
-                ledger_api=ledger_api, crypto=qs_wallet.crypto,
+                ledger_api=ledger_api,
+                crypto=qs_wallet.crypto,
                 service_registry_address=registry_addr,
                 qs_master_safe=qs_master_safe,
                 pearl_master_safe=pearl_master_safe,
                 service_id=token_id,
             ),
-            ledger_api=ledger_api, address=qs_wallet.address,
-            chain_str=chain_str, recipient_name="Quickstart master EOA",
+            ledger_api=ledger_api,
+            address=qs_wallet.address,
+            chain_str=chain_str,
+            recipient_name="Quickstart master EOA",
         )
     except PostConditionUnknown as exc:
         # Distinct from "inner reverted": tx submitted, but the post-tx
@@ -1056,20 +1105,28 @@ def _step_transfer_nft(
         # intentional translation so the underlying RPC failure stays
         # visible in the traceback chain.
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=str(exc),
         ) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
-            sid=sid, chain=chain_str,
-            prefix="NFT transfer failed", exc=exc,
+            sid=sid,
+            chain=chain_str,
+            prefix="NFT transfer failed",
+            exc=exc,
         )
 
 
 def _step_swap_service_safe_owner(
-    *, ledger_api: Any, qs_wallet: Any, service_safe: str,
-    qs_master_safe: str, pearl_master_safe: str,
-    sid: str, chain_str: str,
+    *,
+    ledger_api: Any,
+    qs_wallet: Any,
+    service_safe: str,
+    qs_master_safe: str,
+    pearl_master_safe: str,
+    sid: str,
+    chain_str: str,
     ensure_signable,
 ) -> None:
     """Swap the service multisig's owner from qs Safe to Pearl Safe (idempotent)."""
@@ -1082,7 +1139,8 @@ def _step_swap_service_safe_owner(
         owners = safe_owners(ledger_api=ledger_api, safe=service_safe)
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
-            sid=sid, chain=chain_str,
+            sid=sid,
+            chain=chain_str,
             prefix=f"could not read service Safe owners on {service_safe}",
             exc=exc,
         )
@@ -1094,21 +1152,26 @@ def _step_swap_service_safe_owner(
         return
     if not qs_present:
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=f"service Safe {service_safe} owners are {owners}; "
-                   f"quickstart Safe ({qs_master_safe}) not found, can't swap.",
+            f"quickstart Safe ({qs_master_safe}) not found, can't swap.",
         )
     ensure_signable()
     info(f"  swapping owner on service Safe {service_safe}")
     try:
         _retry_on_funds_shortage(
             lambda: swap_service_safe_owner(
-                ledger_api=ledger_api, crypto=qs_wallet.crypto,
+                ledger_api=ledger_api,
+                crypto=qs_wallet.crypto,
                 service_safe=service_safe,
-                old_owner=qs_master_safe, new_owner=pearl_master_safe,
+                old_owner=qs_master_safe,
+                new_owner=pearl_master_safe,
             ),
-            ledger_api=ledger_api, address=qs_wallet.address,
-            chain_str=chain_str, recipient_name="Quickstart master EOA",
+            ledger_api=ledger_api,
+            address=qs_wallet.address,
+            chain_str=chain_str,
+            recipient_name="Quickstart master EOA",
         )
     except PostConditionUnknown as exc:
         # State is INDETERMINATE — execTransaction submitted but the
@@ -1120,12 +1183,14 @@ def _step_swap_service_safe_owner(
         # "verify on a block explorer first" guidance. `from exc`
         # preserves the underlying RPC failure in the traceback chain.
         raise _Unmigratable(
-            service_id=sid, chain=chain_str,
+            service_id=sid,
+            chain=chain_str,
             reason=str(exc),
         ) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise _wrap_step_failure(
-            sid=sid, chain=chain_str,
+            sid=sid,
+            chain=chain_str,
             prefix=(
                 f"service Safe owner swap failed; NFT is now owned by Pearl "
                 f"Safe but service multisig {service_safe} still lists "
@@ -1170,6 +1235,7 @@ def _migrate_one_service(
             # the on-chain branch.
             _reraise_if_programming_bug(exc)
             warn(f"stop_service via middleware failed: {exc}; trying force cleanup.")
+
     # Per-service variant of the global stop-and-verify: convert any
     # cleanup failure into `_Unmigratable(service_id=...)` so the
     # orchestrator can keep migrating other services. Proceeding to NFT
@@ -1184,7 +1250,9 @@ def _migrate_one_service(
     for chain_str, chain_config in service.chain_configs.items():
         chain = Chain(chain_str)
         chain_data = chain_config.chain_data
-        info(f"  chain {chain_str}: service NFT id = {chain_data.token}, multisig = {chain_data.multisig}")
+        info(
+            f"  chain {chain_str}: service NFT id = {chain_data.token}, multisig = {chain_data.multisig}"
+        )
 
         # Both `qs_wallet.safes[chain]` and `CONTRACTS[chain][...]` raise
         # KeyError on missing entries — legitimate per-service conditions
@@ -1197,19 +1265,21 @@ def _migrate_one_service(
             qs_master_safe = qs_wallet.safes[chain]
         except KeyError:
             raise _Unmigratable(
-                service_id=sid, chain=chain_str,
+                service_id=sid,
+                chain=chain_str,
                 reason=f"quickstart master wallet has no Safe on {chain_str}; "
-                       "service references a chain the wallet was never "
-                       "configured for.",
+                "service references a chain the wallet was never "
+                "configured for.",
             )
         try:
             registry_addr = CONTRACTS[chain]["service_registry"]
         except KeyError:
             raise _Unmigratable(
-                service_id=sid, chain=chain_str,
+                service_id=sid,
+                chain=chain_str,
                 reason=f"no ServiceRegistry contract registered for {chain_str} "
-                       "in middleware's CONTRACTS table; cannot read NFT owner "
-                       "or build the transfer.",
+                "in middleware's CONTRACTS table; cannot read NFT owner "
+                "or build the transfer.",
             )
         # Ensure Pearl has a master Safe on this chain. `create_safe` is
         # the same factory that bootstraps Pearl on a new chain — required
@@ -1224,13 +1294,15 @@ def _migrate_one_service(
                     chain_str=chain_str,
                     rpc=chain_config.ledger_config.rpc,
                     ledger_api=pearl_wallet.ledger_api(
-                        chain=chain, rpc=chain_config.ledger_config.rpc,
+                        chain=chain,
+                        rpc=chain_config.ledger_config.rpc,
                     ),
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 _reraise_if_programming_bug(exc)
                 raise _Unmigratable(
-                    service_id=sid, chain=chain_str,
+                    service_id=sid,
+                    chain=chain_str,
                     reason=f"could not create Pearl master Safe on {chain_str}: {exc}.",
                 )
         pearl_master_safe = pearl_wallet.safes[chain]
@@ -1255,54 +1327,79 @@ def _migrate_one_service(
                 ).ledger_api
             return ledger_api
 
-        def _ensure_signable() -> None:
+        def _ensure_signable(
+            _qs_safe: str = qs_master_safe,
+            _chain: str = chain_str,
+        ) -> None:
             """Raise `_Unmigratable` unless the qs master Safe is single-signer.
 
             Called lazily, only inside branches that actually sign. Resumed
             runs that find every step already done skip this entirely.
+
+            `_qs_safe` and `_chain` use default-arg binding to capture the
+            loop-iteration's `qs_master_safe` / `chain_str` at definition
+            time. The closure is invoked synchronously within the same
+            iteration today, so the binding is defensive: it survives a
+            future refactor that defers the call to after the loop ends.
+            See B023 in the bugbear ruleset for the underlying pitfall.
             """
             try:
-                t = safe_threshold(ledger_api=_ledger_api(), safe=qs_master_safe)
+                t = safe_threshold(ledger_api=_ledger_api(), safe=_qs_safe)
             except Exception as exc:  # pylint: disable=broad-except
                 _reraise_if_programming_bug(exc)
                 raise _Unmigratable(
-                    service_id=sid, chain=chain_str,
+                    service_id=sid,
+                    chain=_chain,
                     reason=f"could not read quickstart master Safe threshold on "
-                           f"{qs_master_safe}: {exc}.",
+                    f"{_qs_safe}: {exc}.",
                 )
             if t == 1:
                 return
             if t == 0:
                 raise _Unmigratable(
-                    service_id=sid, chain=chain_str,
-                    reason=f"quickstart master Safe {qs_master_safe} reports "
-                           f"threshold 0 — appears unconfigured. Inspect on-chain "
-                           "state before retrying.",
+                    service_id=sid,
+                    chain=_chain,
+                    reason=f"quickstart master Safe {_qs_safe} reports "
+                    f"threshold 0 — appears unconfigured. Inspect on-chain "
+                    "state before retrying.",
                 )
             raise _Unmigratable(
-                service_id=sid, chain=chain_str,
-                reason=f"quickstart master Safe {qs_master_safe} has threshold "
-                       f"{t}; this script signs single-owner only. Lower the "
-                       "threshold to 1 (temporarily) and re-run.",
+                service_id=sid,
+                chain=_chain,
+                reason=f"quickstart master Safe {_qs_safe} has threshold "
+                f"{t}; this script signs single-owner only. Lower the "
+                "threshold to 1 (temporarily) and re-run.",
             )
 
         _step_terminate(
-            manager=manager, service=service, sid=sid, chain_str=chain_str,
-            ensure_signable=_ensure_signable, on_chain_state_cls=OnChainState,
-            ledger_api=_ledger_api(), qs_address=qs_wallet.address,
+            manager=manager,
+            service=service,
+            sid=sid,
+            chain_str=chain_str,
+            ensure_signable=_ensure_signable,
+            on_chain_state_cls=OnChainState,
+            ledger_api=_ledger_api(),
+            qs_address=qs_wallet.address,
         )
         _step_transfer_nft(
-            ledger_api=_ledger_api(), qs_wallet=qs_wallet,
+            ledger_api=_ledger_api(),
+            qs_wallet=qs_wallet,
             registry_addr=registry_addr,
-            qs_master_safe=qs_master_safe, pearl_master_safe=pearl_master_safe,
-            token_id=chain_data.token, sid=sid, chain_str=chain_str,
+            qs_master_safe=qs_master_safe,
+            pearl_master_safe=pearl_master_safe,
+            token_id=chain_data.token,
+            sid=sid,
+            chain_str=chain_str,
             ensure_signable=_ensure_signable,
         )
         _step_swap_service_safe_owner(
-            ledger_api=_ledger_api(), qs_wallet=qs_wallet,
+            ledger_api=_ledger_api(),
+            qs_wallet=qs_wallet,
             service_safe=chain_data.multisig,
-            qs_master_safe=qs_master_safe, pearl_master_safe=pearl_master_safe,
-            sid=sid, chain_str=chain_str,
+            qs_master_safe=qs_master_safe,
+            pearl_master_safe=pearl_master_safe,
+            sid=sid,
+            chain_str=chain_str,
             ensure_signable=_ensure_signable,
         )
 
@@ -1311,9 +1408,7 @@ def _migrate_one_service(
     # NFT owned by Pearl Safe). It's required because Pearl's FE expects it
     # to continue the onbarding of this agent.
     for chain_config in service.chain_configs.values():
-        chain_config.chain_data.user_params.staking_program_id = (
-            NO_STAKING_PROGRAM_ID
-        )
+        chain_config.chain_data.user_params.staking_program_id = NO_STAKING_PROGRAM_ID
     try:
         service.store()
     except OSError as exc:
@@ -1321,7 +1416,8 @@ def _migrate_one_service(
         # filesystem copy (`merge_service`) and surfaces in the summary
         # so the user can re-run after fixing the disk/permission issue.
         raise _Unmigratable(
-            service_id=sid, chain=None,
+            service_id=sid,
+            chain=None,
             reason=(
                 "on-chain migration committed but local "
                 f"`staking_program_id` write failed: {exc}. Re-run after "
@@ -1332,8 +1428,10 @@ def _migrate_one_service(
 
 
 def _format_amount(amount: int, chain: "Chain", asset: str) -> str:
-    """Best-effort token formatter; falls back to raw wei when the asset
-    isn't in the middleware's `CHAIN_TO_METADATA` table.
+    """Best-effort token formatter that falls back to raw wei for unknown assets.
+
+    Falls back to raw wei when the asset isn't in the middleware's
+    `CHAIN_TO_METADATA` table.
 
     Only catches the lookup failures (`KeyError` for unknown chain/asset);
     everything else propagates so a bug in the formatter doesn't masquerade
@@ -1346,7 +1444,8 @@ def _format_amount(amount: int, chain: "Chain", asset: str) -> str:
 
 
 def _drain_master(
-    qs_wallet: "MasterWallet", pearl_wallet: "MasterWallet",
+    qs_wallet: "MasterWallet",
+    pearl_wallet: "MasterWallet",
     chain_rpcs: Optional[Dict["Chain", str]] = None,
 ) -> List[_DrainFailure]:
     """Drain quickstart master Safe + EOA into Pearl per chain.
@@ -1379,15 +1478,17 @@ def _drain_master(
                     "(quickstart had a Safe here but no migrated service "
                     "exposed an RPC for this chain)."
                 )
-                failures.append(_DrainFailure(
-                    chain=chain,
-                    source_kind="Safe+EOA",
-                    source_address=qs_wallet.safes[chain],
-                    reason="no RPC available — quickstart had a Safe on "
-                           f"{chain.name} but no migrated service used "
-                           "this chain; cannot create Pearl Safe to "
-                           "drain into.",
-                ))
+                failures.append(
+                    _DrainFailure(
+                        chain=chain,
+                        source_kind="Safe+EOA",
+                        source_address=qs_wallet.safes[chain],
+                        reason="no RPC available — quickstart had a Safe on "
+                        f"{chain.name} but no migrated service used "
+                        "this chain; cannot create Pearl Safe to "
+                        "drain into.",
+                    )
+                )
                 continue
             try:
                 _create_pearl_safe_with_funds_wait(
@@ -1401,12 +1502,14 @@ def _drain_master(
             except Exception as exc:  # pylint: disable=broad-except
                 _reraise_if_programming_bug(exc)
                 warn(f"  could not create Pearl Safe on {chain.name}: {exc}")
-                failures.append(_DrainFailure(
-                    chain=chain,
-                    source_kind="Safe+EOA",
-                    source_address=qs_wallet.safes[chain],
-                    reason=f"Pearl Safe creation failed: {exc}.",
-                ))
+                failures.append(
+                    _DrainFailure(
+                        chain=chain,
+                        source_kind="Safe+EOA",
+                        source_address=qs_wallet.safes[chain],
+                        reason=f"Pearl Safe creation failed: {exc}.",
+                    )
+                )
                 continue
 
         # NOTE: `qs_wallet.drain` is NOT wrapped in `_retry_on_funds_shortage`.
@@ -1421,7 +1524,9 @@ def _drain_master(
         # after topping up; the drain is idempotent (per-asset balance
         # check before each transfer).
         # Master Safe -> Pearl master Safe (Pearl Safe receives ERC20s + native).
-        info(f"  [{chain.name}] master Safe -> Pearl master Safe ({pearl_wallet.safes[chain]})")
+        info(
+            f"  [{chain.name}] master Safe -> Pearl master Safe ({pearl_wallet.safes[chain]})"
+        )
         try:
             moved = qs_wallet.drain(
                 withdrawal_address=pearl_wallet.safes[chain],
@@ -1439,13 +1544,19 @@ def _drain_master(
         except Exception as exc:  # pylint: disable=broad-except
             _reraise_if_programming_bug(exc)
             warn(f"  drain (Safe) on {chain.name} failed: {exc}")
-            failures.append(_DrainFailure(
-                chain=chain, source_kind="Safe",
-                source_address=qs_wallet.safes[chain], reason=str(exc),
-            ))
+            failures.append(
+                _DrainFailure(
+                    chain=chain,
+                    source_kind="Safe",
+                    source_address=qs_wallet.safes[chain],
+                    reason=str(exc),
+                )
+            )
 
         # Master EOA -> Pearl master EOA.
-        info(f"  [{chain.name}] master EOA -> Pearl master EOA ({pearl_wallet.address})")
+        info(
+            f"  [{chain.name}] master EOA -> Pearl master EOA ({pearl_wallet.address})"
+        )
         try:
             moved = qs_wallet.drain(
                 withdrawal_address=pearl_wallet.address,
@@ -1460,10 +1571,14 @@ def _drain_master(
         except Exception as exc:  # pylint: disable=broad-except
             _reraise_if_programming_bug(exc)
             warn(f"  drain (EOA) on {chain.name} failed: {exc}")
-            failures.append(_DrainFailure(
-                chain=chain, source_kind="EOA",
-                source_address=qs_wallet.address, reason=str(exc),
-            ))
+            failures.append(
+                _DrainFailure(
+                    chain=chain,
+                    source_kind="EOA",
+                    source_address=qs_wallet.address,
+                    reason=str(exc),
+                )
+            )
 
     return failures
 
@@ -1471,6 +1586,7 @@ def _drain_master(
 # ---------------------------------------------------------------------------
 # Final user message
 # ---------------------------------------------------------------------------
+
 
 def _final_prompt(outcome: MigrationOutcome) -> None:
     if not outcome.is_complete:
@@ -1483,7 +1599,9 @@ def _final_prompt(outcome: MigrationOutcome) -> None:
             and not outcome.unmigratable
             and not outcome.drain_failures
         ):
-            print_section("Selected services migrated; remaining services left in source.")
+            print_section(
+                "Selected services migrated; remaining services left in source."
+            )
             print()
             print("  The migrated services will appear in Pearl. The source")
             print("  quickstart `.operate/` is preserved with the unselected")
@@ -1516,7 +1634,9 @@ def _final_prompt(outcome: MigrationOutcome) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main(argv: Optional[List[str]] = None) -> int:
+    """Entry point for the quickstart-to-Pearl migration CLI; returns a process exit code."""
     args = _parse_args(argv)
     print_title("Quickstart -> Pearl migration")
 

@@ -19,20 +19,24 @@
 # ------------------------------------------------------------------------------
 """This script queries the OMEN subgraph to obtain the trades of a given address."""
 
-
 import datetime
-import requests
 import sys
 from argparse import ArgumentParser
 from collections import defaultdict
 from string import Template
-from typing import Any
+from typing import Any, Final
 
+from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
+from scripts.predict_trader.trades import (
+    MarketAttribute,
+    MarketState,
+    _post_subgraph_query,
+    parse_user,
+    wei_to_xdai,
+)
 from scripts.utils import get_subgraph_api_key
-from scripts.predict_trader.trades import MarketAttribute, MarketState, parse_user, wei_to_xdai
-
 
 QUERY_BATCH_SIZE = 1000
 DUST_THRESHOLD = 10000000000000
@@ -41,15 +45,16 @@ FPMM_CREATOR = "0x89c5cc945dd550bcffb72fe42bff002429f46fec"
 DEFAULT_FROM_DATE = "2024-12-01T00:00:00"
 DEFAULT_TO_DATE = "2038-01-19T03:14:07"
 
+# Must match the `name` field in `configs/config_predict_trader.json`.
+# `load_local_config` looks the service up by exact name — if either
+# side (this constant or the JSON value) changes, update the other.
+# The test_rank_traders.py mock asserts the script's call site passes
+# this constant; a drift between this value and the JSON's `name` is
+# NOT covered by CI and will only surface at production runtime.
+PREDICT_TRADER_SERVICE_NAME: Final[str] = "Trader Agent"
 
-headers = {
-    "Accept": "application/json, multipart/mixed",
-    "Content-Type": "application/json",
-}
 
-
-omen_xdai_trades_query = Template(
-    """
+omen_xdai_trades_query = Template("""
     {
         fpmmTrades(
             where: {
@@ -98,8 +103,7 @@ omen_xdai_trades_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 ATTRIBUTE_CHOICES = {i.name: i for i in MarketAttribute}
 
@@ -187,8 +191,7 @@ def _query_omen_xdai_subgraph(
             id_gt=id_gt,
         )
         content_json = _to_content(query)
-        res = requests.post(url, headers=headers, json=content_json)
-        result_json = res.json()
+        result_json = _post_subgraph_query(url, content_json, label="omen")
         user_trades = result_json.get("data", {}).get("fpmmTrades", [])
 
         if not user_trades:
@@ -276,7 +279,9 @@ def _print_user_summary(
             wei_to_xdai(statistics_table[MarketAttribute.INVESTMENT][state]).rjust(13),
             wei_to_xdai(statistics_table[MarketAttribute.FEES][state]).rjust(13),
             wei_to_xdai(statistics_table[MarketAttribute.EARNINGS][state]).rjust(13),
-            wei_to_xdai(statistics_table[MarketAttribute.NET_EARNINGS][state]).rjust(13),
+            wei_to_xdai(statistics_table[MarketAttribute.NET_EARNINGS][state]).rjust(
+                13
+            ),
             wei_to_xdai(statistics_table[MarketAttribute.REDEMPTIONS][state]).rjust(13),
             f"{statistics_table[MarketAttribute.ROI][state] * 100.0:7.2f}%".rjust(9),
             "\n",
@@ -300,9 +305,11 @@ def _print_progress_bar(  # pylint: disable=too-many-arguments
 
     percent = ("{0:.1f}").format(100 * (iteration / float(total)))
     filled_length = int(length * iteration // total)
-    bar = fill * filled_length + "-" * (length - filled_length)
+    progress_bar = fill * filled_length + "-" * (length - filled_length)
     progress_string = f"({iteration} of {total}) - {percent}%"
-    sys.stdout.write("\r%s |%s| %s %s" % (prefix, bar, progress_string, suffix))
+    sys.stdout.write(
+        "\r%s |%s| %s %s" % (prefix, progress_bar, progress_string, suffix)
+    )
     sys.stdout.flush()
 
 
@@ -310,7 +317,11 @@ if __name__ == "__main__":
     print("Starting script")
     user_args = _parse_args()
 
-    config = load_local_config()
+    # `load_local_config` requires an OperateApp + service name since
+    # olas-operate-middleware 0.15.x.
+    config = load_local_config(
+        operate=OperateApp(), service_name=PREDICT_TRADER_SERVICE_NAME
+    )
     rpc = config.rpc[Chain.GNOSIS.value]
 
     print("Querying Thegraph...")

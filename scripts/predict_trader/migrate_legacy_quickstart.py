@@ -1,18 +1,17 @@
+"""Migrate a legacy `.trader_runner/` directory into the modern operate-managed layout."""
+
+import json
+import os
+import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
-import os
-from typing import TypedDict
-from dotenv import load_dotenv
 from getpass import getpass
-from halo import Halo
-import json
 from pathlib import Path
-import sys
+from typing import TypedDict
 
 from aea_ledger_ethereum import Account, EthereumCrypto, LocalAccount
-from autonomy.chain.config import ChainType
-from autonomy.chain.base import registry_contracts
-from autonomy.constants import DEFAULT_KEYS_FILE
+from dotenv import load_dotenv
+from halo import Halo
 from operate.cli import OperateApp
 from operate.constants import (
     OPERATE,
@@ -21,20 +20,23 @@ from operate.constants import (
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain, LedgerType, OnChainState, ServiceTemplate
 from operate.quickstart.run_service import (
+    NO_STAKING_PROGRAM_ID,
+    QuickstartConfig,
     ask_password_if_needed,
     get_service,
-    QuickstartConfig,
 )
-from operate.services.protocol import StakingManager, StakingState
-from operate.services.service import Service
 from operate.quickstart.utils import (
-    ask_yes_or_no,
     CHAIN_TO_METADATA,
+    ask_yes_or_no,
     print_section,
     print_title,
 )
-from operate.quickstart.run_service import NO_STAKING_PROGRAM_ID
+from operate.services.protocol import StakingManager, StakingState
+from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance, get_assets_balances
+
+from autonomy.chain.base import registry_contracts
+from autonomy.constants import DEFAULT_KEYS_FILE
 
 ROOT_PATH = Path(__file__).parent.parent.parent
 TRADER_RUNNER_PATH = ROOT_PATH / ".trader_runner"
@@ -50,6 +52,8 @@ DATA_FILES = (
 
 
 class StakingVariables(TypedDict):
+    """Shape of the staking-related env vars carried over from `.trader_runner/.env`."""
+
     USE_STAKING: bool
     STAKING_PROGRAM: str
     AGENT_ID: int
@@ -64,6 +68,8 @@ class StakingVariables(TypedDict):
 
 @dataclass
 class TraderData:
+    """Bundle of state read off a legacy `.trader_runner/` directory."""
+
     password: str
     agent_eoa: Path
     master_eoa: Path
@@ -75,9 +81,17 @@ class TraderData:
 
 
 def decrypt_private_keys(eoa: Path, password: str) -> dict[str, str]:
+    """Decrypt the EOA file (with or without password) and return its key payload."""
     if not password:
         private_key = "0x" + eoa.read_text()
+        # `Account.from_key` is bound via eth-account's `@combomethod` descriptor;
+        # pylint sees the bound `self` slot and thinks `private_key` is missing.
+        # Block-style disable + enable scopes the suppression to the one call
+        # (a trailing same-line suppression lands on the wrapped closing paren
+        # after black reformats and stops applying to the call itself).
+        # pylint: disable=no-value-for-parameter
         account: LocalAccount = Account.from_key(private_key)
+        # pylint: enable=no-value-for-parameter
         address = account.address
     else:
         crypto = EthereumCrypto(private_key_path=eoa, password=password)
@@ -92,6 +106,7 @@ def decrypt_private_keys(eoa: Path, password: str) -> dict[str, str]:
 
 
 def parse_trader_runner() -> TraderData:
+    """Read every persistent value out of `.trader_runner/` and return it as a TraderData."""
     load_dotenv(TRADER_RUNNER_PATH / ".env")
 
     subgraph_api_key = os.getenv("SUBGRAPH_API_KEY")
@@ -149,6 +164,7 @@ def parse_trader_runner() -> TraderData:
 def populate_operate(
     operate: OperateApp, trader_data: TraderData, service_template: ServiceTemplate
 ) -> Service:
+    """Set up OperateApp using `trader_data` and return the resulting Service object."""
     print_section("Setting up Operate")
     operate.setup()
     if operate.user_account is None:
@@ -248,9 +264,9 @@ def populate_operate(
 
     service.agent_addresses = [agent_eoa["address"]]
     service.chain_configs[Chain.GNOSIS.value].chain_data.token = trader_data.service_id
-    service.chain_configs[
-        Chain.GNOSIS.value
-    ].chain_data.multisig = trader_data.service_safe
+    service.chain_configs[Chain.GNOSIS.value].chain_data.multisig = (
+        trader_data.service_safe
+    )
     service.store()
     spinner.succeed("Service created")
 
@@ -280,6 +296,7 @@ def populate_operate(
 def migrate_to_master_safe(
     operate: OperateApp, trader_data: TraderData, service: Service
 ) -> None:
+    """Move funds and ownership from the legacy trader-runner setup to the master safe."""
     print_section("Migrating service to .operate")
     chain_config = service.chain_configs[service.home_chain]
     ledger_config = chain_config.ledger_config
@@ -561,6 +578,7 @@ def migrate_to_master_safe(
 
 
 def main(config_path: Path) -> None:
+    """Run the predict-trader quickstart migration end-to-end against the given config."""
     print_title("Predict Trader Quickstart Migration")
     if not TRADER_RUNNER_PATH.exists():
         print("No .trader_runner file found!")

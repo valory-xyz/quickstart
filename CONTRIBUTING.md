@@ -1,63 +1,25 @@
 # Contributing to OLAS AI Agents Quickstart
 
-## How to Contribute
+This repository follows the Valory Open-Autonomy contribution workflow.
 
-### Before You Start
+See the canonical guide for the PR checklist, pre-commit routine,
+coding style, and linter / test commands:
+**[open-autonomy/CONTRIBUTING.md](https://github.com/valory-xyz/open-autonomy/blob/main/CONTRIBUTING.md)**
 
-1. **Open an Issue First**: Before starting work on a feature, bug fix, or significant change, please [open an issue](https://github.com/valory-xyz/quickstart/issues) to discuss your idea with the maintainers. This helps ensure your contribution aligns with the project's direction and avoids duplicate work.
+Repo-specific notes for this project:
 
-2. **Check Existing Issues**: Review open and closed issues to see if your concern has already been discussed.
-
-### Contribution Areas
-
-We welcome contributions in the following areas:
-
-- **`configs/`**: Agent configurations and setup files
-- **`scripts/`**: Agent-specific scripts and utilities
-- **`tests/`**: Test cases and testing improvements
-
-### Git Workflow
-
-We follow a standard git workflow:
-
-1. **Create a Branch**: Create a feature branch from `main`
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make Your Changes**: Implement your changes following the guidelines below
-
-3. **Commit Your Work**: Make clear, descriptive commits
-   ```bash
-   git commit -m "Brief description of your changes"
-   ```
-
-4. **Push and Create a PR**: Push your branch and create a pull request
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-5. **Code Review**: Address any feedback from reviewers
-
-6. **Merge**: Once approved, your PR will be merged into `main`
-
-### Code Quality
-
-- **CI Checks**: All code changes are validated through CI checks. Ensure your changes pass all automated checks (linting, testing, etc.)
-- **Local Testing**: While not required, testing your changes locally is recommended
-- **Documentation**: Include or update documentation as needed for new features or changes
-
-### Commit Guidelines
-
-- Use clear, descriptive commit messages
-- Reference related issues when applicable: `Fixes #123` or `Related to #123`
-- Keep commits focused on a single logical change
-
-## Questions?
-
-If you have questions or need clarification:
-- Check existing [issues](https://github.com/valory-xyz/quickstart/issues) and [PRs](https://github.com/valory-xyz/quickstart/pulls)
-- Open a new issue with your question
+- **Scope**: contributions are welcome in `configs/` (agent configs),
+  `scripts/` (agent-specific scripts), and `tests/`.
+- **Open an issue first** for any non-trivial change so it can be
+  discussed before you spend time on it.
+- **Run lint locally** with `uv run tomte tox -p -e black-check -e
+  isort-check -e flake8 -e mypy -e pylint -e darglint -e safety -e
+  bandit -e liccheck`. CI runs the same set.
+- **Run unit tests locally** with `PYTHONPATH=. uv run pytest tests
+  --ignore=tests/test_run_service.py
+  --ignore=tests/test_staking_service.py
+  --ignore=tests/test_migrate_to_pearl.py`. The ignored files are
+  e2e tests that need Docker and live RPC secrets.
 
 ## Guide for the AI agent `config.json`
 

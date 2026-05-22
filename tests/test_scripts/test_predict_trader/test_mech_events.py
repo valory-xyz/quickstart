@@ -50,7 +50,13 @@ def test_populate_ipfs_contents_falls_back_to_non_metadata_url(monkeypatch: pyte
 
 	calls: list[str] = []
 
-	def _fake_get(url: str) -> _Response:
+	# `timeout` is positional with no default so dropping `timeout=` from
+	# the production `requests.get(...)` call raises TypeError and fails
+	# this test (the W3101 regression guard). `**_kwargs` keeps the mock
+	# forward-compatible if production legitimately adds another kwarg.
+	def _fake_get(  # noqa: ARG001
+		url: str, timeout: int, **_kwargs: Any
+	) -> _Response:
 		calls.append(url)
 		if url.endswith("/metadata.json"):
 			return _Response(json.JSONDecodeError("bad", "doc", 0))
@@ -265,7 +271,13 @@ def test_populate_ipfs_contents_uses_ipfs_hash_bytes(monkeypatch: pytest.MonkeyP
 
 	called: list[str] = []
 
-	def _fake_get(url: str) -> _Response:
+	# `timeout` is positional with no default so dropping `timeout=` from
+	# the production `requests.get(...)` call raises TypeError and fails
+	# this test (the W3101 regression guard). `**_kwargs` keeps the mock
+	# forward-compatible if production legitimately adds another kwarg.
+	def _fake_get(  # noqa: ARG001
+		url: str, timeout: int, **_kwargs: Any
+	) -> _Response:
 		called.append(url)
 		return _Response({"ok": True})
 
@@ -297,7 +309,16 @@ def test_populate_ipfs_contents_handles_generic_exception(monkeypatch: pytest.Mo
 
 	printed: list[str] = []
 	inputs: list[str] = []
-	monkeypatch.setattr(mech_events.requests, "get", lambda _url: _BadResponse())
+	# Accept `timeout=` (and any other production-added kwarg). Without
+	# this, the production `requests.get(_url, timeout=30)` call would
+	# raise TypeError before `_BadResponse.raise_for_status` ever fires
+	# — the test would pass for the wrong reason (TypeError, not the
+	# RuntimeError that hits the broad except branch we want to cover).
+	monkeypatch.setattr(
+		mech_events.requests,
+		"get",
+		lambda _url, timeout=None, **_kw: _BadResponse(),
+	)
 	monkeypatch.setattr(mech_events.traceback, "format_exc", lambda: "traceback-text")
 	monkeypatch.setattr(builtins, "print", lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)))
 	monkeypatch.setattr(builtins, "input", lambda prompt: inputs.append(prompt) or "")
