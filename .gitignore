@@ -18,3 +18,9 @@ logs
 .coverage
 coverage-*.xml
 htmlcov/
+
+# tox / setuptools artefacts (built by `tomte tox` testenvs that
+# run an editable install of the project)
+.tox/
+*.egg-info/
+.tomte-*

@@ -321,6 +321,23 @@ jobs:
         name: unit-test-coverage-xml-${{ matrix.python-version }}
         path: coverage-unit.xml
 
+  linter_checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: pip install 'tomte[cli, tests]==0.7.0' tox-uv
+      - name: Code checks
+        run: tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
+      - name: Security checks
+        run: tomte tox -p -e safety -e bandit
+      - name: License compatibility check
+        run: tomte tox -e liccheck
+
   all-checks-passed:
     # Single aggregate gate referenced by branch protection. When adding or
     # removing a mandatory job, update the `needs:` list here instead of
@@ -335,6 +352,7 @@ jobs:
       - changes
       - e2e-test-migrate-to-pearl
       - unit-tests
+      - linter_checks
     steps:
       - name: Verify all dependencies succeeded or were skipped
         run: |
