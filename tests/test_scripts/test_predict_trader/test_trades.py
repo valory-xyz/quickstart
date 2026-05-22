@@ -3,6 +3,7 @@
 import datetime
 import runpy
 import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -188,7 +189,7 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 
 
 @pytest.mark.parametrize(
-	"failure_kind, mock_kwargs, expected_cause",
+	"failure_kind, mock_kwargs, expected_type_name",
 	[
 		# Network failure: simulate the urllib3-shaped str() that
 		# `requests.ConnectionError` produces in practice — the relative
@@ -205,7 +206,7 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 					"(Caused by NewConnectionError(...))"
 				)
 			},
-			requests.ConnectionError,
+			"ConnectionError",
 		),
 		# HTTP error path: 500 response with a JSON body. Body is valid JSON
 		# so `.json()` would succeed; only `raise_for_status()` can produce
@@ -217,7 +218,7 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 		(
 			"http",
 			{"status_code": 500, "json": {"errors": ["internal"]}},
-			requests.HTTPError,
+			"HTTPError",
 		),
 		# Body is not JSON (e.g. a Cloudflare HTML error page on 200).
 		# `requests.JSONDecodeError` subclasses RequestException so the
@@ -225,7 +226,7 @@ def test_query_conditional_tokens_gc_subgraph_returns_none_when_empty(
 		(
 			"body",
 			{"status_code": 200, "text": "<html>oops</html>"},
-			requests.JSONDecodeError,
+			"JSONDecodeError",
 		),
 	],
 )
@@ -233,14 +234,18 @@ def test_post_subgraph_query_raises_runtimeerror(
 	requests_mock,
 	failure_kind: str,
 	mock_kwargs: dict[str, Any],
-	expected_cause: type,
+	expected_type_name: str,
 ) -> None:
 	"""Each failure mode (network, HTTP error, malformed body) must
-	surface as RuntimeError with the redacted URL and label in the
-	message, the original exception preserved as `__cause__`, and the
-	billable API-key segment scrubbed from both the message body and
-	the wrapped exception's string — in BOTH the full-URL form (HTTPError)
-	and the path-only form (urllib3.MaxRetryError inside ConnectionError)."""
+	surface as RuntimeError with the redacted URL, label, and original
+	exception class name in the message, the billable API-key segment
+	scrubbed from BOTH forms (full URL via HTTPError, path-only via
+	urllib3.MaxRetryError inside ConnectionError), and — critically —
+	no key reaching the rendered traceback via `__cause__`/`__context__`.
+	`_post_subgraph_query` uses `from None` to suppress the cause chain;
+	this test exercises `traceback.format_exception` so that any future
+	revert to `from exc` (which would leak the cause's unredacted str)
+	fails here."""
 	url = (
 		"https://gateway-arbitrum.network.thegraph.com"
 		"/api/SECRET_KEY_VALUE/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNc"
@@ -252,16 +257,20 @@ def test_post_subgraph_query_raises_runtimeerror(
 
 	msg = str(exc_info.value)
 	assert "test subgraph query failed" in msg, (failure_kind, msg)
-	# The redacted form must appear; the raw key must NOT — anywhere
-	# in the message, including the wrapped exception's string.
+	# Original exception class is named in the message so debugging
+	# info isn't lost when the cause chain is suppressed.
+	assert expected_type_name in msg, (failure_kind, msg)
+	# The redacted form must appear in the message; the raw key must
+	# NOT — anywhere in the message, including the wrapped exception's
+	# string.
 	assert "/api/<redacted>/" in msg, (failure_kind, msg)
 	assert "SECRET_KEY_VALUE" not in msg, (failure_kind, msg)
-	# Asserting on the cause type proves each parametrised case actually
-	# exercises a distinct branch of the helper (network / HTTP / decode).
-	assert isinstance(exc_info.value.__cause__, expected_cause), (
-		failure_kind,
-		type(exc_info.value.__cause__).__name__,
-	)
+	# Cause chain suppression (`raise ... from None`) means the cause
+	# object — whose unredacted str() carries the key — must not reach
+	# the rendered traceback Python would print to stderr / CI logs.
+	rendered = "".join(traceback.format_exception(exc_info.value))
+	assert "SECRET_KEY_VALUE" not in rendered, (failure_kind, rendered)
+	assert exc_info.value.__cause__ is None, failure_kind
 
 
 def test_redact_subgraph_key_handles_non_gateway_strings() -> None:

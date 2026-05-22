@@ -370,6 +370,13 @@ def _post_subgraph_query(
     reaches the error message — neither via `HTTPError.__str__` (which
     embeds the full URL) nor via `urllib3.MaxRetryError` (which embeds
     just the path).
+
+    Re-raises with `from None` (not `from exc`) so the cause chain is
+    suppressed: keeping `exc` as `__cause__` would let Python's default
+    traceback printer render its unredacted `str()` verbatim, leaking
+    the key into terminal output and CI logs even when the wrapper
+    message itself is clean. The redacted message preserves the URL
+    and the original exception's class name + str for debugging.
     """
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
@@ -379,8 +386,9 @@ def _post_subgraph_query(
         safe_url = _redact_subgraph_key(url)
         safe_exc_msg = _redact_subgraph_key(str(exc))
         raise RuntimeError(
-            f"{label} subgraph query failed for {safe_url}: {safe_exc_msg}"
-        ) from exc
+            f"{label} subgraph query failed for {safe_url} "
+            f"({type(exc).__name__}): {safe_exc_msg}"
+        ) from None
 
 
 def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
