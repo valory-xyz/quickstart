@@ -19,20 +19,24 @@
 # ------------------------------------------------------------------------------
 """This script queries the OMEN subgraph to obtain the trades of a given address."""
 
-
 import datetime
-import requests
 import sys
 from argparse import ArgumentParser
 from collections import defaultdict
 from string import Template
 from typing import Any
 
+import requests
+from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
+from scripts.predict_trader.trades import (
+    MarketAttribute,
+    MarketState,
+    parse_user,
+    wei_to_xdai,
+)
 from scripts.utils import get_subgraph_api_key
-from scripts.predict_trader.trades import MarketAttribute, MarketState, parse_user, wei_to_xdai
-
 
 QUERY_BATCH_SIZE = 1000
 DUST_THRESHOLD = 10000000000000
@@ -48,8 +52,7 @@ headers = {
 }
 
 
-omen_xdai_trades_query = Template(
-    """
+omen_xdai_trades_query = Template("""
     {
         fpmmTrades(
             where: {
@@ -98,8 +101,7 @@ omen_xdai_trades_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 ATTRIBUTE_CHOICES = {i.name: i for i in MarketAttribute}
 
@@ -187,7 +189,7 @@ def _query_omen_xdai_subgraph(
             id_gt=id_gt,
         )
         content_json = _to_content(query)
-        res = requests.post(url, headers=headers, json=content_json)
+        res = requests.post(url, headers=headers, json=content_json, timeout=30)
         result_json = res.json()
         user_trades = result_json.get("data", {}).get("fpmmTrades", [])
 
@@ -276,7 +278,9 @@ def _print_user_summary(
             wei_to_xdai(statistics_table[MarketAttribute.INVESTMENT][state]).rjust(13),
             wei_to_xdai(statistics_table[MarketAttribute.FEES][state]).rjust(13),
             wei_to_xdai(statistics_table[MarketAttribute.EARNINGS][state]).rjust(13),
-            wei_to_xdai(statistics_table[MarketAttribute.NET_EARNINGS][state]).rjust(13),
+            wei_to_xdai(statistics_table[MarketAttribute.NET_EARNINGS][state]).rjust(
+                13
+            ),
             wei_to_xdai(statistics_table[MarketAttribute.REDEMPTIONS][state]).rjust(13),
             f"{statistics_table[MarketAttribute.ROI][state] * 100.0:7.2f}%".rjust(9),
             "\n",
@@ -300,9 +304,11 @@ def _print_progress_bar(  # pylint: disable=too-many-arguments
 
     percent = ("{0:.1f}").format(100 * (iteration / float(total)))
     filled_length = int(length * iteration // total)
-    bar = fill * filled_length + "-" * (length - filled_length)
+    progress_bar = fill * filled_length + "-" * (length - filled_length)
     progress_string = f"({iteration} of {total}) - {percent}%"
-    sys.stdout.write("\r%s |%s| %s %s" % (prefix, bar, progress_string, suffix))
+    sys.stdout.write(
+        "\r%s |%s| %s %s" % (prefix, progress_bar, progress_string, suffix)
+    )
     sys.stdout.flush()
 
 
@@ -310,7 +316,10 @@ if __name__ == "__main__":
     print("Starting script")
     user_args = _parse_args()
 
-    config = load_local_config()
+    # `load_local_config` requires an OperateApp + service name since
+    # olas-operate-middleware 0.15.x. `Trader Agent` matches the
+    # display name written by the predict-trader quickstart.
+    config = load_local_config(operate=OperateApp(), service_name="Trader Agent")
     rpc = config.rpc[Chain.GNOSIS.value]
 
     print("Querying Thegraph...")

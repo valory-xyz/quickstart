@@ -13,19 +13,19 @@ A quickstart for the Omenstrat AI agent for AI prediction markets on Gnosis at h
 1. Use the `trades` command to display information about placed trades by a given address:
 
     ```bash
-    poetry run python -m scripts.predict_trader.trades --creator YOUR_SAFE_ADDRESS
+    uv run python -m scripts.predict_trader.trades --creator YOUR_SAFE_ADDRESS
     ```
 
     Or restrict the search to specific dates by defining the "from" and "to" dates:
 
     ```bash
-    poetry run python -m scripts.predict_trader.trades --creator YOUR_SAFE_ADDRESS --from-date 2023-08-15:03:50:00 --to-date 2023-08-20:13:45:00
+    uv run python -m scripts.predict_trader.trades --creator YOUR_SAFE_ADDRESS --from-date 2023-08-15:03:50:00 --to-date 2023-08-20:13:45:00
     ```
 
 2. Use the `report` command to display a summary of the AI agent status:
 
    ```bash
-   poetry run python -m scripts.predict_trader.report
+   uv run python -m scripts.predict_trader.report
    ```
 
 3. Use this command to investigate your agent instance's logs:
@@ -194,8 +194,8 @@ If you were previously using [trader-quickstart](https://github.com/valory-xyz/t
 2. Run the migration script to create the new `.operate` folder compatible with unified quickstart:
 
     ```bash
-    poetry install
-    poetry run python -m scripts.predict_trader.migrate_legacy_quickstart configs/config_predict_trader.json
+    uv sync
+    uv run python -m scripts.predict_trader.migrate_legacy_quickstart configs/config_predict_trader.json
     ```
 
 3. Follow the prompts to complete the migration process. The script will:

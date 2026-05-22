@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Callable, TypeVar
+from typing import Callable, TYPE_CHECKING, TypeVar
 
 import requests.exceptions
 import web3.exceptions
@@ -112,6 +112,7 @@ class PostConditionUnknown(RuntimeError):
     """
 
     def __init__(self, tx_hash: str, last_exc: BaseException) -> None:
+        """Build the indeterminate-state error for `tx_hash`, carrying `last_exc` as cause."""
         super().__init__(
             f"On-chain state INDETERMINATE after Safe tx {tx_hash}: the "
             f"outer tx mined, but the post-tx verification read failed "
@@ -160,7 +161,7 @@ def _read_with_retry(
         except _RPC_EXCEPTION_TYPES as exc:
             last_exc = exc
             if n + 1 < attempts:
-                time.sleep(backoff * (2 ** n))
+                time.sleep(backoff * (2**n))
     raise PostConditionUnknown(tx_hash=tx_hash, last_exc=last_exc)
 
 
@@ -180,8 +181,9 @@ def transfer_service_nft(
 
     Returns the transaction hash from `send_safe_txs`. Raises on chain errors.
     """
-    from autonomy.chain.base import registry_contracts
     from operate.utils.gnosis import send_safe_txs
+
+    from autonomy.chain.base import registry_contracts
 
     instance = registry_contracts.service_registry.get_instance(
         ledger_api=ledger_api,
@@ -254,7 +256,6 @@ def swap_service_safe_owner(
          and proceeds. The inner call is a self-call into swapOwner,
          which then sees msg.sender == address(this).)
     """
-    from autonomy.chain.base import registry_contracts
     from operate.services.protocol import (
         get_packed_signature_for_approved_hash,
     )
@@ -265,8 +266,12 @@ def swap_service_safe_owner(
         send_safe_txs,
     )
 
+    from autonomy.chain.base import registry_contracts
+
     prev_owner = get_prev_owner(
-        ledger_api=ledger_api, safe=service_safe, owner=old_owner,
+        ledger_api=ledger_api,
+        safe=service_safe,
+        owner=old_owner,
     )
     service_safe_instance = registry_contracts.gnosis_safe.get_instance(
         ledger_api=ledger_api,
@@ -308,15 +313,15 @@ def swap_service_safe_owner(
     exec_data_hex = service_safe_instance.encode_abi(
         abi_element_identifier="execTransaction",
         args=[
-            service_safe,                             # to (self-call)
-            0,                                        # value
-            swap_owner_data,                          # data
-            SafeOperation.CALL.value,                 # operation
-            0,                                        # safeTxGas
-            0,                                        # baseGas
-            0,                                        # gasPrice
-            "0x" + "00" * 20,                         # gasToken
-            "0x" + "00" * 20,                         # refundReceiver
+            service_safe,  # to (self-call)
+            0,  # value
+            swap_owner_data,  # data
+            SafeOperation.CALL.value,  # operation
+            0,  # safeTxGas
+            0,  # baseGas
+            0,  # gasPrice
+            "0x" + "00" * 20,  # gasToken
+            "0x" + "00" * 20,  # refundReceiver
             get_packed_signature_for_approved_hash(
                 owners=(old_owner,),
             ),
@@ -337,7 +342,8 @@ def swap_service_safe_owner(
     # read so a transient RPC hiccup post-mining doesn't surface as
     # "swap failed" when the on-chain side actually completed.
     owners_after = {
-        o.lower() for o in _read_with_retry(
+        o.lower()
+        for o in _read_with_retry(
             lambda: get_owners(ledger_api=ledger_api, safe=service_safe),
             tx_hash=exec_tx_hash,
         )

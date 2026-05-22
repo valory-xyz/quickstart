@@ -18,23 +18,26 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import pytest
-
 from scripts.pearl_migration import detect, filesystem, prompts, status
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_wallet(operate_root: Path, master_eoa: str = "0xeoa") -> None:
     wallets = operate_root / "wallets"
     wallets.mkdir(parents=True, exist_ok=True)
-    (wallets / "ethereum.json").write_text(json.dumps({
-        "address": master_eoa,
-        "safes": {"gnosis": "0xsafe"},
-        "safe_chains": ["gnosis"],
-        "ledger_type": "ethereum",
-    }))
+    (wallets / "ethereum.json").write_text(
+        json.dumps(
+            {
+                "address": master_eoa,
+                "safes": {"gnosis": "0xsafe"},
+                "safe_chains": ["gnosis"],
+                "ledger_type": "ethereum",
+            }
+        )
+    )
     (wallets / "ethereum.txt").write_text("encrypted-master-key")
 
 
@@ -46,12 +49,16 @@ def _write_service(
 ) -> Path:
     sdir = operate_root / "services" / config_id
     sdir.mkdir(parents=True, exist_ok=True)
-    (sdir / "config.json").write_text(json.dumps({
-        "name": name,
-        "service_config_id": config_id,
-        "agent_addresses": agent_addresses or ["0xagent1"],
-        "hash": "bafy-test",
-    }))
+    (sdir / "config.json").write_text(
+        json.dumps(
+            {
+                "name": name,
+                "service_config_id": config_id,
+                "agent_addresses": agent_addresses or ["0xagent1"],
+                "hash": "bafy-test",
+            }
+        )
+    )
     (sdir / "persistent_data").mkdir()
     (sdir / "persistent_data" / "log.txt").write_text("hello")
     return sdir
@@ -80,6 +87,7 @@ def _fake_service(
     `SimpleNamespace` with those fields keeps the fixtures small.
     """
     import types
+
     return types.SimpleNamespace(
         service_config_id=config_id,
         name=name,
@@ -113,6 +121,7 @@ def patch_service_load(monkeypatch: pytest.MonkeyPatch):
 # ---------------------------------------------------------------------------
 # detect.py
 # ---------------------------------------------------------------------------
+
 
 class TestDiscover:
     def test_noop_when_paths_resolve_equal(self, tmp_path: Path) -> None:
@@ -163,10 +172,14 @@ class TestListServices:
         # reach Service.load (filtered out by the prefix / config.json
         # checks in OperateStore.services()).
         patch_service_load[(root / "services/sc-aaa").resolve()] = _fake_service(
-            "sc-aaa", name="A", agent_addresses=["0x1", "0x2"],
+            "sc-aaa",
+            name="A",
+            agent_addresses=["0x1", "0x2"],
         )
         patch_service_load[(root / "services/sc-bbb").resolve()] = _fake_service(
-            "sc-bbb", name="B", agent_addresses=["0x3"],
+            "sc-bbb",
+            name="B",
+            agent_addresses=["0x3"],
         )
 
         store = detect.OperateStore(root=root.resolve())
@@ -200,6 +213,7 @@ class TestListServices:
 # filesystem.py
 # ---------------------------------------------------------------------------
 
+
 class TestFreshCopy:
     def test_copies_whole_tree(self, tmp_path: Path) -> None:
         src_root = tmp_path / "src/.operate"
@@ -226,7 +240,8 @@ class TestFreshCopy:
 
 class TestMergeService:
     def _setup(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> tuple[detect.OperateStore, detect.OperateStore, Any]:
         src_root = tmp_path / "src/.operate"
         _write_service(src_root, "sc-aaa", agent_addresses=["0xagent1"])
@@ -266,14 +281,17 @@ class TestMergeService:
 
         # Always pick "skip".
         monkeypatch.setattr(
-            filesystem, "collision",
+            filesystem,
+            "collision",
             lambda target, kind: prompts.CollisionChoice.SKIP,
         )
 
         outcome = filesystem.merge_service(svc, src, dest)
         assert outcome.service_skipped is True
         assert outcome.keys_skipped == ["0xagent1"]
-        assert (dest.services_dir / "sc-aaa" / "marker.txt").read_text() == "dest-original"
+        assert (
+            dest.services_dir / "sc-aaa" / "marker.txt"
+        ).read_text() == "dest-original"
         assert (dest.keys_dir / "0xagent1").read_text() == "dest-key"
         assert outcome.backups_made == []
 
@@ -287,7 +305,8 @@ class TestMergeService:
         (dest.keys_dir / "0xagent1").write_text("dest-key")
 
         monkeypatch.setattr(
-            filesystem, "collision",
+            filesystem,
+            "collision",
             lambda target, kind: prompts.CollisionChoice.OVERWRITE_WITH_BACKUP,
         )
 
@@ -301,9 +320,11 @@ class TestMergeService:
         # Fresh copy in place.
         assert (dest.services_dir / "sc-aaa" / "config.json").exists()
 
+
 # ---------------------------------------------------------------------------
 # prompts.py
 # ---------------------------------------------------------------------------
+
 
 class TestPrompts:
     @pytest.fixture(autouse=True)
@@ -363,22 +384,24 @@ class TestPrompts:
         assert prompts.yes_no("?", default=True) is True
         assert prompts.yes_no("?", default=False) is False
 
-    def test_yes_no_eof_returns_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_yes_no_eof_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Closed/piped stdin in attended mode falls back to the
         declared default — the rename-source and "different machine?"
         prompts at the end of a successful migration both pass an
         explicit default, so this avoids a raw EOFError traceback at
         the very end of a working migration."""
+
         def boom(_: str) -> str:
             raise EOFError
+
         monkeypatch.setattr("builtins.input", boom)
         assert prompts.yes_no("?", default=True) is True
         assert prompts.yes_no("?", default=False) is False
 
     def test_collision_eof_defaults_to_skip(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """`collision()` is invoked from `merge_service` AFTER on-chain
@@ -386,15 +409,19 @@ class TestPrompts:
         the for-loop, skip drain + rename, and leave the user with no
         summary. Default to SKIP (the safe choice) and warn so it's
         visible."""
+
         def boom(_: str) -> str:
             raise EOFError
+
         monkeypatch.setattr("builtins.input", boom)
         result = prompts.collision(tmp_path / "x", kind="key")
         assert result == prompts.CollisionChoice.SKIP
         assert "stdin closed" in capsys.readouterr().out
 
     def test_collision_invalid_input_re_prompts(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Invalid input must surface a hint rather than silently
@@ -434,6 +461,7 @@ class TestPrompts:
 # status.py (the OS-level bits — no mocking of the chain here)
 # ---------------------------------------------------------------------------
 
+
 class TestStatusOSChecks:
     def test_pearl_daemon_running_false_on_unused_port(self) -> None:
         # Port 1 is privileged + nothing listens on it under tests.
@@ -467,7 +495,8 @@ class TestStatusOSChecks:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         completed = subprocess.CompletedProcess(
-            args=[], returncode=0,
+            args=[],
+            returncode=0,
             stdout="abci0\nnode0\nrandom_other\n",
         )
         monkeypatch.setattr(status.subprocess, "run", lambda *a, **k: completed)
@@ -483,7 +512,8 @@ class TestStatusOSChecks:
         let the migration race a still-running deployment. Substring matching
         on `_abci_0` / `_tm_0` catches them all."""
         completed = subprocess.CompletedProcess(
-            args=[], returncode=0,
+            args=[],
+            returncode=0,
             stdout=(
                 "trader_abci_0\n"
                 "trader_tm_0\n"
@@ -503,6 +533,7 @@ class TestStatusOSChecks:
     ) -> None:
         def boom(*_a: Any, **_k: Any) -> None:
             raise FileNotFoundError("docker not installed")
+
         monkeypatch.setattr(status.subprocess, "run", boom)
         assert status.docker_quickstart_containers() == []
 
@@ -512,6 +543,7 @@ class TestStatusOSChecks:
         # A hung docker daemon must NOT be silently mistaken for "no containers".
         def boom(*_a: Any, **_k: Any) -> None:
             raise subprocess.TimeoutExpired(cmd="docker", timeout=10)
+
         monkeypatch.setattr(status.subprocess, "run", boom)
         with pytest.raises(subprocess.TimeoutExpired):
             status.docker_quickstart_containers()
@@ -523,13 +555,15 @@ class TestStatusOSChecks:
         /var/run/docker.sock, daemon refusing) MUST raise. Returning
         `[]` would let callers conclude "no containers" and race a
         still-running deployment."""
+
         def fake_run(*_a: Any, **_k: Any) -> Any:
             return types.SimpleNamespace(
                 returncode=1,
                 stdout="",
                 stderr="permission denied while trying to connect to "
-                       "the Docker daemon socket",
+                "the Docker daemon socket",
             )
+
         monkeypatch.setattr(status.subprocess, "run", fake_run)
         with pytest.raises(RuntimeError, match="exited 1"):
             status.docker_quickstart_containers()
@@ -555,8 +589,10 @@ class TestStatusOSChecks:
         f = tmp_path / "x"
         f.write_text("hi")
         monkeypatch.setattr(Path, "exists", lambda self, **kwargs: True)
+
         def boom(self: Path, **kwargs: Any) -> None:
             raise OSError("permission denied")
+
         monkeypatch.setattr(Path, "stat", boom)
         with pytest.raises(OSError, match="permission denied"):
             status.is_root_owned(f)
@@ -571,6 +607,7 @@ class TestStatusOSChecks:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import stat as _statmod
+
         child = tmp_path / "child"
         child.write_text("x")
 
@@ -587,6 +624,7 @@ class TestStatusOSChecks:
 
         def fake_stat(self: Path, **kwargs: Any) -> Any:
             return FakeStatChild() if self == child else FakeStatRoot()
+
         monkeypatch.setattr(Path, "stat", fake_stat)
         assert status.any_root_owned_under(tmp_path) is True
 
@@ -618,6 +656,7 @@ class TestStatusOSChecks:
             if self.name == "x":
                 raise OSError("permission")
             return original_stat(self, **kwargs)
+
         monkeypatch.setattr(Path, "stat", stat_raises_for_child)
         with pytest.raises(OSError, match="permission"):
             status.any_root_owned_under(tmp_path)
@@ -631,6 +670,7 @@ class TestStatusOSChecks:
 
         def rglob_raises(self: Path, pattern: str) -> Iterable[Path]:
             raise OSError("nope")
+
         monkeypatch.setattr(Path, "rglob", rglob_raises)
         with pytest.raises(OSError, match="nope"):
             status.any_root_owned_under(tmp_path)
@@ -639,6 +679,7 @@ class TestStatusOSChecks:
 # ---------------------------------------------------------------------------
 # status.py — on-chain query wrappers (mocked)
 # ---------------------------------------------------------------------------
+
 
 def _install_fake_autonomy(monkeypatch: pytest.MonkeyPatch, registry_obj: Any) -> None:
     """Install a stub `autonomy.chain.base` exposing a `registry_contracts` attribute."""
@@ -666,20 +707,26 @@ class TestStatusOnChain:
             ),
         )
         _install_fake_autonomy(monkeypatch, registry)
-        assert status.service_nft_owner(
-            ledger_api=object(),
-            service_registry_address="0xreg",
-            service_id=42,
-        ) == "0xowner"
+        assert (
+            status.service_nft_owner(
+                ledger_api=object(),
+                service_registry_address="0xreg",
+                service_id=42,
+            )
+            == "0xowner"
+        )
 
     def test_service_nft_owner_returns_none_on_revert(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from web3.exceptions import ContractLogicError
+
         instance = types.SimpleNamespace(
             functions=types.SimpleNamespace(
                 ownerOf=lambda sid: types.SimpleNamespace(
-                    call=lambda: (_ for _ in ()).throw(ContractLogicError("revert: NOT_MINTED")),
+                    call=lambda: (_ for _ in ()).throw(
+                        ContractLogicError("revert: NOT_MINTED")
+                    ),
                 ),
             ),
         )
@@ -689,11 +736,14 @@ class TestStatusOnChain:
             ),
         )
         _install_fake_autonomy(monkeypatch, registry)
-        assert status.service_nft_owner(
-            ledger_api=object(),
-            service_registry_address="0xreg",
-            service_id=42,
-        ) is None
+        assert (
+            status.service_nft_owner(
+                ledger_api=object(),
+                service_registry_address="0xreg",
+                service_id=42,
+            )
+            is None
+        )
 
     def test_service_nft_owner_propagates_other_errors(
         self, monkeypatch: pytest.MonkeyPatch
@@ -732,9 +782,7 @@ class TestStatusOnChain:
 
         assert status.safe_owners(ledger_api=object(), safe="0xs") == ["0xa", "0xb"]
 
-    def test_safe_threshold_returns_int(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_safe_threshold_returns_int(self, monkeypatch: pytest.MonkeyPatch) -> None:
         instance = types.SimpleNamespace(
             functions=types.SimpleNamespace(
                 getThreshold=lambda: types.SimpleNamespace(call=lambda: 2),
@@ -753,6 +801,7 @@ class TestStatusOnChain:
 # detect.py — additional branches
 # ---------------------------------------------------------------------------
 
+
 class TestDetectExtras:
     def test_list_services_returns_empty_when_no_services_dir(
         self, tmp_path: Path
@@ -769,6 +818,7 @@ class TestDetectExtras:
 
         def _boom(_: Path) -> Any:
             raise RuntimeError("malformed")
+
         monkeypatch.setattr(detect.Service, "load", staticmethod(_boom))
 
         store = detect.OperateStore(root=tmp_path)
@@ -788,7 +838,9 @@ class TestDetectExtras:
 
         # Insert a fake `operate.cli` so the lazy `from operate.cli import OperateApp`
         # picks it up.
-        import sys, types
+        import sys
+        import types
+
         fake_cli = types.ModuleType("operate.cli")
         fake_cli.OperateApp = FakeApp  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate.cli", fake_cli)
@@ -811,7 +863,9 @@ class TestDetectExtras:
     def test_operate_app_first_call_without_password(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import sys, types
+        import sys
+        import types
+
         class FakeApp:
             def __init__(self, home: Path) -> None:
                 self.home = home
@@ -831,7 +885,9 @@ class TestDetectExtras:
         assert d.is_noop is True
         # Distinct stores → can construct with non-NOOP mode.
         store2 = detect.OperateStore(root=(tmp_path / "other").resolve())
-        d2 = detect.Discovery(quickstart=store, pearl=store2, mode=detect.Mode.FRESH_COPY)
+        d2 = detect.Discovery(
+            quickstart=store, pearl=store2, mode=detect.Mode.FRESH_COPY
+        )
         assert d2.is_noop is False
 
     def test_discovery_rejects_inconsistent_invariants(self, tmp_path: Path) -> None:
@@ -876,8 +932,10 @@ class TestDetectExtras:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """OSError from Path.resolve() should become a clean ValueError."""
+
         def boom(self: Path, *, strict: bool = False) -> Path:
             raise OSError("permission denied: '/some/parent'")
+
         monkeypatch.setattr(Path, "resolve", boom)
         with pytest.raises(ValueError, match="Cannot resolve store root"):
             detect.OperateStore(root=tmp_path)
@@ -886,6 +944,7 @@ class TestDetectExtras:
 # ---------------------------------------------------------------------------
 # wallet.py — quickstart-side password alignment
 # ---------------------------------------------------------------------------
+
 
 class TestAlignQuickstartPassword:
     def test_no_op_when_passwords_match(self) -> None:
@@ -900,7 +959,9 @@ class TestAlignQuickstartPassword:
             update_password=lambda new: update_calls.append(new),
         )
         wallet_mod.align_quickstart_password(
-            qs_app=qs_app, qs_wallet=qs_wallet, new_password="same",
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password="same",
         )
         assert update_calls == []
         assert qs_app.password == "same"
@@ -946,11 +1007,15 @@ class TestAlignQuickstartPassword:
         )
         keys_manager = types.SimpleNamespace(path=keys_dir, password=old_pw)
         qs_app = types.SimpleNamespace(
-            password=old_pw, keys_manager=keys_manager, user_account=None,
+            password=old_pw,
+            keys_manager=keys_manager,
+            user_account=None,
         )
 
         wallet_mod.align_quickstart_password(
-            qs_app=qs_app, qs_wallet=qs_wallet, new_password=new_pw,
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password=new_pw,
         )
 
         # Master keyfile re-encrypt was delegated to operate's update_password.
@@ -980,7 +1045,9 @@ class TestAlignQuickstartPassword:
             assert bytes(Account.decrypt(snap_inner, old_pw)) == raw
 
     def test_reencrypt_failure_is_propagated_and_warned(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Failure inside _reencrypt_agent_key MUST propagate so the caller
         aborts the migration rather than half-converting the keys dir."""
@@ -998,10 +1065,12 @@ class TestAlignQuickstartPassword:
 
         def boom(**kwargs: Any) -> None:
             raise RuntimeError("disk full")
+
         monkeypatch.setattr(wallet_mod, "_reencrypt_agent_key", boom)
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password="old",
@@ -1010,14 +1079,18 @@ class TestAlignQuickstartPassword:
         )
         with pytest.raises(RuntimeError, match="disk full"):
             wallet_mod.align_quickstart_password(
-                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password="new",
             )
         # User is told the recovery path — must include the snapshot dir.
         assert any("failed to re-encrypt" in msg for msg in warn_calls)
         assert any(".pre-align." in msg for msg in warn_calls)
 
     def test_snapshot_preserves_originals_after_partial_failure(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The whole point of the snapshot is recovery. After a mid-loop
         failure (key 1 already mutated, key 2 raised), the snapshot
@@ -1054,6 +1127,7 @@ class TestAlignQuickstartPassword:
         # failure shape: walk gets through some files before erroring.
         seen: list[Path] = []
         original = wallet_mod._reencrypt_agent_key
+
         def partial(*, key_path: Path, old_password: str, new_password: str) -> None:
             seen.append(key_path)
             if len(seen) == 1:
@@ -1064,10 +1138,12 @@ class TestAlignQuickstartPassword:
                 )
                 return
             raise RuntimeError("io error mid-walk")
+
         monkeypatch.setattr(wallet_mod, "_reencrypt_agent_key", partial)
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password=old_pw,
@@ -1076,7 +1152,9 @@ class TestAlignQuickstartPassword:
         )
         with pytest.raises(RuntimeError, match="io error mid-walk"):
             wallet_mod.align_quickstart_password(
-                qs_app=qs_app, qs_wallet=qs_wallet, new_password=new_pw,
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password=new_pw,
             )
 
         # Snapshot must exist and must contain ORIGINAL (old-pw) copies of
@@ -1109,13 +1187,18 @@ class TestAlignQuickstartPassword:
             update_password=lambda new: master_calls.append(new),
         )
         keys_manager = types.SimpleNamespace(
-            path=operate_root / "absent_keys", password="old",
+            path=operate_root / "absent_keys",
+            password="old",
         )
         qs_app = types.SimpleNamespace(
-            password="old", keys_manager=keys_manager, user_account=None,
+            password="old",
+            keys_manager=keys_manager,
+            user_account=None,
         )
         wallet_mod.align_quickstart_password(
-            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password="new",
         )
         assert master_calls == ["new"]
         assert qs_app.password == "new"
@@ -1134,7 +1217,8 @@ class TestAlignQuickstartPassword:
         (keys_dir / "subdir").mkdir()  # not-a-file entry
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password="old",
@@ -1143,7 +1227,9 @@ class TestAlignQuickstartPassword:
         )
         # Should not raise — subdir gets skipped silently.
         wallet_mod.align_quickstart_password(
-            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password="new",
         )
         assert qs_app.password == "new"
 
@@ -1165,7 +1251,8 @@ class TestAlignQuickstartPassword:
         (keys_dir / ".DS_Store").write_bytes(b"\x00\x01binary-junk")
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password="old",
@@ -1174,19 +1261,22 @@ class TestAlignQuickstartPassword:
         )
         called: list[Any] = []
         from unittest.mock import patch
+
         with patch.object(
-            wallet_mod, "_reencrypt_agent_key",
+            wallet_mod,
+            "_reencrypt_agent_key",
             lambda **kw: called.append(kw["key_path"]),
         ):
             wallet_mod.align_quickstart_password(
-                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password="new",
             )
-        assert called == [], (
-            "dotfiles must be skipped — got: " + repr(called)
-        )
+        assert called == [], "dotfiles must be skipped — got: " + repr(called)
 
     def test_old_password_captured_before_update_password(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """qs_wallet.update_password may mutate qs_app.password as a side
         effect (the wallet shares state with the manager). The function
@@ -1207,21 +1297,28 @@ class TestAlignQuickstartPassword:
             keys_manager=types.SimpleNamespace(path=keys_dir, password="real-old"),
             user_account=None,
         )
+
         def mutate_password(new: str) -> None:
             qs_app.password = new
+
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=mutate_password,
+            path=wallets_dir,
+            update_password=mutate_password,
         )
 
         captured_old: list[str] = []
         original_reencrypt = wallet_mod._reencrypt_agent_key
+
         def capture(*, key_path: Any, old_password: str, new_password: str) -> None:
             captured_old.append(old_password)
+
         wallet_mod._reencrypt_agent_key = capture
         try:
             (keys_dir / "0xagent").write_text("{}", encoding="utf-8")
             wallet_mod.align_quickstart_password(
-                qs_app=qs_app, qs_wallet=qs_wallet, new_password="real-new",
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password="real-new",
             )
         finally:
             wallet_mod._reencrypt_agent_key = original_reencrypt
@@ -1231,7 +1328,9 @@ class TestAlignQuickstartPassword:
         )
 
     def test_invokes_user_account_alignment_after_rotation(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """After rotating the wallet+keys to Pearl's password,
         `user.json` must be re-aligned. Without this, qs's `user.json`
@@ -1247,24 +1346,29 @@ class TestAlignQuickstartPassword:
         wallets_dir.mkdir(parents=True)
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(
-                path=operate_root / "absent_keys", password="old",
+                path=operate_root / "absent_keys",
+                password="old",
             ),
             user_account=None,
         )
 
         align_calls: list[Any] = []
         monkeypatch.setattr(
-            wallet_mod, "align_user_account_to_wallet",
+            wallet_mod,
+            "align_user_account_to_wallet",
             lambda app: align_calls.append((app, app.password)),
         )
 
         wallet_mod.align_quickstart_password(
-            qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            new_password="new",
         )
 
         assert align_calls == [(qs_app, "new")], (
@@ -1274,7 +1378,9 @@ class TestAlignQuickstartPassword:
         )
 
     def test_alignment_failure_warns_about_keys_already_rotated(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If `align_user_account_to_wallet` raises AFTER the wallet+keys
         are already rotated, the warn message must NOT instruct the user
@@ -1291,12 +1397,14 @@ class TestAlignQuickstartPassword:
         wallets_dir.mkdir(parents=True)
 
         qs_wallet = types.SimpleNamespace(
-            path=wallets_dir, update_password=lambda new: None,
+            path=wallets_dir,
+            update_password=lambda new: None,
         )
         qs_app = types.SimpleNamespace(
             password="old",
             keys_manager=types.SimpleNamespace(
-                path=operate_root / "absent_keys", password="old",
+                path=operate_root / "absent_keys",
+                password="old",
             ),
             user_account=None,
         )
@@ -1317,13 +1425,18 @@ class TestAlignQuickstartPassword:
         def fail_alignment(app: Any) -> None:
             password_at_alignment.append(app.password)
             raise OSError("disk full")
+
         monkeypatch.setattr(
-            wallet_mod, "align_user_account_to_wallet", fail_alignment,
+            wallet_mod,
+            "align_user_account_to_wallet",
+            fail_alignment,
         )
 
         with pytest.raises(OSError, match="disk full"):
             wallet_mod.align_quickstart_password(
-                qs_app=qs_app, qs_wallet=qs_wallet, new_password="new",
+                qs_app=qs_app,
+                qs_wallet=qs_wallet,
+                new_password="new",
             )
 
         # Structural placement assertion: alignment ran on the
@@ -1339,14 +1452,13 @@ class TestAlignQuickstartPassword:
         assert any("Do NOT restore" in m for m in warn_calls), warn_calls
         # And must NOT print the snapshot-recovery `rm -rf wallets/ keys/`
         # message — that'd point the user at the wrong recovery.
-        assert not any(
-            "Recover with: rm -rf" in m for m in warn_calls
-        ), warn_calls
+        assert not any("Recover with: rm -rf" in m for m in warn_calls), warn_calls
 
 
 # ---------------------------------------------------------------------------
 # filesystem.py — extras
 # ---------------------------------------------------------------------------
+
 
 class TestFilesystemExtras:
     def test_rename_source_for_rollback(self, tmp_path: Path) -> None:
@@ -1389,9 +1501,11 @@ class TestFilesystemExtras:
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
         invoked: list[list[str]] = []
+
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             invoked.append(cmd)
             return subprocess.CompletedProcess(args=cmd, returncode=0)
+
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
         store = detect.OperateStore(root=tmp_path)
         filesystem.fix_root_ownership(store)
@@ -1402,8 +1516,10 @@ class TestFilesystemExtras:
     ) -> None:
         pdata = tmp_path / "services" / "sc-aaa" / "persistent_data"
         pdata.mkdir(parents=True)
+
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             raise subprocess.CalledProcessError(1, cmd)
+
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
         store = detect.OperateStore(root=tmp_path.resolve())
         # Must raise — caller would otherwise corrupt the destination.
@@ -1411,7 +1527,9 @@ class TestFilesystemExtras:
             filesystem.fix_root_ownership(store)
 
     def test_fix_root_ownership_partial_failure_lists_audit_trail(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When chown succeeds on the first dir then fails on the second,
         the raised message MUST list the successful one under 'Already
@@ -1427,12 +1545,14 @@ class TestFilesystemExtras:
         # guaranteed — make the LAST chown call fail and capture the
         # iteration order so the test reasons about it directly.
         seen: list[str] = []
+
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             target = cmd[-1]
             seen.append(target)
             if len(seen) == 2:  # second dir, whichever it is
                 raise subprocess.CalledProcessError(1, cmd)
             return subprocess.CompletedProcess(args=cmd, returncode=0)
+
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
 
         store = detect.OperateStore(root=tmp_path.resolve())
@@ -1466,9 +1586,11 @@ class TestFilesystemExtras:
         (services_dir / ".DS_Store").write_text("junk")
         (services_dir / "stray-dir").mkdir()
         invoked_targets: list[str] = []
+
         def fake_run(cmd: list[str], **kw: Any) -> Any:
             invoked_targets.append(cmd[-1])
             return subprocess.CompletedProcess(args=cmd, returncode=0)
+
         monkeypatch.setattr(filesystem.subprocess, "run", fake_run)
         store = detect.OperateStore(root=tmp_path.resolve())
         filesystem.fix_root_ownership(store)
@@ -1558,7 +1680,9 @@ class TestResetServicesStakingToNoStaking:
         return svc
 
     def test_rewrites_every_chain_and_calls_store_once(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         store_calls: list[str] = []
         svc = self._fake_svc(
@@ -1568,19 +1692,22 @@ class TestResetServicesStakingToNoStaking:
         )
         store = detect.OperateStore(root=tmp_path)
         monkeypatch.setattr(
-            detect.OperateStore, "services", lambda self: [svc],
+            detect.OperateStore,
+            "services",
+            lambda self: [svc],
         )
         updated = filesystem.reset_services_staking_to_no_staking(store)
         assert updated == ["sc-aaa"]
         for chain_config in svc.chain_configs.values():
             assert (
-                chain_config.chain_data.user_params.staking_program_id
-                == "no_staking"
+                chain_config.chain_data.user_params.staking_program_id == "no_staking"
             )
         assert store_calls == ["sc-aaa"], "Service.store() called once per service"
 
     def test_already_no_staking_is_noop_and_skips_store(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Re-running a migration must not write already-`no_staking`
         configs — that would touch the file's mtime for no reason and
@@ -1592,7 +1719,9 @@ class TestResetServicesStakingToNoStaking:
             store_calls=store_calls,
         )
         monkeypatch.setattr(
-            detect.OperateStore, "services", lambda self: [svc],
+            detect.OperateStore,
+            "services",
+            lambda self: [svc],
         )
         updated = filesystem.reset_services_staking_to_no_staking(
             detect.OperateStore(root=tmp_path),
@@ -1601,7 +1730,9 @@ class TestResetServicesStakingToNoStaking:
         assert store_calls == []
 
     def test_partial_reset_when_some_chains_already_no_staking(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A service spanning multiple chains where one is already
         `no_staking` and another is not still triggers `store()` — the
@@ -1613,7 +1744,9 @@ class TestResetServicesStakingToNoStaking:
             store_calls=store_calls,
         )
         monkeypatch.setattr(
-            detect.OperateStore, "services", lambda self: [svc],
+            detect.OperateStore,
+            "services",
+            lambda self: [svc],
         )
         updated = filesystem.reset_services_staking_to_no_staking(
             detect.OperateStore(root=tmp_path),
@@ -1623,24 +1756,31 @@ class TestResetServicesStakingToNoStaking:
         # Both chains end up `no_staking` regardless of pre-state.
         for chain_config in svc.chain_configs.values():
             assert (
-                chain_config.chain_data.user_params.staking_program_id
-                == "no_staking"
+                chain_config.chain_data.user_params.staking_program_id == "no_staking"
             )
 
     def test_returns_empty_when_no_services(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
-            detect.OperateStore, "services", lambda self: [],
+            detect.OperateStore,
+            "services",
+            lambda self: [],
         )
-        assert filesystem.reset_services_staking_to_no_staking(
-            detect.OperateStore(root=tmp_path),
-        ) == []
+        assert (
+            filesystem.reset_services_staking_to_no_staking(
+                detect.OperateStore(root=tmp_path),
+            )
+            == []
+        )
 
 
 # ---------------------------------------------------------------------------
 # prompts.py — extras
 # ---------------------------------------------------------------------------
+
 
 class TestPromptsExtras:
     def test_password_attended_uses_getpass(
@@ -1650,6 +1790,7 @@ class TestPromptsExtras:
         # when ATTENDED=true regardless of isatty.
         monkeypatch.setenv("ATTENDED", "true")
         import getpass
+
         monkeypatch.setattr(getpass, "getpass", lambda prompt: "secret")
         assert prompts.password("pw: ") == "secret"
 
@@ -1701,7 +1842,7 @@ class TestPromptsExtras:
     def test_backup_suffix_format(self) -> None:
         s = prompts.backup_suffix()
         assert s.startswith("bak.")
-        assert s[len("bak."):].isdigit()
+        assert s[len("bak.") :].isdigit()
 
     def test_ask_password_prompts_warning_message(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -1710,7 +1851,9 @@ class TestPromptsExtras:
         answers = iter(["w1", "w2"])
         monkeypatch.setattr(prompts, "password", lambda _: next(answers))
         result = prompts.ask_password_validating(
-            prompt="pw: ", validate=lambda _: False, attempts=2,
+            prompt="pw: ",
+            validate=lambda _: False,
+            attempts=2,
         )
         assert result is None
         captured = capsys.readouterr().out
@@ -1720,6 +1863,7 @@ class TestPromptsExtras:
 # ---------------------------------------------------------------------------
 # stop.py
 # ---------------------------------------------------------------------------
+
 
 class TestStop:
     @staticmethod
@@ -1742,7 +1886,9 @@ class TestStop:
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
         monkeypatch.setitem(sys.modules, "operate.quickstart", fake_quickstart)
         monkeypatch.setitem(
-            sys.modules, "operate.quickstart.stop_service", fake_stop,
+            sys.modules,
+            "operate.quickstart.stop_service",
+            fake_stop,
         )
         return called
 
@@ -1787,7 +1933,8 @@ class TestStop:
         stop.stop_via_middleware(operate=op, config_path="cfg.json")
 
         assert seen_env == {
-            "OPERATE_PASSWORD": "pw_wallet", "ATTENDED": "false",
+            "OPERATE_PASSWORD": "pw_wallet",
+            "ATTENDED": "false",
         }
         # Env restored to "absent" after the call — middleware's
         # unattended mode must not leak into anything else.
@@ -1866,6 +2013,7 @@ class TestStop:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from scripts.pearl_migration import stop
+
         monkeypatch.setattr(stop, "docker_quickstart_containers", lambda: [])
         assert stop.force_remove_known_containers() == []
 
@@ -1873,10 +2021,12 @@ class TestStop:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from scripts.pearl_migration import stop
+
         monkeypatch.setattr(stop, "docker_quickstart_containers", lambda: ["abci0"])
         invoked: list[list[str]] = []
-        monkeypatch.setattr(stop.subprocess, "run",
-                            lambda cmd, **kw: invoked.append(cmd))
+        monkeypatch.setattr(
+            stop.subprocess, "run", lambda cmd, **kw: invoked.append(cmd)
+        )
         result = stop.force_remove_known_containers()
         assert result == ["abci0"]
         assert invoked and "rm" in invoked[0]
@@ -1885,9 +2035,12 @@ class TestStop:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from scripts.pearl_migration import stop
+
         monkeypatch.setattr(stop, "docker_quickstart_containers", lambda: ["abci0"])
+
         def boom(*_a: Any, **_k: Any) -> None:
             raise FileNotFoundError("nope")
+
         monkeypatch.setattr(stop.subprocess, "run", boom)
         assert stop.force_remove_known_containers() == []
 
@@ -1899,12 +2052,16 @@ class TestStop:
         "don't proceed against still-running deployment" guarantee
         depends on it."""
         from scripts.pearl_migration import stop
+
         monkeypatch.setattr(stop, "docker_quickstart_containers", lambda: ["abci0"])
+
         def boom(*_a: Any, **_k: Any) -> None:
             raise subprocess.CalledProcessError(
-                returncode=1, cmd=["docker", "rm", "-f", "abci0"],
+                returncode=1,
+                cmd=["docker", "rm", "-f", "abci0"],
                 stderr=b"permission denied",
             )
+
         monkeypatch.setattr(stop.subprocess, "run", boom)
         with pytest.raises(RuntimeError, match="exited 1.*permission denied"):
             stop.force_remove_known_containers()
@@ -1913,6 +2070,7 @@ class TestStop:
 # ---------------------------------------------------------------------------
 # transfer.py
 # ---------------------------------------------------------------------------
+
 
 class TestPostConditionRetry:
     """`_read_with_retry` and `PostConditionUnknown` make the post-tx
@@ -1925,25 +2083,31 @@ class TestPostConditionRetry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from scripts.pearl_migration import transfer
+
         monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
         result = transfer._read_with_retry(lambda: "ok", tx_hash="0xtx")
         assert result == "ok"
 
-    def test_retries_then_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_retries_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scripts.pearl_migration import transfer
+
         monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
         # Network-shaped failures (ConnectionError, TimeoutError) are
         # retried; programming bugs are NOT — see the test below.
-        attempts = iter([
-            ConnectionError("rpc 502"), TimeoutError("rpc slow"), "good",
-        ])
+        attempts = iter(
+            [
+                ConnectionError("rpc 502"),
+                TimeoutError("rpc slow"),
+                "good",
+            ]
+        )
+
         def step() -> str:
             v = next(attempts)
             if isinstance(v, Exception):
                 raise v
             return v
+
         result = transfer._read_with_retry(step, tx_hash="0xtx", attempts=3)
         assert result == "good"
 
@@ -1955,14 +2119,19 @@ class TestPostConditionRetry:
         immediately so the user sees a real traceback rather than the
         misleading 'verify on a block explorer' framing."""
         from scripts.pearl_migration import transfer
+
         sleeps: list[float] = []
         monkeypatch.setattr(
-            transfer.time, "sleep", lambda s: sleeps.append(s),
+            transfer.time,
+            "sleep",
+            lambda s: sleeps.append(s),
         )
         calls = {"n": 0}
+
         def buggy() -> str:
             calls["n"] += 1
             raise TypeError("regression: ownerOf signature changed")
+
         with pytest.raises(TypeError, match="regression"):
             transfer._read_with_retry(buggy, tx_hash="0xtx", attempts=3)
         assert calls["n"] == 1, "must NOT retry programming bugs"
@@ -1970,6 +2139,7 @@ class TestPostConditionRetry:
 
     def test_attempts_must_be_at_least_one(self) -> None:
         from scripts.pearl_migration import transfer
+
         with pytest.raises(ValueError, match="attempts must be >= 1"):
             transfer._read_with_retry(lambda: "x", tx_hash="0xtx", attempts=0)
 
@@ -1986,6 +2156,7 @@ class TestPostConditionRetry:
         import requests.exceptions
         import web3.exceptions
         from scripts.pearl_migration import transfer
+
         excs = transfer._RPC_EXCEPTION_TYPES
         # Stdlib bases — always must be present.
         assert ConnectionError in excs
@@ -1995,6 +2166,7 @@ class TestPostConditionRetry:
         # Exception (not the builtin alias as in 3.11+) and the project
         # supports 3.10 — must be in the tuple regardless of runtime.
         import asyncio
+
         assert asyncio.TimeoutError in excs
         # Third-party RPC roots — load-bearing for retry semantics.
         assert web3.exceptions.Web3Exception in excs
@@ -2008,12 +2180,17 @@ class TestPostConditionRetry:
         (PostConditionUnknown). Re-running blindly in the latter case
         would fail because the on-chain side already mined."""
         from scripts.pearl_migration import transfer
+
         monkeypatch.setattr(transfer.time, "sleep", lambda *a, **k: None)
+
         def always_fail() -> str:
             raise ConnectionError("rpc 503")
+
         with pytest.raises(transfer.PostConditionUnknown) as excinfo:
             transfer._read_with_retry(
-                always_fail, tx_hash="0xMINED", attempts=3,
+                always_fail,
+                tx_hash="0xMINED",
+                attempts=3,
             )
         msg = str(excinfo.value)
         assert "0xMINED" in msg
@@ -2032,11 +2209,14 @@ class TestTransfer:
         # Safe — this is the post-condition the function reads to confirm
         # the transfer landed on-chain.
         owner_of_calls: list[int] = []
+
         class _OwnerOfCallable:
             def __init__(self, token_id: int) -> None:
                 owner_of_calls.append(token_id)
+
             def call(self) -> str:
                 return "0xpl"
+
         functions = types.SimpleNamespace(ownerOf=_OwnerOfCallable)
         instance = types.SimpleNamespace(
             encode_abi=lambda abi_element_identifier, args: (
@@ -2055,9 +2235,13 @@ class TestTransfer:
         operate_pkg = types.ModuleType("operate")
         operate_utils = types.ModuleType("operate.utils")
         operate_gnosis = types.ModuleType("operate.utils.gnosis")
-        def fake_send(txd: bytes, safe: str, ledger_api: Any, crypto: Any, to: str) -> str:
+
+        def fake_send(
+            txd: bytes, safe: str, ledger_api: Any, crypto: Any, to: str
+        ) -> str:
             sent.update(txd=txd, safe=safe, to=to)
             return "0xtxhash"
+
         operate_gnosis.send_safe_txs = fake_send  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate", operate_pkg)
         monkeypatch.setitem(sys.modules, "operate.utils", operate_utils)
@@ -2090,8 +2274,12 @@ class TestTransfer:
         from scripts.pearl_migration import transfer
 
         class _OwnerOfCallable:
-            def __init__(self, token_id: int) -> None: pass
-            def call(self) -> str: return "0xqs"  # unchanged: inner call reverted
+            def __init__(self, token_id: int) -> None:
+                pass
+
+            def call(self) -> str:
+                return "0xqs"  # unchanged: inner call reverted
+
         instance = types.SimpleNamespace(
             encode_abi=lambda abi_element_identifier, args: "0xdeadbeef",
             functions=types.SimpleNamespace(ownerOf=_OwnerOfCallable),
@@ -2113,9 +2301,11 @@ class TestTransfer:
 
         with pytest.raises(RuntimeError, match="still reports owner"):
             transfer.transfer_service_nft(
-                ledger_api=object(), crypto=object(),
+                ledger_api=object(),
+                crypto=object(),
                 service_registry_address="0xreg",
-                qs_master_safe="0xqs", pearl_master_safe="0xpl",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
                 service_id=99,
             )
 
@@ -2136,6 +2326,7 @@ class TestTransfer:
         autonomy_chain = types.ModuleType("autonomy.chain")
         autonomy_base = types.ModuleType("autonomy.chain.base")
         encoded: list[tuple[str, list]] = []
+
         class _FakeInstance:
             def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
                 encoded.append((abi_element_identifier, args))
@@ -2146,11 +2337,13 @@ class TestTransfer:
                     "approveHash": "0x2200",
                     "execTransaction": "0x3300",
                 }[abi_element_identifier]
+
         class _FakeGnosisSafe:
             @staticmethod
             def get_instance(*, ledger_api: Any, contract_address: str) -> Any:
                 assert contract_address == "0xservice"
                 return _FakeInstance()
+
             @staticmethod
             def get_raw_safe_transaction_hash(**kw: Any) -> dict:
                 # Reflect args back so the test asserts the inner-tx-hash
@@ -2160,6 +2353,7 @@ class TestTransfer:
                 assert kw["to_address"] == "0xservice"
                 assert kw["data"] == bytes.fromhex("1100")
                 return {"tx_hash": "0xabcdef"}
+
         autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
             gnosis_safe=_FakeGnosisSafe(),
         )
@@ -2177,9 +2371,11 @@ class TestTransfer:
         operate_protocol.get_packed_signature_for_approved_hash = (  # type: ignore[attr-defined]
             lambda *, owners: b"PACKED_SIG_FOR_" + owners[0].encode()
         )
+
         class _SafeOperation:
             class CALL:
                 value = 0
+
         operate_gnosis.SafeOperation = _SafeOperation  # type: ignore[attr-defined]
         operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
             lambda *, ledger_api, safe, owner: "0xprev"
@@ -2199,15 +2395,19 @@ class TestTransfer:
         monkeypatch.setitem(sys.modules, "operate.utils.gnosis", operate_gnosis)
 
         transfer.swap_service_safe_owner(
-            ledger_api="LA", crypto="CR",
+            ledger_api="LA",
+            crypto="CR",
             service_safe="0xservice",
-            old_owner="0xqsafe", new_owner="0xpearl",
+            old_owner="0xqsafe",
+            new_owner="0xpearl",
         )
 
         # Three encode_abi calls: swapOwner (for the inner-hash and exec
         # data fields), approveHash, execTransaction.
         assert [name for name, _ in encoded] == [
-            "swapOwner", "approveHash", "execTransaction",
+            "swapOwner",
+            "approveHash",
+            "execTransaction",
         ]
         assert encoded[0][1] == ["0xprev", "0xqsafe", "0xpearl"]
         assert encoded[1][1] == ["0xabcdef"]  # approveHash(inner_tx_hash)
@@ -2240,15 +2440,20 @@ class TestTransfer:
         autonomy_pkg = types.ModuleType("autonomy")
         autonomy_chain = types.ModuleType("autonomy.chain")
         autonomy_base = types.ModuleType("autonomy.chain.base")
+
         class _FakeInstance:
             def encode_abi(self, *, abi_element_identifier: str, args: list) -> str:
                 return "0x00"
+
         class _FakeGnosisSafe:
             @staticmethod
-            def get_instance(**kw: Any) -> Any: return _FakeInstance()
+            def get_instance(**kw: Any) -> Any:
+                return _FakeInstance()
+
             @staticmethod
             def get_raw_safe_transaction_hash(**kw: Any) -> dict:
                 return {"tx_hash": "0xabcdef"}
+
         autonomy_base.registry_contracts = types.SimpleNamespace(  # type: ignore[attr-defined]
             gnosis_safe=_FakeGnosisSafe(),
         )
@@ -2264,9 +2469,11 @@ class TestTransfer:
         operate_protocol.get_packed_signature_for_approved_hash = (  # type: ignore[attr-defined]
             lambda *, owners: b""
         )
+
         class _SafeOperation:
             class CALL:
                 value = 0
+
         operate_gnosis.SafeOperation = _SafeOperation  # type: ignore[attr-defined]
         operate_gnosis.get_prev_owner = (  # type: ignore[attr-defined]
             lambda *, ledger_api, safe, owner: "0xprev"
@@ -2289,15 +2496,18 @@ class TestTransfer:
 
         with pytest.raises(RuntimeError, match="still has owners"):
             transfer.swap_service_safe_owner(
-                ledger_api="LA", crypto="CR",
+                ledger_api="LA",
+                crypto="CR",
                 service_safe="0xservice",
-                old_owner="0xqsafe", new_owner="0xpearl",
+                old_owner="0xqsafe",
+                new_owner="0xpearl",
             )
 
 
 # ---------------------------------------------------------------------------
 # migrate_to_pearl.py — orchestrator
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def orch(monkeypatch: pytest.MonkeyPatch):
@@ -2315,11 +2525,14 @@ def orch(monkeypatch: pytest.MonkeyPatch):
 
     class FakeChain:
         GNOSIS = None  # filled in below
+
         def __init__(self, value: str) -> None:
             self.value = value
             self.name = value.upper()
+
         def __eq__(self, other: object) -> bool:
             return isinstance(other, FakeChain) and self.value == other.value
+
         def __hash__(self) -> int:
             return hash(self.value)
 
@@ -2356,10 +2569,12 @@ def orch(monkeypatch: pytest.MonkeyPatch):
     # importing — otherwise a previous test's `m` (with stale Chain
     # binding) silently leaks into this test.
     import scripts.pearl_migration as _pkg
+
     sys.modules.pop("scripts.pearl_migration.migrate_to_pearl", None)
     if hasattr(_pkg, "migrate_to_pearl"):
         delattr(_pkg, "migrate_to_pearl")
     from scripts.pearl_migration import migrate_to_pearl as m
+
     return m, FakeChain, FakeOnChainState
 
 
@@ -2384,54 +2599,78 @@ class TestSelectServices:
             m._select_services(store, None)
 
     def test_single_service_auto_selected(
-        self, orch: Any, tmp_path: Path, patch_service_load: dict[Path, Any],
+        self,
+        orch: Any,
+        tmp_path: Path,
+        patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="A")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
         )
         store = detect.OperateStore(root=tmp_path)
         sel = m._select_services(store, None)
         assert [s.service_config_id for s in sel] == ["sc-aaa"]
 
     def test_multi_service_picks_one(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
         _write_service(tmp_path, "sc-bbb", name="B")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service("sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service("sc-bbb", name="B")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
+        )
+        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service(
+            "sc-bbb", name="B"
+        )
         store = detect.OperateStore(root=tmp_path)
         monkeypatch.setattr("builtins.input", lambda _: "2")
         sel = m._select_services(store, None)
         assert [s.service_config_id for s in sel] == ["sc-bbb"]
 
     def test_multi_service_picks_all(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
         _write_service(tmp_path, "sc-bbb", name="B")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service("sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service("sc-bbb", name="B")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
+        )
+        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service(
+            "sc-bbb", name="B"
+        )
         store = detect.OperateStore(root=tmp_path)
         monkeypatch.setattr("builtins.input", lambda _: "3")
         sel = m._select_services(store, None)
         assert [s.service_config_id for s in sel] == ["sc-aaa", "sc-bbb"]
 
     def test_multi_service_retries_on_bad_input(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
         _write_service(tmp_path, "sc-bbb", name="B")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service("sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service("sc-bbb", name="B")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
+        )
+        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service(
+            "sc-bbb", name="B"
+        )
         store = detect.OperateStore(root=tmp_path)
         answers = iter(["foo", "9", "1"])
         monkeypatch.setattr("builtins.input", lambda _: next(answers))
@@ -2439,7 +2678,10 @@ class TestSelectServices:
         assert [s.service_config_id for s in sel] == ["sc-aaa"]
 
     def test_multi_service_eof_on_stdin_aborts_cleanly(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         patch_service_load: dict[Path, Any],
     ) -> None:
         """Closed/piped stdin (CI, automation) must NOT spin in `input()`
@@ -2448,22 +2690,31 @@ class TestSelectServices:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
         _write_service(tmp_path, "sc-bbb", name="B")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service("sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service("sc-bbb", name="B")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
+        )
+        patch_service_load[(tmp_path / "services/sc-bbb").resolve()] = _fake_service(
+            "sc-bbb", name="B"
+        )
         store = detect.OperateStore(root=tmp_path)
+
         def boom_input(_: str) -> str:
             raise EOFError
+
         monkeypatch.setattr("builtins.input", boom_input)
         with pytest.raises(SystemExit):
             m._select_services(store, None)
 
     def test_config_path_matches_by_name(
-        self, orch: Any, tmp_path: Path, patch_service_load: dict[Path, Any],
+        self,
+        orch: Any,
+        tmp_path: Path,
+        patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="Trader Agent")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="Trader Agent")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="Trader Agent"
         )
         cfg = tmp_path / "cfg.json"
         cfg.write_text(json.dumps({"name": "Trader Agent"}))
@@ -2472,19 +2723,26 @@ class TestSelectServices:
         assert [s.service_config_id for s in sel] == ["sc-aaa"]
 
     def test_config_path_matches_by_hash(
-        self, orch: Any, tmp_path: Path, patch_service_load: dict[Path, Any],
+        self,
+        orch: Any,
+        tmp_path: Path,
+        patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         # Different name in service config — match by hash instead.
         sdir = tmp_path / "services" / "sc-aaa"
         sdir.mkdir(parents=True)
-        (sdir / "config.json").write_text(json.dumps({
-            "name": "Different Name",
-            "agent_addresses": [],
-            "hash": "bafy-test",
-        }))
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="Different Name", hash_="bafy-test")
+        (sdir / "config.json").write_text(
+            json.dumps(
+                {
+                    "name": "Different Name",
+                    "agent_addresses": [],
+                    "hash": "bafy-test",
+                }
+            )
+        )
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="Different Name", hash_="bafy-test"
         )
         cfg = tmp_path / "cfg.json"
         cfg.write_text(json.dumps({"name": "Trader Agent", "hash": "bafy-test"}))
@@ -2493,12 +2751,15 @@ class TestSelectServices:
         assert [s.service_config_id for s in sel] == ["sc-aaa"]
 
     def test_config_path_no_match_aborts(
-        self, orch: Any, tmp_path: Path, patch_service_load: dict[Path, Any],
+        self,
+        orch: Any,
+        tmp_path: Path,
+        patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="A", hash_="bafy-test")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A", hash_="bafy-test"
         )
         cfg = tmp_path / "cfg.json"
         cfg.write_text(json.dumps({"name": "Z", "hash": "h"}))
@@ -2507,12 +2768,15 @@ class TestSelectServices:
             m._select_services(store, str(cfg))
 
     def test_config_path_unreadable_aborts(
-        self, orch: Any, tmp_path: Path, patch_service_load: dict[Path, Any],
+        self,
+        orch: Any,
+        tmp_path: Path,
+        patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         _write_service(tmp_path, "sc-aaa", name="A")
-        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="A")
+        patch_service_load[(tmp_path / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
         )
         store = detect.OperateStore(root=tmp_path)
         with pytest.raises(SystemExit):
@@ -2545,7 +2809,10 @@ class TestPreflight:
             m._preflight(d)
 
     def test_with_leftover_containers_warns(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, *_ = orch
@@ -2569,7 +2836,9 @@ class TestLoadWallet:
 
     @staticmethod
     def _stub_master_wallet_manager(
-        monkeypatch: pytest.MonkeyPatch, *, valid_password: Optional[str] = None,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        valid_password: Optional[str] = None,
     ) -> list[str]:
         """Replace `MasterWalletManager` so `is_password_valid` is observable
         and the constructor never touches disk. Returns the list it appends to."""
@@ -2585,7 +2854,8 @@ class TestLoadWallet:
 
         operate_pkg = sys.modules.setdefault("operate", types.ModuleType("operate"))
         operate_wallet = sys.modules.setdefault(
-            "operate.wallet", types.ModuleType("operate.wallet"),
+            "operate.wallet",
+            types.ModuleType("operate.wallet"),
         )
         fake_master = types.ModuleType("operate.wallet.master")
         fake_master.MasterWalletManager = FakeMWM  # type: ignore[attr-defined]
@@ -2605,7 +2875,9 @@ class TestLoadWallet:
         self._stub_master_wallet_manager(monkeypatch, valid_password=None)
         # OperateApp should never be constructed on a bad password.
         operate_app_calls = []
-        operate_cli = sys.modules.setdefault("operate.cli", types.ModuleType("operate.cli"))
+        operate_cli = sys.modules.setdefault(
+            "operate.cli", types.ModuleType("operate.cli")
+        )
         operate_cli.OperateApp = lambda **kw: operate_app_calls.append(kw) or types.SimpleNamespace()  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate.cli", operate_cli)
 
@@ -2634,9 +2906,13 @@ class TestLoadWallet:
         # `_load_wallet` calls it (next test) without diving into its
         # internals.
         fake_app = types.SimpleNamespace(
-            wallet_manager=fake_wm, password=None, user_account=None,
+            wallet_manager=fake_wm,
+            password=None,
+            user_account=None,
         )
-        operate_cli = sys.modules.setdefault("operate.cli", types.ModuleType("operate.cli"))
+        operate_cli = sys.modules.setdefault(
+            "operate.cli", types.ModuleType("operate.cli")
+        )
         operate_cli.OperateApp = lambda **kw: fake_app  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate.cli", operate_cli)
 
@@ -2645,6 +2921,7 @@ class TestLoadWallet:
             assert validate("wrong") is False
             assert validate("thepw") is True
             return "thepw"
+
         monkeypatch.setattr(m, "ask_password_validating", fake_ask)
 
         app, wallet = m._load_wallet(store, "label")
@@ -2670,15 +2947,20 @@ class TestLoadWallet:
         fake_wallet = types.SimpleNamespace(name="loaded")
         fake_wm = types.SimpleNamespace(load=lambda lt: fake_wallet)
         fake_app = types.SimpleNamespace(
-            wallet_manager=fake_wm, password=None, user_account=None,
+            wallet_manager=fake_wm,
+            password=None,
+            user_account=None,
         )
-        operate_cli = sys.modules.setdefault("operate.cli", types.ModuleType("operate.cli"))
+        operate_cli = sys.modules.setdefault(
+            "operate.cli", types.ModuleType("operate.cli")
+        )
         operate_cli.OperateApp = lambda **kw: fake_app  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "operate.cli", operate_cli)
 
         align_calls: list[Any] = []
         monkeypatch.setattr(
-            m, "align_user_account_to_wallet",
+            m,
+            "align_user_account_to_wallet",
             lambda app: align_calls.append(app),
         )
         monkeypatch.setattr(m, "ask_password_validating", lambda **kw: "thepw")
@@ -2739,7 +3021,10 @@ class TestRunModeA:
         assert outcome.is_complete is True
 
     def test_dry_run_with_existing_pearl_backup_print(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         # Cover the "[dry-run] would back up" branch by ensuring pearl exists.
@@ -2757,7 +3042,10 @@ class TestRunModeA:
         assert "Would back up" in capsys.readouterr().out
 
     def test_mode_a_re_probe_failure_is_fatal(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Mode A re-probes via `docker_quickstart_containers` after
         `force_remove_known_containers()` returned cleanly. If `docker ps`
@@ -2777,15 +3065,20 @@ class TestRunModeA:
             mode=detect.Mode.FRESH_COPY,
         )
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+
         def boom() -> list:
             raise RuntimeError("docker daemon hung")
+
         monkeypatch.setattr(m, "docker_quickstart_containers", boom)
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         with pytest.raises(SystemExit):
             m._run_mode_a(disc=d, dry_run=False)
 
     def test_mode_a_re_probe_finds_remaining_containers_is_fatal(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`force_remove_known_containers()` may return cleanly even
         when the docker daemon refused the rm with a non-zero exit (the
@@ -2809,7 +3102,10 @@ class TestRunModeA:
             m._run_mode_a(disc=d, dry_run=False)
 
     def test_force_cleanup_failure_is_fatal_in_mode_a(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Mode A has no per-service aggregation: an unstoppable
         deployment MUST be `fatal()`, not silently proceed to copy a
@@ -2825,15 +3121,20 @@ class TestRunModeA:
             pearl=detect.OperateStore(root=pl_root.resolve()),
             mode=detect.Mode.FRESH_COPY,
         )
+
         def boom() -> list:
             raise subprocess.TimeoutExpired(cmd=["docker", "rm"], timeout=30)
+
         monkeypatch.setattr(m, "force_remove_known_containers", boom)
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         with pytest.raises(SystemExit):
             m._run_mode_a(disc=d, dry_run=False)
 
     def test_real_run_invokes_staking_reset_against_dest_store(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Mode A (no on-chain step) MUST also leave Pearl with
         `staking_program_id = no_staking` — symmetric with Mode B's
@@ -2860,17 +3161,22 @@ class TestRunModeA:
         # still at qs_root for any subsequent cleanup).
         events: list[tuple[str, Any]] = []
         original_copy = m.fresh_copy_store
+
         def spy_copy(src: Any, dest: Path) -> None:
             events.append(("copy", dest))
             return original_copy(src, dest)
+
         def spy_reset(store: Any) -> list[str]:
             events.append(("reset", store.root))
             assert pl_root.resolve().exists(), "reset must run after copy"
             return ["sc-aaa"]
+
         original_rename = m.rename_source_for_rollback
+
         def spy_rename(src: Any) -> Path:
             events.append(("rename", src.root))
             return original_rename(src)
+
         monkeypatch.setattr(m, "fresh_copy_store", spy_copy)
         monkeypatch.setattr(m, "reset_services_staking_to_no_staking", spy_reset)
         monkeypatch.setattr(m, "rename_source_for_rollback", spy_rename)
@@ -2883,7 +3189,10 @@ class TestRunModeA:
         assert events[1][1] == pl_root.resolve()
 
     def test_real_run_backs_up_existing_empty_pearl(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Covers the non-dry-run branch where Pearl dir exists but has no wallet."""
@@ -2983,7 +3292,9 @@ class TestAlignUserAccountToWallet:
         assert forced == {}
 
     def test_force_updates_when_diverged(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Diverged install: `user.json`'s hash is for `pw_user`, wallet
         is for `pw_wallet`. After alignment `force_update(pw_wallet)`
@@ -3111,34 +3422,45 @@ class TestStepTerminate:
     only when the whole `_migrate_one_service` is exercised."""
 
     def _manager(
-        self, FakeOnChainState: Any, *, state_seq: list, terminate=None,
+        self,
+        FakeOnChainState: Any,
+        *,
+        state_seq: list,
+        terminate=None,
     ) -> Any:
         states = list(state_seq)
         return types.SimpleNamespace(
-            terminate_service_on_chain_from_safe=(
-                terminate or (lambda **kw: None)
+            terminate_service_on_chain_from_safe=(terminate or (lambda **kw: None)),
+            _get_on_chain_state=lambda s, c: (
+                states.pop(0) if states else FakeOnChainState.PRE_REGISTRATION
             ),
-            _get_on_chain_state=lambda s, c: states.pop(0) if states else FakeOnChainState.PRE_REGISTRATION,
         )
 
     def test_skip_when_already_pre_registration(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         m, FakeChain, FakeOnChainState = orch
         signed = {"n": 0}
         manager = self._manager(
-            FakeOnChainState, state_seq=[FakeOnChainState.PRE_REGISTRATION],
+            FakeOnChainState,
+            state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         m._step_terminate(
-            manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
+            manager=manager,
+            service=object(),
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
             on_chain_state_cls=FakeOnChainState,
-            ledger_api=object(), qs_address="0xqs_eoa",
+            ledger_api=object(),
+            qs_address="0xqs_eoa",
         )
-        assert signed["n"] == 0   # never signed because already there
+        assert signed["n"] == 0  # never signed because already there
 
     def test_success_path_signs_and_advances_state(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         m, FakeChain, FakeOnChainState = orch
         signed = {"n": 0}
@@ -3147,26 +3469,38 @@ class TestStepTerminate:
             state_seq=[FakeOnChainState.DEPLOYED, FakeOnChainState.PRE_REGISTRATION],
         )
         m._step_terminate(
-            manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
+            manager=manager,
+            service=object(),
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
             on_chain_state_cls=FakeOnChainState,
-            ledger_api=object(), qs_address="0xqs_eoa",
+            ledger_api=object(),
+            qs_address="0xqs_eoa",
         )
-        assert signed["n"] == 1   # ensure_signable was called
+        assert signed["n"] == 1  # ensure_signable was called
 
     def test_terminate_raise_wraps_into_unmigratable(self, orch: Any) -> None:
         m, FakeChain, FakeOnChainState = orch
+
         def boom(**kw: Any) -> None:
             raise RuntimeError("revert: NotEnoughFunds")
+
         manager = self._manager(
-            FakeOnChainState, state_seq=[FakeOnChainState.DEPLOYED],
+            FakeOnChainState,
+            state_seq=[FakeOnChainState.DEPLOYED],
             terminate=boom,
         )
         with pytest.raises(m._Unmigratable) as ei:
             m._step_terminate(
-                manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-                ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-                ledger_api=object(), qs_address="0xqs_eoa",
+                manager=manager,
+                service=object(),
+                sid="sc-aaa",
+                chain_str="gnosis",
+                ensure_signable=lambda: None,
+                on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(),
+                qs_address="0xqs_eoa",
             )
         assert "could not unstake/terminate" in ei.value.reason
 
@@ -3178,20 +3512,27 @@ class TestStepTerminate:
         `_Unmigratable` so the next re-run resumes from the next step."""
         m, FakeChain, FakeOnChainState = orch
         calls = {"n": 0}
+
         def states(s: Any, c: str) -> Any:
             calls["n"] += 1
             if calls["n"] == 1:
                 return FakeOnChainState.DEPLOYED  # before terminate
             raise ConnectionError("rpc 502")  # post-terminate read fails
+
         manager = types.SimpleNamespace(
             terminate_service_on_chain_from_safe=lambda **kw: None,
             _get_on_chain_state=states,
         )
         with pytest.raises(m._Unmigratable) as ei:
             m._step_terminate(
-                manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-                ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-                ledger_api=object(), qs_address="0xqs_eoa",
+                manager=manager,
+                service=object(),
+                sid="sc-aaa",
+                chain_str="gnosis",
+                ensure_signable=lambda: None,
+                on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(),
+                qs_address="0xqs_eoa",
             )
         assert "post-state verification" in ei.value.reason
         assert "rpc 502" in ei.value.reason
@@ -3205,63 +3546,99 @@ class TestStepTerminate:
         )
         with pytest.raises(m._Unmigratable) as ei:
             m._step_terminate(
-                manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-                ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-                ledger_api=object(), qs_address="0xqs_eoa",
+                manager=manager,
+                service=object(),
+                sid="sc-aaa",
+                chain_str="gnosis",
+                ensure_signable=lambda: None,
+                on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(),
+                qs_address="0xqs_eoa",
             )
         assert "expected PRE_REGISTRATION" in ei.value.reason
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_programming_bug_propagates_not_wrapped(
-        self, orch: Any, bug_cls: type,
+        self,
+        orch: Any,
+        bug_cls: type,
     ) -> None:
         """Step exception wrapper must NOT swallow programming bugs as
         'chain failed'. Covers every member of `_PROGRAMMING_BUGS`."""
         m, FakeChain, FakeOnChainState = orch
+
         def buggy(**kw: Any) -> None:
             raise bug_cls("simulated programming bug")
+
         manager = self._manager(
-            FakeOnChainState, state_seq=[FakeOnChainState.DEPLOYED],
+            FakeOnChainState,
+            state_seq=[FakeOnChainState.DEPLOYED],
             terminate=buggy,
         )
         with pytest.raises(bug_cls):
             m._step_terminate(
-                manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-                ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-                ledger_api=object(), qs_address="0xqs_eoa",
+                manager=manager,
+                service=object(),
+                sid="sc-aaa",
+                chain_str="gnosis",
+                ensure_signable=lambda: None,
+                on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(),
+                qs_address="0xqs_eoa",
             )
 
-    @pytest.mark.parametrize("rpc_cls", [
-        KeyError,           # web3 / middleware: missing chain metadata
-        LookupError,        # eth_abi / contract attribute resolution
-        RuntimeError,       # generic chain-side
-        ConnectionError,    # transport-layer
-    ])
+    @pytest.mark.parametrize(
+        "rpc_cls",
+        [
+            KeyError,  # web3 / middleware: missing chain metadata
+            LookupError,  # eth_abi / contract attribute resolution
+            RuntimeError,  # generic chain-side
+            ConnectionError,  # transport-layer
+        ],
+    )
     def test_legitimate_rpc_failures_get_wrapped_not_re_raised(
-        self, orch: Any, rpc_cls: type,
+        self,
+        orch: Any,
+        rpc_cls: type,
     ) -> None:
         """Regression guard: KeyError / LookupError MUST become per-service
         `_Unmigratable`, not crash the whole batch. Round 4 specifically
         removed these from `_PROGRAMMING_BUGS` for this reason; this test
         prevents a future re-widening from regressing the contract."""
         m, FakeChain, FakeOnChainState = orch
+
         def chain_failure(**kw: Any) -> None:
             raise rpc_cls("simulated chain-side failure")
+
         manager = self._manager(
-            FakeOnChainState, state_seq=[FakeOnChainState.DEPLOYED],
+            FakeOnChainState,
+            state_seq=[FakeOnChainState.DEPLOYED],
             terminate=chain_failure,
         )
         with pytest.raises(m._Unmigratable):
             m._step_terminate(
-                manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-                ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-                ledger_api=object(), qs_address="0xqs_eoa",
+                manager=manager,
+                service=object(),
+                sid="sc-aaa",
+                chain_str="gnosis",
+                ensure_signable=lambda: None,
+                on_chain_state_cls=FakeOnChainState,
+                ledger_api=object(),
+                qs_address="0xqs_eoa",
             )
 
     def test_terminate_waits_for_funds_then_retries(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Pin: an insufficient-funds error from `terminate_service_on_chain_from_safe`
         MUST trigger the wait-and-retry helper, not bail as `_Unmigratable`.
@@ -3278,8 +3655,8 @@ class TestStepTerminate:
         manager = self._manager(
             FakeOnChainState,
             state_seq=[
-                FakeOnChainState.DEPLOYED,         # before terminate
-                FakeOnChainState.PRE_REGISTRATION, # post-state read after retry
+                FakeOnChainState.DEPLOYED,  # before terminate
+                FakeOnChainState.PRE_REGISTRATION,  # post-state read after retry
             ],
             terminate=maybe_boom,
         )
@@ -3288,9 +3665,14 @@ class TestStepTerminate:
         monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
         monkeypatch.setattr(m.time, "sleep", lambda s: None)
         m._step_terminate(
-            manager=manager, service=object(), sid="sc-aaa", chain_str="gnosis",
-            ensure_signable=lambda: None, on_chain_state_cls=FakeOnChainState,
-            ledger_api=object(), qs_address="0xqs_eoa",
+            manager=manager,
+            service=object(),
+            sid="sc-aaa",
+            chain_str="gnosis",
+            ensure_signable=lambda: None,
+            on_chain_state_cls=FakeOnChainState,
+            ledger_api=object(),
+            qs_address="0xqs_eoa",
         )
         assert len(attempts) == 2  # one fail, one retry-after-topup
 
@@ -3305,8 +3687,11 @@ class TestStepTransferNft:
     def fake_transfer(self, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201
         """Install a stub transfer module; return the call recorder."""
         calls: list = []
+
         def fake_nft(**kw: Any) -> str:
-            calls.append(kw); return "0x1"
+            calls.append(kw)
+            return "0x1"
+
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
         fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = fake_nft  # type: ignore[attr-defined]
@@ -3315,7 +3700,10 @@ class TestStepTransferNft:
         return calls
 
     def test_skip_when_nft_already_on_pearl(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_transfer: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_transfer: list,
     ) -> None:
         m, *_ = orch
         signed = {"n": 0}
@@ -3324,15 +3712,21 @@ class TestStepTransferNft:
             ledger_api="LA",
             qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             registry_addr="0xreg",
-            qs_master_safe="0xqs", pearl_master_safe="0xpl",
-            token_id=42, sid="sc-aaa", chain_str="gnosis",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            token_id=42,
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
         )
         assert fake_transfer == []
         assert signed["n"] == 0
 
     def test_owner_unreadable_raises(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_transfer: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_transfer: list,
     ) -> None:
         m, *_ = orch
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: None)
@@ -3341,14 +3735,20 @@ class TestStepTransferNft:
                 ledger_api="LA",
                 qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
-                qs_master_safe="0xqs", pearl_master_safe="0xpl",
-                token_id=42, sid="sc-aaa", chain_str="gnosis",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                token_id=42,
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "could not read NFT owner" in ei.value.reason
 
     def test_owner_third_party_raises(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_transfer: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_transfer: list,
     ) -> None:
         m, *_ = orch
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xstranger")
@@ -3357,14 +3757,20 @@ class TestStepTransferNft:
                 ledger_api="LA",
                 qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
-                qs_master_safe="0xqs", pearl_master_safe="0xpl",
-                token_id=42, sid="sc-aaa", chain_str="gnosis",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                token_id=42,
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "expected quickstart" in ei.value.reason
 
     def test_success_path_calls_transfer_then_signs(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_transfer: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_transfer: list,
     ) -> None:
         m, *_ = orch
         signed = {"n": 0}
@@ -3373,8 +3779,11 @@ class TestStepTransferNft:
             ledger_api="LA",
             qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             registry_addr="0xreg",
-            qs_master_safe="0xqs", pearl_master_safe="0xpl",
-            token_id=42, sid="sc-aaa", chain_str="gnosis",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            token_id=42,
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
         )
         assert signed["n"] == 1
@@ -3382,14 +3791,18 @@ class TestStepTransferNft:
         assert fake_transfer[0]["service_id"] == 42
 
     def test_transfer_failure_wraps_into_unmigratable(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         m, *_ = orch
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
         fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
+
         def boom(**kw: Any) -> None:
             raise RuntimeError("nonce stale")
+
         fake_mod.transfer_service_nft = boom  # type: ignore[attr-defined]
         fake_mod.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
@@ -3398,14 +3811,19 @@ class TestStepTransferNft:
                 ledger_api="LA",
                 qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
-                qs_master_safe="0xqs", pearl_master_safe="0xpl",
-                token_id=42, sid="sc-aaa", chain_str="gnosis",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                token_id=42,
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "NFT transfer failed" in ei.value.reason
 
     def test_post_condition_unknown_surfaces_unwrapped(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`PostConditionUnknown` carries critical 'DO NOT re-run blindly'
         guidance. The step wrapper MUST surface it as an _Unmigratable
@@ -3414,14 +3832,18 @@ class TestStepTransferNft:
         m, *_ = orch
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+
         class _PCU(RuntimeError):
             pass
+
         fake_mod.PostConditionUnknown = _PCU  # type: ignore[attr-defined]
+
         def post_cond_unknown(**kw: Any) -> None:
             raise _PCU(
                 "On-chain state INDETERMINATE after Safe tx 0xMINED: "
                 "DO NOT re-run blindly."
             )
+
         fake_mod.transfer_service_nft = post_cond_unknown  # type: ignore[attr-defined]
         fake_mod.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
@@ -3430,8 +3852,11 @@ class TestStepTransferNft:
                 ledger_api="LA",
                 qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
                 registry_addr="0xreg",
-                qs_master_safe="0xqs", pearl_master_safe="0xpl",
-                token_id=42, sid="sc-aaa", chain_str="gnosis",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                token_id=42,
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         # The original "DO NOT re-run blindly" / "INDETERMINATE" message
@@ -3442,7 +3867,9 @@ class TestStepTransferNft:
         assert "NFT transfer failed" not in ei.value.reason
 
     def test_transfer_nft_waits_for_funds_then_retries(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Pin: insufficient-funds during the NFT `safeTransferFrom` MUST
         trigger the wait-and-retry helper (qs master EOA pays gas), not
@@ -3472,8 +3899,11 @@ class TestStepTransferNft:
             ledger_api=object(),
             qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
             registry_addr="0xreg",
-            qs_master_safe="0xqs", pearl_master_safe="0xpl",
-            token_id=42, sid="sc-aaa", chain_str="gnosis",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            token_id=42,
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: None,
         )
         assert len(attempts) == 2  # one fail, one retry-after-topup
@@ -3490,88 +3920,128 @@ class TestStepSwapServiceSafeOwner:
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
         fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
+
         def fake(**kw: Any) -> None:
             calls.append(kw)
+
         fake_mod.swap_service_safe_owner = fake  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
         return calls
 
     def test_skip_when_already_swapped(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_swap: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_swap: list,
     ) -> None:
         m, *_ = orch
         signed = {"n": 0}
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
         m._step_swap_service_safe_owner(
-            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-            service_safe="0xms", qs_master_safe="0xqs",
-            pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+            ledger_api="LA",
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+            service_safe="0xms",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
         )
         assert fake_swap == []
         assert signed["n"] == 0
 
     def test_owners_unreadable_wraps(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_swap: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_swap: list,
     ) -> None:
         m, *_ = orch
+
         def boom(**kw: Any) -> Any:
             raise RuntimeError("rpc 502")
+
         monkeypatch.setattr(m, "safe_owners", boom)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-                service_safe="0xms", qs_master_safe="0xqs",
-                pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+                ledger_api="LA",
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+                service_safe="0xms",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "could not read service Safe owners" in ei.value.reason
 
     def test_qs_not_owner_raises(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_swap: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_swap: list,
     ) -> None:
         m, *_ = orch
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xstranger"])
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-                service_safe="0xms", qs_master_safe="0xqs",
-                pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+                ledger_api="LA",
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+                service_safe="0xms",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "can't swap" in ei.value.reason
 
     def test_success_path_signs_then_swaps(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch, fake_swap: list,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_swap: list,
     ) -> None:
         m, *_ = orch
         signed = {"n": 0}
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         m._step_swap_service_safe_owner(
-            ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-            service_safe="0xms", qs_master_safe="0xqs",
-            pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+            ledger_api="LA",
+            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+            service_safe="0xms",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: signed.update(n=signed["n"] + 1),
         )
         assert signed["n"] == 1 and len(fake_swap) == 1
 
     def test_swap_failure_wraps_into_half_state_message(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         m, *_ = orch
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
         fake_mod.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
+
         def boom(**kw: Any) -> None:
             raise RuntimeError("safe tx revert")
+
         fake_mod.swap_service_safe_owner = boom  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-                service_safe="0xms", qs_master_safe="0xqs",
-                pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+                ledger_api="LA",
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+                service_safe="0xms",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         # Half-state message must call out the inconsistency.
@@ -3579,7 +4049,9 @@ class TestStepSwapServiceSafeOwner:
         assert "still lists 0xqs as owner" in ei.value.reason
 
     def test_post_condition_unknown_surfaces_unwrapped(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Same as the NFT-step test: the swap step MUST surface
         PostConditionUnknown's verbatim 'INDETERMINATE / DO NOT re-run'
@@ -3588,22 +4060,30 @@ class TestStepSwapServiceSafeOwner:
         m, *_ = orch
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         fake_mod = types.ModuleType("scripts.pearl_migration.transfer")
+
         class _PCU(RuntimeError):
             pass
+
         fake_mod.PostConditionUnknown = _PCU  # type: ignore[attr-defined]
         fake_mod.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
+
         def post_cond_unknown(**kw: Any) -> None:
             raise _PCU(
                 "On-chain state INDETERMINATE after Safe tx 0xMINED: "
                 "DO NOT re-run blindly."
             )
+
         fake_mod.swap_service_safe_owner = post_cond_unknown  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_mod)
         with pytest.raises(m._Unmigratable) as ei:
             m._step_swap_service_safe_owner(
-                ledger_api="LA", qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-                service_safe="0xms", qs_master_safe="0xqs",
-                pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+                ledger_api="LA",
+                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
+                service_safe="0xms",
+                qs_master_safe="0xqs",
+                pearl_master_safe="0xpl",
+                sid="sc-aaa",
+                chain_str="gnosis",
                 ensure_signable=lambda: None,
             )
         assert "INDETERMINATE" in ei.value.reason
@@ -3613,7 +4093,9 @@ class TestStepSwapServiceSafeOwner:
         assert "service Safe owner swap failed" not in ei.value.reason
 
     def test_swap_owner_waits_for_funds_then_retries(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Pin: insufficient-funds during the service Safe owner swap MUST
         trigger the wait-and-retry helper. Same risk shape as the NFT
@@ -3639,8 +4121,11 @@ class TestStepSwapServiceSafeOwner:
         m._step_swap_service_safe_owner(
             ledger_api=object(),
             qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa"),
-            service_safe="0xms", qs_master_safe="0xqs",
-            pearl_master_safe="0xpl", sid="sc-aaa", chain_str="gnosis",
+            service_safe="0xms",
+            qs_master_safe="0xqs",
+            pearl_master_safe="0xpl",
+            sid="sc-aaa",
+            chain_str="gnosis",
             ensure_signable=lambda: None,
         )
         assert len(attempts) == 2  # one fail, one retry-after-topup
@@ -3652,7 +4137,9 @@ class TestUnmigratableExceptionInit:
     def test_args_populated(self, orch: Any) -> None:
         m, *_ = orch
         exc = m._Unmigratable(
-            service_id="sc-aaa", chain="gnosis", reason="boom",
+            service_id="sc-aaa",
+            chain="gnosis",
+            reason="boom",
         )
         # Without __post_init__, the dataclass-synthesized __init__ leaves
         # args=(). With it, the structured fields propagate to Exception.
@@ -3661,7 +4148,9 @@ class TestUnmigratableExceptionInit:
     def test_repr_shows_all_fields(self, orch: Any) -> None:
         m, *_ = orch
         exc = m._Unmigratable(
-            service_id="sc-aaa", chain="gnosis", reason="boom",
+            service_id="sc-aaa",
+            chain="gnosis",
+            reason="boom",
         )
         # The dataclass-synthesized `__repr__` (which overrides Exception's
         # default) renders every field by name.
@@ -3676,7 +4165,9 @@ class TestUnmigratableExceptionInit:
         + added `__reduce__` so the alignment is explicit."""
         m, *_ = orch
         exc = m._Unmigratable(
-            service_id="sc-aaa", chain=None, reason="config malformed",
+            service_id="sc-aaa",
+            chain=None,
+            reason="config malformed",
         )
         assert exc.args == ("sc-aaa", None, "config malformed")
         # str(exc) (custom __str__) elides "on None" so the user-visible
@@ -3690,9 +4181,12 @@ class TestUnmigratableExceptionInit:
         end-to-end via copy.copy (which uses __reduce__ under the hood).
         Guards against multiprocessing transport breaking on _Unmigratable."""
         import copy
+
         m, *_ = orch
         original = m._Unmigratable(
-            service_id="sc-aaa", chain=None, reason="boom",
+            service_id="sc-aaa",
+            chain=None,
+            reason="boom",
         )
         clone = copy.copy(original)
         assert clone == original
@@ -3712,9 +4206,13 @@ class TestUnmigratableExceptionInit:
         and would fail pickle's `cls is sys.modules[mod].cls` identity
         check, which would mask the real contract being tested."""
         import pickle  # noqa: S403 — internal serialization, not untrusted input
+
         from scripts.pearl_migration.migrate_to_pearl import _Unmigratable
+
         original = _Unmigratable(
-            service_id="sc-aaa", chain=chain, reason="boom",
+            service_id="sc-aaa",
+            chain=chain,
+            reason="boom",
         )
         clone = pickle.loads(pickle.dumps(original))  # noqa: S301
         assert isinstance(clone, _Unmigratable)
@@ -3737,7 +4235,11 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "docker_quickstart_containers", lambda: [])
 
     def _make_service_obj(
-        self, fake_chain_cls: Any, *, multisig: str = "0xms", token: int = 7,
+        self,
+        fake_chain_cls: Any,
+        *,
+        multisig: str = "0xms",
+        token: int = 7,
     ) -> Any:
         # `user_params` and `store` are required by the post-loop staking
         # reset in `_migrate_one_service`; pre-populating them with a
@@ -3751,7 +4253,8 @@ class TestMigrateOneService:
         )
         ledger_config = types.SimpleNamespace(rpc="http://rpc")
         chain_config = types.SimpleNamespace(
-            chain_data=chain_data, ledger_config=ledger_config,
+            chain_data=chain_data,
+            ledger_config=ledger_config,
         )
         return types.SimpleNamespace(
             chain_configs={"gnosis": chain_config},
@@ -3759,7 +4262,9 @@ class TestMigrateOneService:
         )
 
     def _setup_manager(
-        self, FakeChain: Any, FakeOnChainState: Any,
+        self,
+        FakeChain: Any,
+        FakeOnChainState: Any,
         *,
         terminate: Any = None,
         state_seq: Optional[list] = None,
@@ -3769,15 +4274,20 @@ class TestMigrateOneService:
         state on the second call (after-terminate check)."""
         if terminate is None:
             terminate = lambda **kw: None  # noqa: E731 -- default no-op
-        states = list(state_seq or [
-            FakeOnChainState.DEPLOYED,         # before terminate
-            FakeOnChainState.PRE_REGISTRATION, # after terminate
-        ])
+        states = list(
+            state_seq
+            or [
+                FakeOnChainState.DEPLOYED,  # before terminate
+                FakeOnChainState.PRE_REGISTRATION,  # after terminate
+            ]
+        )
         svc_obj = self._make_service_obj(FakeChain, multisig=multisig)
         return svc_obj, types.SimpleNamespace(
             load=lambda service_config_id: svc_obj,
             terminate_service_on_chain_from_safe=terminate,
-            _get_on_chain_state=lambda s, c: states.pop(0) if states else FakeOnChainState.PRE_REGISTRATION,
+            _get_on_chain_state=lambda s, c: (
+                states.pop(0) if states else FakeOnChainState.PRE_REGISTRATION
+            ),
             get_eth_safe_tx_builder=lambda ledger_config: types.SimpleNamespace(
                 ledger_api="LA",
             ),
@@ -3793,38 +4303,52 @@ class TestMigrateOneService:
             manager_calls["term"] = chain
 
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState, terminate=fake_terminate,
+            FakeChain,
+            FakeOnChainState,
+            terminate=fake_terminate,
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        qs_wallet = types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"})
+        qs_wallet = types.SimpleNamespace(
+            crypto="CR",
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            safes={FakeChain.GNOSIS: "0xqs"},
+        )
         pearl_wallet = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"})
 
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         # Idempotency probes: NFT not yet transferred, qs Safe still owns service Safe.
-        monkeypatch.setattr(m, "service_nft_owner",
-                            lambda **kw: "0xqs")
+        monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
 
         # Stub the lazy transfer-module import.
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
         fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         moves: list[Any] = []
+
         def fake_nft(**kw: Any) -> str:
-            moves.append(("nft", kw)); return "0x1"
+            moves.append(("nft", kw))
+            return "0x1"
+
         def fake_swap(**kw: Any) -> None:
             moves.append(("swap", kw))
+
         fake_transfer.transfer_service_nft = fake_nft  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = fake_swap  # type: ignore[attr-defined]
         monkeypatch.setitem(
-            sys.modules, "scripts.pearl_migration.transfer", fake_transfer,
+            sys.modules,
+            "scripts.pearl_migration.transfer",
+            fake_transfer,
         )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=["0xa"], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app, qs_wallet=qs_wallet,
-            pearl_wallet=pearl_wallet, config_path="cfg.json",
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            pearl_wallet=pearl_wallet,
+            config_path="cfg.json",
         )
         assert manager_calls["term"] == "gnosis"
         assert [step for step, _ in moves] == ["nft", "swap"]
@@ -3840,16 +4364,21 @@ class TestMigrateOneService:
             terminate_calls.append(kw)
 
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             terminate=fake_terminate,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],  # already there
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        qs_wallet = types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"})
+        qs_wallet = types.SimpleNamespace(
+            crypto="CR",
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            safes={FakeChain.GNOSIS: "0xqs"},
+        )
         pearl_wallet = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"})
 
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         # NFT already on Pearl, Safe owner already swapped to Pearl.
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
@@ -3862,18 +4391,29 @@ class TestMigrateOneService:
         fake_transfer.transfer_service_nft = lambda **kw: nft_called.append(kw)  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: swap_called.append(kw)  # type: ignore[attr-defined]
         monkeypatch.setitem(
-            sys.modules, "scripts.pearl_migration.transfer", fake_transfer,
+            sys.modules,
+            "scripts.pearl_migration.transfer",
+            fake_transfer,
         )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app, qs_wallet=qs_wallet,
-            pearl_wallet=pearl_wallet, config_path=None,
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=qs_wallet,
+            pearl_wallet=pearl_wallet,
+            config_path=None,
         )
         # Every on-chain step was probed-and-skipped.
-        assert terminate_calls == [], "terminate must be skipped when already PRE_REGISTRATION"
-        assert nft_called == [], "transfer_service_nft must be skipped when NFT already on Pearl"
-        assert swap_called == [], "swap_service_safe_owner must be skipped when already swapped"
+        assert (
+            terminate_calls == []
+        ), "terminate must be skipped when already PRE_REGISTRATION"
+        assert (
+            nft_called == []
+        ), "transfer_service_nft must be skipped when NFT already on Pearl"
+        assert (
+            swap_called == []
+        ), "swap_service_safe_owner must be skipped when already swapped"
 
     def test_nft_owner_unreadable_raises_unmigratable(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -3881,16 +4421,21 @@ class TestMigrateOneService:
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(FakeChain, FakeOnChainState)
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: None)  # RPC failure
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3911,8 +4456,14 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3931,19 +4482,29 @@ class TestMigrateOneService:
 
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
         fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
+
         def boom(**kw: Any) -> None:
             raise RuntimeError("revert: nonce stale")
+
         fake_transfer.transfer_service_nft = boom  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(
-            sys.modules, "scripts.pearl_migration.transfer", fake_transfer,
+            sys.modules,
+            "scripts.pearl_migration.transfer",
+            fake_transfer,
         )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3967,21 +4528,34 @@ class TestMigrateOneService:
         order: list[str] = []
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
         fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
+
         def fake_nft(**kw: Any) -> str:
-            order.append("nft"); return "0x1"
+            order.append("nft")
+            return "0x1"
+
         def swap_boom(**kw: Any) -> None:
-            order.append("swap"); raise RuntimeError("safe tx revert")
+            order.append("swap")
+            raise RuntimeError("safe tx revert")
+
         fake_transfer.transfer_service_nft = fake_nft  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = swap_boom  # type: ignore[attr-defined]
         monkeypatch.setitem(
-            sys.modules, "scripts.pearl_migration.transfer", fake_transfer,
+            sys.modules,
+            "scripts.pearl_migration.transfer",
+            fake_transfer,
         )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -3989,32 +4563,47 @@ class TestMigrateOneService:
         assert "service multisig" in ei.value.reason
         assert "owner swap failed" in ei.value.reason
         # And the half-state message must actually be true: NFT transferred FIRST.
-        assert order == ["nft", "swap"], (
-            f"swap must run AFTER nft transfer for the half-state message to be true; saw {order}"
-        )
+        assert order == [
+            "nft",
+            "swap",
+        ], f"swap must run AFTER nft transfer for the half-state message to be true; saw {order}"
 
     def test_terminate_failure_raises_unmigratable(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         m, FakeChain, FakeOnChainState = orch
+
         def boom(service_config_id: str, chain: str) -> None:
             raise RuntimeError("can't unstake yet")
+
         # State is DEPLOYED before terminate runs (so the probe says "act").
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
-            terminate=boom, state_seq=[FakeOnChainState.DEPLOYED],
+            FakeChain,
+            FakeOnChainState,
+            terminate=boom,
+            state_seq=[FakeOnChainState.DEPLOYED],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: (_ for _ in ()).throw(RuntimeError("stop fails too")))
+        monkeypatch.setattr(
+            m,
+            "stop_via_middleware",
+            lambda operate, config_path: (_ for _ in ()).throw(
+                RuntimeError("stop fails too")
+            ),
+        )
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
@@ -4027,20 +4616,25 @@ class TestMigrateOneService:
         m, FakeChain, FakeOnChainState = orch
         # Both probes return DEPLOYED — terminate "succeeds" but state never moves.
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.DEPLOYED, FakeOnChainState.DEPLOYED],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
@@ -4057,14 +4651,21 @@ class TestMigrateOneService:
         # NFT was already transferred (so we get past step 2), but reading
         # owners fails (RPC down).
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
+
         def owners_boom(**kw: Any) -> Any:
             raise RuntimeError("rpc down")
+
         monkeypatch.setattr(m, "safe_owners", owners_boom)
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"}, address="0xqs_eoa", ledger_api=lambda **kw: object()),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4086,15 +4687,24 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
         assert "can't swap" in ei.value.reason
 
     def test_multi_chain_per_iteration_ledger_capture(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Service spans 2 chains: each iteration's `_ledger_api(_cfg=...)`
         default-arg binding must capture THAT iteration's chain_config.
@@ -4108,14 +4718,16 @@ class TestMigrateOneService:
         # Two distinct chain_configs, distinguished by RPC.
         cc_g = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=1, multisig="0xms-g",
+                token=1,
+                multisig="0xms-g",
                 user_params=types.SimpleNamespace(staking_program_id="qsp"),
             ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/gnosis"),
         )
         cc_o = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=2, multisig="0xms-o",
+                token=2,
+                multisig="0xms-o",
                 user_params=types.SimpleNamespace(staking_program_id="qsp"),
             ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/optimism"),
@@ -4149,43 +4761,60 @@ class TestMigrateOneService:
         # (token=1 → gnosis, token=2 → optimism).
         per_chain_pearl = {1: "0xpl-g", 2: "0xpl-o"}
         monkeypatch.setattr(
-            m, "service_nft_owner",
-            lambda *, ledger_api, service_registry_address, service_id:
-                per_chain_pearl[service_id],
+            m,
+            "service_nft_owner",
+            lambda *, ledger_api, service_registry_address, service_id: per_chain_pearl[
+                service_id
+            ],
         )
         monkeypatch.setattr(
-            m, "safe_owners",
-            lambda *, ledger_api, safe:
-                ["0xpl-g"] if safe == "0xms-g" else ["0xpl-o"],
+            m,
+            "safe_owners",
+            lambda *, ledger_api, safe: ["0xpl-g"] if safe == "0xms-g" else ["0xpl-o"],
         )
         # Override the autouse stub so safe_threshold actually runs against
         # the per-chain ledger_api.
         seen_thresholds: list = []
+
         def threshold_recorder(*, ledger_api: Any, safe: str) -> int:
             seen_thresholds.append(ledger_api)
             return 1
+
         monkeypatch.setattr(m, "safe_threshold", threshold_recorder)
         # Force a state mismatch so terminate runs — that triggers the
         # threshold guard (which calls _ledger_api → records the build).
-        states = iter([
-            FakeOnChainState.DEPLOYED, FakeOnChainState.PRE_REGISTRATION,  # gnosis
-            FakeOnChainState.DEPLOYED, FakeOnChainState.PRE_REGISTRATION,  # optimism
-        ])
+        states = iter(
+            [
+                FakeOnChainState.DEPLOYED,
+                FakeOnChainState.PRE_REGISTRATION,  # gnosis
+                FakeOnChainState.DEPLOYED,
+                FakeOnChainState.PRE_REGISTRATION,  # optimism
+            ]
+        )
         manager._get_on_chain_state = lambda s, c: next(states)  # type: ignore[attr-defined]
 
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
 
         ref = _fake_service("sc-aaa", name="A", path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={
-                FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o",
-            }),
-            pearl_wallet=types.SimpleNamespace(safes={
-                FakeChain.GNOSIS: "0xpl-g", FakeChain.OPTIMISM: "0xpl-o",
-            }),
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={
+                    FakeChain.GNOSIS: "0xqs-g",
+                    FakeChain.OPTIMISM: "0xqs-o",
+                },
+            ),
+            pearl_wallet=types.SimpleNamespace(
+                safes={
+                    FakeChain.GNOSIS: "0xpl-g",
+                    FakeChain.OPTIMISM: "0xpl-o",
+                }
+            ),
             config_path=None,
         )
 
@@ -4200,7 +4829,10 @@ class TestMigrateOneService:
         assert "LA-https://rpc.example/optimism" in seen_thresholds
 
     def test_multi_chain_steps_2_and_3_use_per_iteration_ledger(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Sibling to the previous test: this time NFT is still on the QS
         Safe and the service Safe is still QS-owned, so step 2 (NFT transfer)
@@ -4212,14 +4844,16 @@ class TestMigrateOneService:
         m, FakeChain, FakeOnChainState = orch
         cc_g = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=1, multisig="0xms-g",
+                token=1,
+                multisig="0xms-g",
                 user_params=types.SimpleNamespace(staking_program_id="qsp"),
             ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/gnosis"),
         )
         cc_o = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=2, multisig="0xms-o",
+                token=2,
+                multisig="0xms-o",
                 user_params=types.SimpleNamespace(staking_program_id="qsp"),
             ),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/optimism"),
@@ -4237,8 +4871,9 @@ class TestMigrateOneService:
             terminate_service_on_chain_from_safe=lambda **kw: None,
             _get_on_chain_state=lambda s, c: FakeOnChainState.PRE_REGISTRATION,
             get_eth_safe_tx_builder=(
-                lambda ledger_config:
-                    types.SimpleNamespace(ledger_api=f"LA-{ledger_config.rpc}")
+                lambda ledger_config: types.SimpleNamespace(
+                    ledger_api=f"LA-{ledger_config.rpc}"
+                )
             ),
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
@@ -4246,45 +4881,60 @@ class TestMigrateOneService:
         # NFT still owned by per-chain QS Safe -> step 2 must run.
         per_chain_qs = {1: "0xqs-g", 2: "0xqs-o"}
         monkeypatch.setattr(
-            m, "service_nft_owner",
-            lambda *, ledger_api, service_registry_address, service_id:
-                per_chain_qs[service_id],
+            m,
+            "service_nft_owner",
+            lambda *, ledger_api, service_registry_address, service_id: per_chain_qs[
+                service_id
+            ],
         )
         # Service Safe still QS-owned -> step 3 must run.
         monkeypatch.setattr(
-            m, "safe_owners",
-            lambda *, ledger_api, safe:
-                ["0xqs-g"] if safe == "0xms-g" else ["0xqs-o"],
+            m,
+            "safe_owners",
+            lambda *, ledger_api, safe: ["0xqs-g"] if safe == "0xms-g" else ["0xqs-o"],
         )
         monkeypatch.setattr(m, "safe_threshold", lambda *, ledger_api, safe: 1)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
 
         nft_calls: list = []
         swap_calls: list = []
         from scripts.pearl_migration import transfer as transfer_mod
+
         monkeypatch.setattr(
-            transfer_mod, "transfer_service_nft",
-            lambda *, ledger_api, crypto, service_registry_address,
-                   qs_master_safe, pearl_master_safe, service_id:
-                nft_calls.append((ledger_api, service_id)),
+            transfer_mod,
+            "transfer_service_nft",
+            lambda *, ledger_api, crypto, service_registry_address, qs_master_safe, pearl_master_safe, service_id: nft_calls.append(
+                (ledger_api, service_id)
+            ),
         )
         monkeypatch.setattr(
-            transfer_mod, "swap_service_safe_owner",
-            lambda *, ledger_api, crypto, service_safe, old_owner, new_owner:
-                swap_calls.append((ledger_api, service_safe)),
+            transfer_mod,
+            "swap_service_safe_owner",
+            lambda *, ledger_api, crypto, service_safe, old_owner, new_owner: swap_calls.append(
+                (ledger_api, service_safe)
+            ),
         )
 
         ref = _fake_service("sc-aaa", name="A", path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={
-                FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o",
-            }),
-            pearl_wallet=types.SimpleNamespace(safes={
-                FakeChain.GNOSIS: "0xpl-g", FakeChain.OPTIMISM: "0xpl-o",
-            }),
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={
+                    FakeChain.GNOSIS: "0xqs-g",
+                    FakeChain.OPTIMISM: "0xqs-o",
+                },
+            ),
+            pearl_wallet=types.SimpleNamespace(
+                safes={
+                    FakeChain.GNOSIS: "0xpl-g",
+                    FakeChain.OPTIMISM: "0xpl-o",
+                }
+            ),
             config_path=None,
         )
 
@@ -4302,8 +4952,11 @@ class TestMigrateOneService:
         """Pearl missing a Safe on this chain -> create_safe is invoked, then proceed."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
-            state_seq=[FakeOnChainState.PRE_REGISTRATION],  # already there, skip terminate
+            FakeChain,
+            FakeOnChainState,
+            state_seq=[
+                FakeOnChainState.PRE_REGISTRATION
+            ],  # already there, skip terminate
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
@@ -4320,16 +4973,26 @@ class TestMigrateOneService:
         def fake_create_safe(*, chain: Any, rpc: Any) -> None:
             creates.append({"chain": chain, "rpc": rpc})
             pearl_safes[chain] = "0xpl-new"
+
         pearl_wallet = types.SimpleNamespace(
-            safes=pearl_safes, create_safe=fake_create_safe,
-            ledger_api=lambda **kw: object(), address="0xpe",
+            safes=pearl_safes,
+            create_safe=fake_create_safe,
+            ledger_api=lambda **kw: object(),
+            address="0xpe",
         )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
-            pearl_wallet=pearl_wallet, config_path=None,
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={FakeChain.GNOSIS: "0xqs"},
+            ),
+            pearl_wallet=pearl_wallet,
+            config_path=None,
         )
         assert len(creates) == 1
         assert creates[0]["chain"] == FakeChain.GNOSIS
@@ -4340,7 +5003,8 @@ class TestMigrateOneService:
     ) -> None:
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
@@ -4349,50 +5013,81 @@ class TestMigrateOneService:
 
         def boom(**kw: Any) -> None:
             raise RuntimeError("rpc rejected safe deployment")
+
         pearl_wallet = types.SimpleNamespace(
-            safes={}, create_safe=boom, address="0xpe",
+            safes={},
+            create_safe=boom,
+            address="0xpe",
             ledger_api=lambda **kw: object(),
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
-                pearl_wallet=pearl_wallet, config_path=None,
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
+                pearl_wallet=pearl_wallet,
+                config_path=None,
             )
         assert "could not create Pearl master Safe" in ei.value.reason
 
     def test_force_remove_timeout_becomes_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`force_remove_known_containers` raising `TimeoutExpired` (docker
         daemon hang) MUST surface as `_Unmigratable` — not propagate raw
         and abort the batch with on-chain ops about to commit."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
+
         def boom() -> list:
             raise subprocess.TimeoutExpired(cmd=["docker", "rm"], timeout=30)
+
         monkeypatch.setattr(m, "force_remove_known_containers", boom)
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
         assert "could not confirm containers are stopped" in ei.value.reason
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_stop_via_middleware_programming_bug_propagates(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         bug_cls: type,
     ) -> None:
         """A programming bug in middleware's stop_service must NOT be
@@ -4400,58 +5095,96 @@ class TestMigrateOneService:
         on-chain branch — propagate as a real traceback."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
+
         def buggy(operate: Any, config_path: str) -> None:
             raise bug_cls("middleware refactor")
+
         monkeypatch.setattr(m, "stop_via_middleware", buggy)
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(bug_cls):
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path="cfg.json",
             )
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_pearl_create_safe_programming_bug_propagates(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         bug_cls: type,
     ) -> None:
         """Programming bug in `pearl_wallet.create_safe` must propagate,
         not get wrapped as `_Unmigratable("could not create Pearl Safe")`."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
+
         def buggy(**kw: Any) -> None:
             raise bug_cls("middleware refactor")
+
         pearl_wallet = types.SimpleNamespace(
-            safes={}, create_safe=buggy, address="0xpe",
+            safes={},
+            create_safe=buggy,
+            address="0xpe",
             ledger_api=lambda **kw: object(),
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(bug_cls):
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
-                pearl_wallet=pearl_wallet, config_path=None,
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
+                pearl_wallet=pearl_wallet,
+                config_path=None,
             )
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_ensure_signable_programming_bug_propagates(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         bug_cls: type,
     ) -> None:
         """A programming bug in `safe_threshold` (caller of
@@ -4460,10 +5193,11 @@ class TestMigrateOneService:
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(FakeChain, FakeOnChainState)
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
+
         def buggy(**kw: Any) -> None:
             raise bug_cls("middleware refactor")
+
         monkeypatch.setattr(m, "safe_threshold", buggy)
         # Force the signing branch by ensuring NFT is still on QS.
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
@@ -4471,73 +5205,107 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(bug_cls):
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
 
     def test_force_remove_runtime_error_becomes_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`docker_quickstart_containers` raising `RuntimeError` (docker
         daemon refusing to talk) MUST surface as `_Unmigratable`."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
+
         def boom() -> list:
             raise RuntimeError("docker ps exited 1: permission denied")
+
         monkeypatch.setattr(m, "force_remove_known_containers", boom)
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
         assert "could not confirm containers are stopped" in ei.value.reason
 
     def test_re_probe_runtime_error_becomes_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Re-probe via `docker_quickstart_containers` failing AFTER a
         clean `force_remove_known_containers` MUST also become
         `_Unmigratable`. Covers the daemon-hangs-between-rm-and-ps race."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
+
         def boom() -> list:
             raise RuntimeError("docker ps exited 1: daemon gone")
+
         monkeypatch.setattr(m, "docker_quickstart_containers", boom)
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
         assert "could not verify containers stopped" in ei.value.reason
 
     def test_leftover_containers_after_cleanup_become_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If `docker rm -f` reported success but containers are still
         listed afterwards (daemon refused without erroring), MUST surface
         as `_Unmigratable` — proceeding would race the live deployment."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
@@ -4548,8 +5316,14 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4566,7 +5340,8 @@ class TestMigrateOneService:
         the contract."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
@@ -4576,9 +5351,15 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
+                svc=ref,
+                qs_app=qs_app,
                 # No Safe registered for Gnosis -> KeyError on access.
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={}),
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4592,7 +5373,8 @@ class TestMigrateOneService:
         service `_Unmigratable`, not crash the batch."""
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
+            FakeChain,
+            FakeOnChainState,
             state_seq=[FakeOnChainState.PRE_REGISTRATION],
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
@@ -4601,6 +5383,7 @@ class TestMigrateOneService:
         # Strip the registry entry for Gnosis to simulate a chain without
         # a registered ServiceRegistry.
         from operate.ledger.profiles import CONTRACTS as _CONTRACTS
+
         original = _CONTRACTS.get(FakeChain.GNOSIS, {}).copy()
         _CONTRACTS[FakeChain.GNOSIS] = {
             k: v for k, v in original.items() if k != "service_registry"
@@ -4609,9 +5392,17 @@ class TestMigrateOneService:
             ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
             with pytest.raises(m._Unmigratable) as ei:
                 m._migrate_one_service(
-                    svc=ref, qs_app=qs_app,
-                    qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
-                    pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
+                    svc=ref,
+                    qs_app=qs_app,
+                    qs_wallet=types.SimpleNamespace(
+                        crypto="CR",
+                        address="0xqs_eoa",
+                        ledger_api=lambda **kw: object(),
+                        safes={FakeChain.GNOSIS: "0xqs"},
+                    ),
+                    pearl_wallet=types.SimpleNamespace(
+                        safes={FakeChain.GNOSIS: "0xpl"}
+                    ),
                     config_path=None,
                 )
             assert "no ServiceRegistry contract" in ei.value.reason
@@ -4627,15 +5418,21 @@ class TestMigrateOneService:
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
-        monkeypatch.setattr(m, "safe_threshold", lambda **kw: 2)   # multi-sig
+        monkeypatch.setattr(m, "safe_threshold", lambda **kw: 2)  # multi-sig
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4656,8 +5453,14 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
@@ -4675,8 +5478,9 @@ class TestMigrateOneService:
         """
         m, FakeChain, FakeOnChainState = orch
         _, manager = self._setup_manager(
-            FakeChain, FakeOnChainState,
-            state_seq=[FakeOnChainState.PRE_REGISTRATION],   # already terminated
+            FakeChain,
+            FakeOnChainState,
+            state_seq=[FakeOnChainState.PRE_REGISTRATION],  # already terminated
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
@@ -4686,24 +5490,32 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
 
         threshold_calls: list = []
+
         def boom_threshold(**kw: Any) -> int:
             threshold_calls.append(kw)
             # Simulate user having raised threshold post-migration; would
             # raise _Unmigratable IF the check ran.
             return 2
+
         monkeypatch.setattr(m, "safe_threshold", boom_threshold)
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         # Should complete cleanly: no signing → no threshold check.
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={FakeChain.GNOSIS: "0xqs"},
+            ),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
-        assert threshold_calls == [], (
-            "safe_threshold must NOT be called when no signing branch runs"
-        )
+        assert (
+            threshold_calls == []
+        ), "safe_threshold must NOT be called when no signing branch runs"
 
     def test_threshold_actually_invoked_when_signing(
         self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -4722,21 +5534,31 @@ class TestMigrateOneService:
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
 
         invocations: list = []
+
         def recording_threshold(**kw: Any) -> int:
             invocations.append(kw)
             return 1
+
         monkeypatch.setattr(m, "safe_threshold", recording_threshold)
 
         fake_transfer = types.ModuleType("scripts.pearl_migration.transfer")
         fake_transfer.PostConditionUnknown = type("PostConditionUnknown", (RuntimeError,), {})  # type: ignore[attr-defined]
         fake_transfer.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "scripts.pearl_migration.transfer", fake_transfer)
+        monkeypatch.setitem(
+            sys.modules, "scripts.pearl_migration.transfer", fake_transfer
+        )
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={FakeChain.GNOSIS: "0xqs"},
+            ),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
@@ -4756,20 +5578,29 @@ class TestMigrateOneService:
 
         def boom(**kw: Any) -> Any:
             raise RuntimeError("rpc 502")
+
         monkeypatch.setattr(m, "safe_threshold", boom)
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
-                qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+                svc=ref,
+                qs_app=qs_app,
+                qs_wallet=types.SimpleNamespace(
+                    crypto="CR",
+                    address="0xqs_eoa",
+                    ledger_api=lambda **kw: object(),
+                    safes={FakeChain.GNOSIS: "0xqs"},
+                ),
                 pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
                 config_path=None,
             )
         assert "could not read quickstart master Safe threshold" in ei.value.reason
 
     def test_print_summary_clean_prints_success(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """All-clean migration: prints a positive 'fully migrated: N' headline."""
         m, *_ = orch
@@ -4783,7 +5614,9 @@ class TestMigrateOneService:
         assert "Migration incomplete" not in out
 
     def test_print_summary_subset_only_shows_subset_note(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """When the only reason for incompleteness is a subset selection
         (no unmigratable, no drain failures), the summary surfaces the
@@ -4801,16 +5634,22 @@ class TestMigrateOneService:
         assert "drains were skipped" in out
 
     def test_print_summary_subset_with_unmigratable_omits_subset_note(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Subset note is suppressed when there's also an unmigratable list
         — stacking 're-run for the rest' on top of 're-run after fixing
         the failure' would muddle the user's next action."""
         m, *_ = orch
         outcome = m.MigrationOutcome(
-            unmigratable=(m._Unmigratable(
-                service_id="sc-aaa", chain="gnosis", reason="boom",
-            ),),
+            unmigratable=(
+                m._Unmigratable(
+                    service_id="sc-aaa",
+                    chain="gnosis",
+                    reason="boom",
+                ),
+            ),
             subset_selected=True,
         )
         m._print_migration_summary(outcome)
@@ -4818,22 +5657,32 @@ class TestMigrateOneService:
         assert "subset migration:" not in out
 
     def test_print_summary_formats_each_failure_line(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Direct check on the per-failure formatting — would catch a typo
         in the `[chain] kind address: reason` template."""
         m, FakeChain, _ = orch
-        unm = (m._Unmigratable(
-            service_id="sc-zzz", chain="gnosis", reason="cannot unstake yet",
-        ),)
+        unm = (
+            m._Unmigratable(
+                service_id="sc-zzz",
+                chain="gnosis",
+                reason="cannot unstake yet",
+            ),
+        )
         drains = (
             m._DrainFailure(
-                chain=FakeChain.GNOSIS, source_kind="Safe",
-                source_address="0xsafe-addr", reason="insufficient gas",
+                chain=FakeChain.GNOSIS,
+                source_kind="Safe",
+                source_address="0xsafe-addr",
+                reason="insufficient gas",
             ),
             m._DrainFailure(
-                chain=FakeChain.OPTIMISM, source_kind="EOA",
-                source_address="0xeoa-addr", reason="rpc 502",
+                chain=FakeChain.OPTIMISM,
+                source_kind="EOA",
+                source_address="0xeoa-addr",
+                reason="rpc 502",
             ),
         )
         outcome = m.MigrationOutcome(
@@ -4859,8 +5708,9 @@ class TestMigrateOneService:
         _, manager = self._setup_manager(FakeChain, FakeOnChainState)
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
         called: list[str] = []
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda **kw: called.append("nope"))
+        monkeypatch.setattr(
+            m, "stop_via_middleware", lambda **kw: called.append("nope")
+        )
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xqs")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xqs"])
@@ -4869,19 +5719,30 @@ class TestMigrateOneService:
         fake_transfer.transfer_service_nft = lambda **kw: "0x1"  # type: ignore[attr-defined]
         fake_transfer.swap_service_safe_owner = lambda **kw: None  # type: ignore[attr-defined]
         monkeypatch.setitem(
-            sys.modules, "scripts.pearl_migration.transfer", fake_transfer,
+            sys.modules,
+            "scripts.pearl_migration.transfer",
+            fake_transfer,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
-            qs_wallet=types.SimpleNamespace(crypto="CR", address="0xqs_eoa", ledger_api=lambda **kw: object(), safes={FakeChain.GNOSIS: "0xqs"}),
+            svc=ref,
+            qs_app=qs_app,
+            qs_wallet=types.SimpleNamespace(
+                crypto="CR",
+                address="0xqs_eoa",
+                ledger_api=lambda **kw: object(),
+                safes={FakeChain.GNOSIS: "0xqs"},
+            ),
             pearl_wallet=types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}),
             config_path=None,
         )
         assert called == []  # config_path None bypasses stop_via_middleware
 
     def test_resets_staking_program_id_to_no_staking_after_success(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """After all on-chain steps succeed, every chain's
         `user_params.staking_program_id` is pinned to `no_staking` and the
@@ -4895,14 +5756,16 @@ class TestMigrateOneService:
         # so we can assert ALL chains get reset, not just the first.
         cc_g = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=1, multisig="0xms-g",
+                token=1,
+                multisig="0xms-g",
                 user_params=types.SimpleNamespace(staking_program_id="qsp_g"),
             ),
             ledger_config=types.SimpleNamespace(rpc="http://rpc/g"),
         )
         cc_o = types.SimpleNamespace(
             chain_data=types.SimpleNamespace(
-                token=2, multisig="0xms-o",
+                token=2,
+                multisig="0xms-o",
                 user_params=types.SimpleNamespace(staking_program_id="qsp_o"),
             ),
             ledger_config=types.SimpleNamespace(rpc="http://rpc/o"),
@@ -4921,8 +5784,7 @@ class TestMigrateOneService:
         )
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
 
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         # NFT already on Pearl, Safe owner already swapped — keeps the
         # test focused on the post-loop staking reset, not on-chain branches.
@@ -4931,9 +5793,11 @@ class TestMigrateOneService:
 
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         m._migrate_one_service(
-            svc=ref, qs_app=qs_app,
+            svc=ref,
+            qs_app=qs_app,
             qs_wallet=types.SimpleNamespace(
-                crypto="CR", address="0xqs_eoa",
+                crypto="CR",
+                address="0xqs_eoa",
                 ledger_api=lambda **kw: object(),
                 safes={FakeChain.GNOSIS: "0xqs", FakeChain.OPTIMISM: "0xqs"},
             ),
@@ -4947,7 +5811,10 @@ class TestMigrateOneService:
         assert store_calls == [True], "service.store() must be called once"
 
     def test_staking_reset_store_oserror_raises_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If `service.store()` fails after on-chain ops have committed,
         a `_Unmigratable` is raised so the filesystem copy is skipped and
@@ -4963,8 +5830,7 @@ class TestMigrateOneService:
         manager.load("anything").store = boom  # type: ignore[misc]
 
         qs_app = types.SimpleNamespace(service_manager=lambda: manager)
-        monkeypatch.setattr(m, "stop_via_middleware",
-                            lambda operate, config_path: None)
+        monkeypatch.setattr(m, "stop_via_middleware", lambda operate, config_path: None)
         monkeypatch.setattr(m, "force_remove_known_containers", lambda: [])
         monkeypatch.setattr(m, "service_nft_owner", lambda **kw: "0xpl")
         monkeypatch.setattr(m, "safe_owners", lambda **kw: ["0xpl"])
@@ -4972,9 +5838,11 @@ class TestMigrateOneService:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(m._Unmigratable) as ei:
             m._migrate_one_service(
-                svc=ref, qs_app=qs_app,
+                svc=ref,
+                qs_app=qs_app,
                 qs_wallet=types.SimpleNamespace(
-                    crypto="CR", address="0xqs_eoa",
+                    crypto="CR",
+                    address="0xqs_eoa",
                     ledger_api=lambda **kw: object(),
                     safes={FakeChain.GNOSIS: "0xqs"},
                 ),
@@ -4996,7 +5864,8 @@ class TestPearlSafeFundsWait:
     `ask_funds_in_address` (run_service.py:597)."""
 
     def test_is_insufficient_funds_error_matches_known_phrasings(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         m, _, _ = orch
         assert m._is_insufficient_funds_error(
@@ -5012,7 +5881,9 @@ class TestPearlSafeFundsWait:
         )
 
     def test_wait_for_native_funds_returns_when_balance_increases(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Polls until balance > current. First call seeds `current`,
@@ -5021,10 +5892,14 @@ class TestPearlSafeFundsWait:
         m, _, _ = orch
         balances = iter([100, 100, 250])
         monkeypatch.setattr(
-            m, "get_asset_balance", lambda *a, **kw: next(balances),
+            m,
+            "get_asset_balance",
+            lambda *a, **kw: next(balances),
         )
         monkeypatch.setattr(
-            m, "wei_to_token", lambda wei, chain, asset: f"{wei}wei",
+            m,
+            "wei_to_token",
+            lambda wei, chain, asset: f"{wei}wei",
         )
         slept: list[float] = []
         monkeypatch.setattr(m.time, "sleep", lambda s: slept.append(s))
@@ -5042,7 +5917,9 @@ class TestPearlSafeFundsWait:
         assert "Pearl master EOA 0xpe" in out
 
     def test_create_pearl_safe_waits_then_succeeds_on_insufficient_funds(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """When `create_safe` first raises an insufficient-funds error
@@ -5059,11 +5936,15 @@ class TestPearlSafeFundsWait:
             # Second attempt: user has topped up, succeed silently.
 
         pearl = types.SimpleNamespace(
-            safes={}, create_safe=create_safe, address="0xpe",
+            safes={},
+            create_safe=create_safe,
+            address="0xpe",
         )
         balances = iter([0, 1000])  # current=0, then post-topup=1000.
         monkeypatch.setattr(
-            m, "get_asset_balance", lambda *a, **kw: next(balances),
+            m,
+            "get_asset_balance",
+            lambda *a, **kw: next(balances),
         )
         monkeypatch.setattr(m, "wei_to_token", lambda *a, **kw: "stub")
         monkeypatch.setattr(m.time, "sleep", lambda s: None)
@@ -5081,7 +5962,9 @@ class TestPearlSafeFundsWait:
         assert "Detected" in out
 
     def test_wait_for_native_funds_tolerates_rpc_blip_mid_poll(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Pin: a transient RPC failure during the poll loop MUST NOT
@@ -5104,7 +5987,9 @@ class TestPearlSafeFundsWait:
         monkeypatch.setattr(m, "wei_to_token", lambda wei, *a, **kw: f"{wei}wei")
         monkeypatch.setattr(m.time, "sleep", lambda s: None)
         m._wait_for_native_funds(
-            ledger_api=object(), address="0xpe", chain_str="gnosis",
+            ledger_api=object(),
+            address="0xpe",
+            chain_str="gnosis",
             recipient_name="Pearl master EOA",
         )
         out = capsys.readouterr().out
@@ -5115,16 +6000,22 @@ class TestPearlSafeFundsWait:
         assert "Detected 250wei arrived" in out
 
     def test_create_pearl_safe_propagates_non_funds_error(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A non-funds error MUST surface to the caller (which wraps it
         as `_Unmigratable` / `_DrainFailure`) rather than spinning the
         wait loop on an unrelated failure that won't ever cure."""
         m, FakeChain, _ = orch
+
         def create_safe(*, chain: Any, rpc: Any) -> None:
             raise RuntimeError("rpc rejected")
+
         pearl = types.SimpleNamespace(
-            safes={}, create_safe=create_safe, address="0xpe",
+            safes={},
+            create_safe=create_safe,
+            address="0xpe",
         )
         with pytest.raises(RuntimeError, match="rpc rejected"):
             m._create_pearl_safe_with_funds_wait(
@@ -5138,7 +6029,9 @@ class TestPearlSafeFundsWait:
 
 class TestDrainMaster:
     def test_announces_pearl_safe_creation(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """When Pearl lacks a Safe on a chain we announce + create rather than skip."""
         m, FakeChain, _ = orch
@@ -5147,34 +6040,42 @@ class TestDrainMaster:
         def fake_create_safe(*, chain: Any, rpc: Any) -> None:
             pearl_safes[chain] = "0xpl"
 
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes=pearl_safes,
-                                      create_safe=fake_create_safe,
-                                      address="0xpe",
-                                      ledger_api=lambda **kw: object())
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=lambda **kw: {},
+        )
+        pearl = types.SimpleNamespace(
+            safes=pearl_safes,
+            create_safe=fake_create_safe,
+            address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         m._drain_master(
-            qs_wallet=qs, pearl_wallet=pearl,
+            qs_wallet=qs,
+            pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc/gnosis"},
         )
         out = capsys.readouterr().out
         assert "Pearl has no master Safe" in out and "creating one" in out
 
     def test_drain_empty_moved_emits_info_line(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """When `qs_wallet.drain()` returns `{}`, emit an explicit "no
         balances to move" line so silence isn't ambiguous between
         "nothing to drain" and "silently dropped"."""
         m, FakeChain, _ = orch
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=lambda **kw: {},
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
         out = capsys.readouterr().out
         assert "no balances to move from Safe on GNOSIS" in out
@@ -5185,15 +6086,20 @@ class TestDrainMaster:
     ) -> None:
         m, FakeChain, _ = orch
         called: list[dict[str, Any]] = []
-        def fake_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict[str, int]:
+
+        def fake_drain(
+            withdrawal_address: str, chain: Any, from_safe: bool
+        ) -> dict[str, int]:
             called.append({"to": withdrawal_address, "from_safe": from_safe})
             return {"0xtoken": 100}
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=fake_drain)
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=fake_drain,
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
         assert failures == []
         assert {c["from_safe"] for c in called} == {True, False}
@@ -5201,19 +6107,26 @@ class TestDrainMaster:
         assert called[1]["to"] == "0xpe"
 
     def test_drain_safe_failure_returns_failure_record(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, FakeChain, _ = orch
-        def fake_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict[str, int]:
+
+        def fake_drain(
+            withdrawal_address: str, chain: Any, from_safe: bool
+        ) -> dict[str, int]:
             if from_safe:
                 raise RuntimeError("safe drain boom")
             return {}
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=fake_drain)
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=fake_drain,
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
         assert len(failures) == 1
         assert failures[0].source_kind == "Safe"
@@ -5221,26 +6134,34 @@ class TestDrainMaster:
         assert "drain (Safe)" in capsys.readouterr().out
 
     def test_drain_eoa_failure_returns_failure_record(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, FakeChain, _ = orch
-        def fake_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict[str, int]:
+
+        def fake_drain(
+            withdrawal_address: str, chain: Any, from_safe: bool
+        ) -> dict[str, int]:
             if not from_safe:
                 raise RuntimeError("eoa drain boom")
             return {}
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=fake_drain)
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=fake_drain,
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
         assert len(failures) == 1
         assert failures[0].source_kind == "EOA"
         assert "drain (EOA)" in capsys.readouterr().out
 
     def test_drain_creates_pearl_safe_when_missing(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         """If Pearl has no Safe on a chain, create one then drain into it."""
         m, FakeChain, _ = orch
@@ -5253,91 +6174,132 @@ class TestDrainMaster:
             pearl_safes[chain] = "0xpl-fresh"
 
         called: list = []
+
         def fake_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict:
             called.append({"to": withdrawal_address, "from_safe": from_safe})
             return {}
 
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=fake_drain)
-        pearl = types.SimpleNamespace(safes=pearl_safes,
-                                      create_safe=fake_create_safe,
-                                      address="0xpe",
-                                      ledger_api=lambda **kw: object())
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=fake_drain,
+        )
+        pearl = types.SimpleNamespace(
+            safes=pearl_safes,
+            create_safe=fake_create_safe,
+            address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         failures = m._drain_master(
-            qs_wallet=qs, pearl_wallet=pearl,
+            qs_wallet=qs,
+            pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc.example/gnosis"},
         )
         assert failures == []
-        assert creates == [{"chain": FakeChain.GNOSIS,
-                            "rpc": "https://rpc.example/gnosis"}]
+        assert creates == [
+            {"chain": FakeChain.GNOSIS, "rpc": "https://rpc.example/gnosis"}
+        ]
         # Drains then ran into the freshly-created Pearl Safe.
         assert called[0]["to"] == "0xpl-fresh"
         assert called[1]["to"] == "0xpe"
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_drain_programming_bug_propagates(
-        self, orch: Any, bug_cls: type,
+        self,
+        orch: Any,
+        bug_cls: type,
     ) -> None:
         """A programming bug in `qs_wallet.drain()` (e.g. middleware
         signature drift) MUST propagate as a real traceback, NOT get
         silently aggregated into `_DrainFailure` where the user would
         chase 'RPC retry' instead of the real bug."""
         m, FakeChain, _ = orch
+
         def buggy_drain(withdrawal_address: str, chain: Any, from_safe: bool) -> dict:
             raise bug_cls("simulated middleware refactor bug")
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=buggy_drain)
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=buggy_drain,
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         with pytest.raises(bug_cls):
             m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
 
-    @pytest.mark.parametrize("bug_cls", [
-        TypeError, AttributeError, NameError, ImportError,
-    ])
+    @pytest.mark.parametrize(
+        "bug_cls",
+        [
+            TypeError,
+            AttributeError,
+            NameError,
+            ImportError,
+        ],
+    )
     def test_drain_create_safe_programming_bug_propagates(
-        self, orch: Any, bug_cls: type,
+        self,
+        orch: Any,
+        bug_cls: type,
     ) -> None:
         """Same policy for the Pearl Safe creation site in `_drain_master`."""
         m, FakeChain, _ = orch
+
         def buggy_create(*, chain: Any, rpc: Any) -> None:
             raise bug_cls("simulated middleware refactor bug")
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes={}, create_safe=buggy_create,
-                                      address="0xpe",
-                                      ledger_api=lambda **kw: object())
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=lambda **kw: {},
+        )
+        pearl = types.SimpleNamespace(
+            safes={},
+            create_safe=buggy_create,
+            address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         with pytest.raises(bug_cls):
             m._drain_master(
-                qs_wallet=qs, pearl_wallet=pearl,
+                qs_wallet=qs,
+                pearl_wallet=pearl,
                 chain_rpcs={FakeChain.GNOSIS: "https://rpc/gnosis"},
             )
 
     def test_drain_pearl_safe_creation_failure_records_failure(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, FakeChain, _ = orch
 
         def boom(*, chain: Any, rpc: Any) -> None:
             raise RuntimeError("create reverted")
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes={}, create_safe=boom, address="0xpe",
-                                      ledger_api=lambda **kw: object())
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=lambda **kw: {},
+        )
+        pearl = types.SimpleNamespace(
+            safes={}, create_safe=boom, address="0xpe", ledger_api=lambda **kw: object()
+        )
         # Provide an RPC so the create_safe boom is reached (new pre-check
         # would short-circuit otherwise).
         failures = m._drain_master(
-            qs_wallet=qs, pearl_wallet=pearl,
+            qs_wallet=qs,
+            pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc/gnosis"},
         )
         assert len(failures) == 1
@@ -5346,7 +6308,9 @@ class TestDrainMaster:
         assert "could not create Pearl Safe" in capsys.readouterr().out
 
     def test_drain_skips_chain_with_no_rpc_records_failure(
-        self, orch: Any, capsys: pytest.CaptureFixture[str],
+        self,
+        orch: Any,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Pre-check: if Pearl needs a Safe on a chain but `chain_rpcs` has
         no entry, we MUST NOT pass `rpc=None` to `create_safe` (silent
@@ -5357,13 +6321,19 @@ class TestDrainMaster:
 
         def fake_create_safe(*, chain: Any, rpc: Any) -> None:
             creates.append(chain)
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=lambda **kw: {})
-        pearl = types.SimpleNamespace(safes={}, create_safe=fake_create_safe,
-                                      address="0xpe",
-                                      ledger_api=lambda **kw: object())
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=lambda **kw: {},
+        )
+        pearl = types.SimpleNamespace(
+            safes={},
+            create_safe=fake_create_safe,
+            address="0xpe",
+            ledger_api=lambda **kw: object(),
+        )
         failures = m._drain_master(qs_wallet=qs, pearl_wallet=pearl, chain_rpcs={})
         # create_safe MUST NOT have been called with rpc=None.
         assert creates == []
@@ -5373,7 +6343,8 @@ class TestDrainMaster:
         assert "no RPC available" in capsys.readouterr().out
 
     def test_drain_per_chain_isolation(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         """Docstring claims one chain's RPC outage shouldn't prevent
         draining the others. Pin it: chain A's Safe creation fails,
@@ -5391,16 +6362,19 @@ class TestDrainMaster:
 
         qs = types.SimpleNamespace(
             safes={FakeChain.GNOSIS: "0xqs-g", FakeChain.OPTIMISM: "0xqs-o"},
-            address="0xqs_eoa", drain=fake_drain,
+            address="0xqs_eoa",
+            drain=fake_drain,
             ledger_api=lambda **kw: object(),
         )
         pearl = types.SimpleNamespace(
-            safes={FakeChain.OPTIMISM: "0xpl-o"},   # missing GNOSIS
-            create_safe=fake_create_safe, address="0xpe",
+            safes={FakeChain.OPTIMISM: "0xpl-o"},  # missing GNOSIS
+            create_safe=fake_create_safe,
+            address="0xpe",
             ledger_api=lambda **kw: object(),
         )
         failures = m._drain_master(
-            qs_wallet=qs, pearl_wallet=pearl,
+            qs_wallet=qs,
+            pearl_wallet=pearl,
             chain_rpcs={FakeChain.GNOSIS: "https://rpc/gnosis"},
         )
         # Gnosis aborted (Safe creation failed) -> single failure.
@@ -5414,7 +6388,8 @@ class TestDrainMaster:
         assert (FakeChain.GNOSIS, True) not in drained
 
     def test_safe_failure_does_not_skip_eoa_on_same_chain(
-        self, orch: Any,
+        self,
+        orch: Any,
     ) -> None:
         """Safe drain failure on chain X must still attempt EOA drain on
         chain X. A future refactor combining both into one try block
@@ -5427,12 +6402,14 @@ class TestDrainMaster:
             if from_safe:
                 raise RuntimeError("safe drain boom")
             return {}
-        qs = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xqs"},
-                                   address="0xqs_eoa",
-                                   ledger_api=lambda **kw: object(),
-                                   drain=fake_drain)
-        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"},
-                                      address="0xpe")
+
+        qs = types.SimpleNamespace(
+            safes={FakeChain.GNOSIS: "0xqs"},
+            address="0xqs_eoa",
+            ledger_api=lambda **kw: object(),
+            drain=fake_drain,
+        )
+        pearl = types.SimpleNamespace(safes={FakeChain.GNOSIS: "0xpl"}, address="0xpe")
         m._drain_master(qs_wallet=qs, pearl_wallet=pearl)
         # Both rails attempted — Safe first (raised), EOA second (succeeded).
         assert calls == [True, False]
@@ -5440,14 +6417,19 @@ class TestDrainMaster:
 
 class TestRunModeB:
     def test_password_align_runs_when_passwords_differ(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """qs_app.password != pearl_app.password -> user is asked to confirm
         and align_quickstart_password is invoked with Pearl's password."""
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
@@ -5456,22 +6438,27 @@ class TestRunModeB:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         passwords = iter(["qs-pw", "pearl-pw"])
         monkeypatch.setattr(
-            m, "_load_wallet",
+            m,
+            "_load_wallet",
             lambda store, label: (
                 types.SimpleNamespace(
-                    password=next(passwords), user_account=None,
-                ), "WALLET",
+                    password=next(passwords),
+                    user_account=None,
+                ),
+                "WALLET",
             ),
         )
         align_calls: list[dict[str, Any]] = []
         monkeypatch.setattr(
-            m, "align_quickstart_password",
+            m,
+            "align_quickstart_password",
             lambda **kw: align_calls.append(kw),
         )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
         monkeypatch.setattr(
-            m, "merge_service",
+            m,
+            "merge_service",
             lambda service, src, dest: types.SimpleNamespace(),
         )
         monkeypatch.setattr(m, "_drain_master", lambda **kw: [])
@@ -5486,11 +6473,16 @@ class TestRunModeB:
         assert "ALIGNING QUICKSTART PASSWORD" in out
 
     def test_password_align_aborts_on_user_decline(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
@@ -5499,16 +6491,20 @@ class TestRunModeB:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         passwords = iter(["qs-pw", "pearl-pw"])
         monkeypatch.setattr(
-            m, "_load_wallet",
+            m,
+            "_load_wallet",
             lambda store, label: (
                 types.SimpleNamespace(
-                    password=next(passwords), user_account=None,
-                ), "WALLET",
+                    password=next(passwords),
+                    user_account=None,
+                ),
+                "WALLET",
             ),
         )
         align_called = {"n": 0}
         monkeypatch.setattr(
-            m, "align_quickstart_password",
+            m,
+            "align_quickstart_password",
             lambda **kw: align_called.update(n=align_called["n"] + 1),
         )
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
@@ -5518,7 +6514,10 @@ class TestRunModeB:
         assert align_called["n"] == 0
 
     def test_password_align_failure_fatals_with_recovery_message(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """If `align_quickstart_password` raises (e.g. disk-full mid
@@ -5529,8 +6528,10 @@ class TestRunModeB:
         that tells the user which recovery path applies.
         """
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
@@ -5539,16 +6540,20 @@ class TestRunModeB:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         passwords = iter(["qs-pw", "pearl-pw"])
         monkeypatch.setattr(
-            m, "_load_wallet",
+            m,
+            "_load_wallet",
             lambda store, label: (
                 types.SimpleNamespace(
-                    password=next(passwords), user_account=None,
-                ), "WALLET",
+                    password=next(passwords),
+                    user_account=None,
+                ),
+                "WALLET",
             ),
         )
 
         def boom(**kw: Any) -> None:
             raise OSError("disk full")
+
         monkeypatch.setattr(m, "align_quickstart_password", boom)
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
 
@@ -5562,7 +6567,10 @@ class TestRunModeB:
         assert "nothing on-chain has changed" in combined, combined
 
     def test_password_align_failure_does_not_swallow_programming_bugs(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """`_reraise_if_programming_bug` must run before `fatal(...)`
         so a `TypeError` / `AttributeError` from a middleware refactor
@@ -5570,8 +6578,10 @@ class TestRunModeB:
         that hides the bug under a "user error" framing.
         """
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
@@ -5580,16 +6590,20 @@ class TestRunModeB:
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         passwords = iter(["qs-pw", "pearl-pw"])
         monkeypatch.setattr(
-            m, "_load_wallet",
+            m,
+            "_load_wallet",
             lambda store, label: (
                 types.SimpleNamespace(
-                    password=next(passwords), user_account=None,
-                ), "WALLET",
+                    password=next(passwords),
+                    user_account=None,
+                ),
+                "WALLET",
             ),
         )
 
         def attribute_bug(**kw: Any) -> None:
             raise AttributeError("middleware refactor: .password no longer exists")
+
         monkeypatch.setattr(m, "align_quickstart_password", attribute_bug)
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
 
@@ -5623,22 +6637,33 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         drain_called = {"n": 0}
+
         def fake_drain(**kw: Any) -> list:
             drain_called["n"] += 1
-            return []   # empty failures = full success
+            return []  # empty failures = full success
+
         monkeypatch.setattr(m, "_drain_master", fake_drain)
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
         rename_called = {"n": 0}
+
         def fake_rename(src: Any) -> Path:
             rename_called["n"] += 1
             return src.root
+
         monkeypatch.setattr(m, "rename_source_for_rollback", fake_rename)
 
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
@@ -5646,7 +6671,10 @@ class TestRunModeB:
         assert rename_called["n"] == 1
 
     def test_subset_selection_skips_drain_and_rename(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """`subset_selected=True` (user picked a single service from many,
@@ -5655,29 +6683,47 @@ class TestRunModeB:
         gas funds, and must NOT rename the source `.operate/` because
         the unselected services still live there."""
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         called = {"drain": 0, "rename": 0}
-        monkeypatch.setattr(m, "_drain_master",
-                            lambda **kw: called.update(drain=called["drain"] + 1) or [])
-        monkeypatch.setattr(m, "rename_source_for_rollback",
-                            lambda store: called.update(rename=called["rename"] + 1) or store.root)
+        monkeypatch.setattr(
+            m,
+            "_drain_master",
+            lambda **kw: called.update(drain=called["drain"] + 1) or [],
+        )
+        monkeypatch.setattr(
+            m,
+            "rename_source_for_rollback",
+            lambda store: called.update(rename=called["rename"] + 1) or store.root,
+        )
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
 
         outcome = m._run_mode_b(
-            disc=d, services=[ref], config_path=None, dry_run=False,
+            disc=d,
+            services=[ref],
+            config_path=None,
+            dry_run=False,
             subset_selected=True,
         )
 
@@ -5691,13 +6737,18 @@ class TestRunModeB:
         assert "remaining services still live in the source" in out
 
     def test_subset_selection_dry_run_records_subset_flag(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Dry-run must still surface `subset_selected` so the caller can
         skip the post-run prompts even when no on-chain work happened."""
         m, *_ = orch
-        qs_root = tmp_path / "qs/.operate"; qs_root.mkdir(parents=True)
-        pl_root = tmp_path / "pl/.operate"; pl_root.mkdir(parents=True)
+        qs_root = tmp_path / "qs/.operate"
+        qs_root.mkdir(parents=True)
+        pl_root = tmp_path / "pl/.operate"
+        pl_root.mkdir(parents=True)
         d = detect.Discovery(
             quickstart=detect.OperateStore(root=qs_root),
             pearl=detect.OperateStore(root=pl_root),
@@ -5705,13 +6756,19 @@ class TestRunModeB:
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         outcome = m._run_mode_b(
-            disc=d, services=[ref], config_path=None, dry_run=True,
+            disc=d,
+            services=[ref],
+            config_path=None,
+            dry_run=True,
             subset_selected=True,
         )
         assert outcome.subset_selected is True
 
     def test_unmigratable_skips_drain(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, *_ = orch
@@ -5725,19 +6782,33 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
+
         def boom(**kw: Any) -> None:
             raise m._Unmigratable(
-                service_id="sc-aaa", chain="gnosis", reason="cannot unstake",
+                service_id="sc-aaa",
+                chain="gnosis",
+                reason="cannot unstake",
             )
+
         monkeypatch.setattr(m, "_migrate_one_service", boom)
         called = {"drain": 0, "rename": 0}
-        monkeypatch.setattr(m, "_drain_master",
-                            lambda **kw: called.update(drain=called["drain"] + 1))
-        monkeypatch.setattr(m, "rename_source_for_rollback",
-                            lambda store: called.update(rename=called["rename"] + 1) or store.root)
+        monkeypatch.setattr(
+            m, "_drain_master", lambda **kw: called.update(drain=called["drain"] + 1)
+        )
+        monkeypatch.setattr(
+            m,
+            "rename_source_for_rollback",
+            lambda store: called.update(rename=called["rename"] + 1) or store.root,
+        )
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
         assert called["drain"] == 0
         # Nothing migrated AND incomplete -> never rename source.
@@ -5748,7 +6819,10 @@ class TestRunModeB:
         assert "Source `.operate/` left in place" in out
 
     def test_merge_service_oserror_aggregates_as_unmigratable(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """`merge_service` runs AFTER on-chain ops. An OSError here would,
@@ -5767,18 +6841,30 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
+
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
             raise OSError(28, "no space left on device")
+
         monkeypatch.setattr(m, "merge_service", boom_copy)
         called = {"drain": 0, "rename": 0}
-        monkeypatch.setattr(m, "_drain_master",
-                            lambda **kw: called.update(drain=called["drain"] + 1))
-        monkeypatch.setattr(m, "rename_source_for_rollback",
-                            lambda store: called.update(rename=called["rename"] + 1) or store.root)
+        monkeypatch.setattr(
+            m, "_drain_master", lambda **kw: called.update(drain=called["drain"] + 1)
+        )
+        monkeypatch.setattr(
+            m,
+            "rename_source_for_rollback",
+            lambda store: called.update(rename=called["rename"] + 1) or store.root,
+        )
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
         # Drain skipped (unmigratable present); rename skipped (incomplete).
         assert called["drain"] == 0
@@ -5790,11 +6876,15 @@ class TestRunModeB:
         assert "sc-aaa" in out
 
     def test_merge_service_shutil_error_also_aggregates(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """shutil.Error (separate exception type from OSError — used for
         copytree multi-error aggregation) is also caught."""
         import shutil as _shutil
+
         m, *_ = orch
         qs_root = tmp_path / "qs/.operate"
         qs_root.mkdir(parents=True)
@@ -5806,19 +6896,30 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
+
         def boom_copy(service: Any, src: Any, dest: Any) -> None:
             raise _shutil.Error([("a", "b", "permission denied")])
+
         monkeypatch.setattr(m, "merge_service", boom_copy)
         monkeypatch.setattr(m, "_drain_master", lambda **kw: [])
         # Should not raise; drain/rename gating happens at the higher level.
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
 
     def test_drain_failure_blocks_rename(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """All services migrate but a drain fails -> source MUST NOT be renamed."""
@@ -5833,33 +6934,48 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         # Drain returns a non-empty failure list.
         m_FakeChain = orch[1]
         fake_failure = m._DrainFailure(
-            chain=m_FakeChain.GNOSIS, source_kind="Safe",
-            source_address="0xqs", reason="rpc timeout",
+            chain=m_FakeChain.GNOSIS,
+            source_kind="Safe",
+            source_address="0xqs",
+            reason="rpc timeout",
         )
         monkeypatch.setattr(m, "_drain_master", lambda **kw: [fake_failure])
         rename_called = {"n": 0}
-        monkeypatch.setattr(m, "rename_source_for_rollback",
-                            lambda store: rename_called.update(n=rename_called["n"] + 1))
+        monkeypatch.setattr(
+            m,
+            "rename_source_for_rollback",
+            lambda store: rename_called.update(n=rename_called["n"] + 1),
+        )
         # Force yes_no="yes" so we'd rename if the orchestrator asked.
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: True)
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
-        assert rename_called["n"] == 0   # rename refused
+        assert rename_called["n"] == 0  # rename refused
         out = capsys.readouterr().out
         assert "Migration incomplete" in out
         assert "rpc timeout" in out
         assert "Source `.operate/` left in place" in out
 
     def test_collects_chain_rpcs_for_drain(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Per-service chain_configs feed `chain_rpcs` so the drain step can
         create Pearl Safes on chains it doesn't yet have."""
@@ -5879,28 +6995,45 @@ class TestRunModeB:
             ledger_config=types.SimpleNamespace(rpc="https://rpc.example/gnosis"),
         )
         ref = _fake_service(
-            "sc-aaa", name="A", agent_addresses=[], path=tmp_path,
+            "sc-aaa",
+            name="A",
+            agent_addresses=[],
+            path=tmp_path,
             chain_configs={"gnosis": chain_config},
         )
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         captured: dict = {}
+
         def fake_drain(**kw: Any) -> list:
             captured.update(kw)
             return []
+
         monkeypatch.setattr(m, "_drain_master", fake_drain)
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
         monkeypatch.setattr(m, "rename_source_for_rollback", lambda store: store.root)
 
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
-        assert captured["chain_rpcs"] == {FakeChain.GNOSIS: "https://rpc.example/gnosis"}
+        assert captured["chain_rpcs"] == {
+            FakeChain.GNOSIS: "https://rpc.example/gnosis"
+        }
 
     def test_chain_rpcs_conflict_warns_keeps_first(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Two services declaring different RPCs for the same chain: warn
@@ -5926,20 +7059,28 @@ class TestRunModeB:
             chain_data=types.SimpleNamespace(token=2, multisig="0xms-b"),
             ledger_config=types.SimpleNamespace(rpc="https://rpc.public/gnosis"),
         )
-        ref_a = _fake_service("sc-aaa", name="A", path=tmp_path,
-                              chain_configs={"gnosis": cc_a})
-        ref_b = _fake_service("sc-bbb", name="B", path=tmp_path,
-                              chain_configs={"gnosis": cc_b})
+        ref_a = _fake_service(
+            "sc-aaa", name="A", path=tmp_path, chain_configs={"gnosis": cc_a}
+        )
+        ref_b = _fake_service(
+            "sc-bbb", name="B", path=tmp_path, chain_configs={"gnosis": cc_b}
+        )
 
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         captured: dict = {}
-        monkeypatch.setattr(m, "_drain_master",
-                            lambda **kw: captured.update(kw) or [])
+        monkeypatch.setattr(m, "_drain_master", lambda **kw: captured.update(kw) or [])
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
         monkeypatch.setattr(m, "rename_source_for_rollback", lambda store: store.root)
 
@@ -5953,7 +7094,10 @@ class TestRunModeB:
         assert "rpc.private" in out and "rpc.public" in out
 
     def test_failed_load_aborts_before_any_action(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If `services()` dropped any malformed configs, refuse to migrate."""
         m, *_ = orch
@@ -5963,14 +7107,22 @@ class TestRunModeB:
         pl_root.mkdir(parents=True)
         qs_store = detect.OperateStore(root=qs_root)
         pl_store = detect.OperateStore(root=pl_root)
-        d = detect.Discovery(quickstart=qs_store, pearl=pl_store, mode=detect.Mode.MERGE)
+        d = detect.Discovery(
+            quickstart=qs_store, pearl=pl_store, mode=detect.Mode.MERGE
+        )
         # Pretend the store had a malformed config that didn't load.
-        monkeypatch.setattr(qs_store.__class__, "failed_services",
-                            lambda self: [(qs_root / "services/sc-bad", RuntimeError("bad"))])
+        monkeypatch.setattr(
+            qs_store.__class__,
+            "failed_services",
+            lambda self: [(qs_root / "services/sc-bad", RuntimeError("bad"))],
+        )
         # Capture whether any wallet loading happens (it must not).
         load_called = {"n": 0}
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: load_called.update(n=load_called["n"] + 1))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: load_called.update(n=load_called["n"] + 1),
+        )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
         with pytest.raises(SystemExit):
             m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
@@ -5990,24 +7142,36 @@ class TestRunModeB:
             mode=detect.Mode.MERGE,
         )
         ref = _fake_service("sc-aaa", name="A", agent_addresses=[], path=tmp_path)
-        monkeypatch.setattr(m, "_load_wallet",
-                            lambda store, label: (types.SimpleNamespace(password="pw", user_account=None), "WALLET"))
+        monkeypatch.setattr(
+            m,
+            "_load_wallet",
+            lambda store, label: (
+                types.SimpleNamespace(password="pw", user_account=None),
+                "WALLET",
+            ),
+        )
         monkeypatch.setattr(m, "fix_root_ownership", lambda store: None)
         monkeypatch.setattr(m, "_migrate_one_service", lambda **kw: None)
-        monkeypatch.setattr(m, "merge_service",
-                            lambda service, src, dest: types.SimpleNamespace())
+        monkeypatch.setattr(
+            m, "merge_service", lambda service, src, dest: types.SimpleNamespace()
+        )
         monkeypatch.setattr(m, "_drain_master", lambda **kw: [])
         monkeypatch.setattr(m, "yes_no", lambda *a, **k: False)
         called = {"rename": 0}
-        monkeypatch.setattr(m, "rename_source_for_rollback",
-                            lambda store: called.update(rename=called["rename"] + 1))
+        monkeypatch.setattr(
+            m,
+            "rename_source_for_rollback",
+            lambda store: called.update(rename=called["rename"] + 1),
+        )
         m._run_mode_b(disc=d, services=[ref], config_path=None, dry_run=False)
         assert called["rename"] == 0
 
 
 class TestFinalPrompt:
     def test_complete_yes_branch(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, *_ = orch
@@ -6017,7 +7181,9 @@ class TestFinalPrompt:
         assert "different machine" in out.lower() or "Copy `~/.operate/`" in out
 
     def test_complete_no_branch(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         m, *_ = orch
@@ -6033,7 +7199,9 @@ class TestFinalPrompt:
             m._final_prompt()
 
     def test_incomplete_skips_prompts_and_warns(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Partial migration: must NOT ask the 'different machine?' question
@@ -6041,12 +7209,17 @@ class TestFinalPrompt:
         m, *_ = orch
         # Track that yes_no is never called.
         called = {"n": 0}
-        monkeypatch.setattr(m, "yes_no",
-                            lambda *a, **k: called.update(n=called["n"] + 1) or False)
+        monkeypatch.setattr(
+            m, "yes_no", lambda *a, **k: called.update(n=called["n"] + 1) or False
+        )
         outcome = m.MigrationOutcome(
-            unmigratable=(m._Unmigratable(
-                service_id="sc-aaa", chain="gnosis", reason="boom",
-            ),),
+            unmigratable=(
+                m._Unmigratable(
+                    service_id="sc-aaa",
+                    chain="gnosis",
+                    reason="boom",
+                ),
+            ),
         )
         m._final_prompt(outcome)
         out = capsys.readouterr().out
@@ -6055,7 +7228,9 @@ class TestFinalPrompt:
         assert called["n"] == 0
 
     def test_subset_selection_uses_dedicated_message(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Subset-only incompleteness gets its own message — phrasing
@@ -6064,8 +7239,9 @@ class TestFinalPrompt:
         chose to migrate part of the quickstart."""
         m, *_ = orch
         called = {"n": 0}
-        monkeypatch.setattr(m, "yes_no",
-                            lambda *a, **k: called.update(n=called["n"] + 1) or False)
+        monkeypatch.setattr(
+            m, "yes_no", lambda *a, **k: called.update(n=called["n"] + 1) or False
+        )
         outcome = m.MigrationOutcome(
             migrated=(_fake_service("sc-aaa"),),
             subset_selected=True,
@@ -6082,28 +7258,39 @@ class TestFinalPrompt:
 
 class TestMain:
     def test_noop_returns_via_preflight(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         m, *_ = orch
         store = tmp_path / ".operate"
         store.mkdir()
-        monkeypatch.setattr(m, "discover", lambda quickstart_root, pearl_root: detect.Discovery(
-            quickstart=detect.OperateStore(root=store),
-            pearl=detect.OperateStore(root=store),
-            mode=detect.Mode.NOOP,
-        ))
+        monkeypatch.setattr(
+            m,
+            "discover",
+            lambda quickstart_root, pearl_root: detect.Discovery(
+                quickstart=detect.OperateStore(root=store),
+                pearl=detect.OperateStore(root=store),
+                mode=detect.Mode.NOOP,
+            ),
+        )
         with pytest.raises(SystemExit):
             m.main([])
 
     def test_discover_value_error_becomes_fatal(
-        self, orch: Any, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Invariant violations from Discovery/__post_init__ surface via fatal()
         instead of leaking a stacktrace to the user."""
         m, *_ = orch
+
         def boom(quickstart_root: Any, pearl_root: Any) -> Any:
             raise ValueError("Discovery: stores share root /x but mode is FRESH_COPY")
+
         monkeypatch.setattr(m, "discover", boom)
         with pytest.raises(SystemExit):
             m.main([])
@@ -6112,49 +7299,75 @@ class TestMain:
         assert "Discovery failed" in err
 
     def test_fresh_copy_dry_run(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         m, *_ = orch
         qs = detect.OperateStore(root=tmp_path / "qs")
         pl = detect.OperateStore(root=tmp_path / "pl")
-        monkeypatch.setattr(m, "discover", lambda quickstart_root, pearl_root: detect.Discovery(
-            quickstart=qs, pearl=pl, mode=detect.Mode.FRESH_COPY,
-        ))
+        monkeypatch.setattr(
+            m,
+            "discover",
+            lambda quickstart_root, pearl_root: detect.Discovery(
+                quickstart=qs,
+                pearl=pl,
+                mode=detect.Mode.FRESH_COPY,
+            ),
+        )
         monkeypatch.setattr(m, "pearl_daemon_running", lambda: False)
         monkeypatch.setattr(m, "docker_quickstart_containers", lambda: [])
         called = {"a": 0, "fp": 0}
-        monkeypatch.setattr(m, "_run_mode_a", lambda disc, dry_run: called.update(a=called["a"] + 1))
-        monkeypatch.setattr(m, "_final_prompt", lambda **kw: called.update(fp=called["fp"] + 1))
+        monkeypatch.setattr(
+            m, "_run_mode_a", lambda disc, dry_run: called.update(a=called["a"] + 1)
+        )
+        monkeypatch.setattr(
+            m, "_final_prompt", lambda **kw: called.update(fp=called["fp"] + 1)
+        )
         rc = m.main(["--dry-run"])
         assert rc == 0
         assert called["a"] == 1
         assert called["fp"] == 0  # dry-run skips final prompt
 
     def test_merge_invokes_select_and_run_b(
-        self, orch: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        orch: Any,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         patch_service_load: dict[Path, Any],
     ) -> None:
         m, *_ = orch
         qs_root = tmp_path / "qs/.operate"
         _write_service(qs_root, "sc-aaa", name="A")
-        patch_service_load[(qs_root / "services/sc-aaa").resolve()] = (
-            _fake_service("sc-aaa", name="A")
+        patch_service_load[(qs_root / "services/sc-aaa").resolve()] = _fake_service(
+            "sc-aaa", name="A"
         )
         qs = detect.OperateStore(root=qs_root.resolve())
         pl = detect.OperateStore(root=tmp_path / "pl/.operate")
-        monkeypatch.setattr(m, "discover", lambda quickstart_root, pearl_root: detect.Discovery(
-            quickstart=qs, pearl=pl, mode=detect.Mode.MERGE,
-        ))
+        monkeypatch.setattr(
+            m,
+            "discover",
+            lambda quickstart_root, pearl_root: detect.Discovery(
+                quickstart=qs,
+                pearl=pl,
+                mode=detect.Mode.MERGE,
+            ),
+        )
         monkeypatch.setattr(m, "pearl_daemon_running", lambda: False)
         monkeypatch.setattr(m, "docker_quickstart_containers", lambda: [])
         called = {"b": 0, "fp": 0, "outcome": None}
+
         def fake_run_b(**kw: Any) -> Any:
             called["b"] += 1
             return m.MigrationOutcome(migrated=(_fake_service("sc-x"),))
+
         monkeypatch.setattr(m, "_run_mode_b", fake_run_b)
+
         def fake_final(outcome: Any = None) -> None:
             called["fp"] += 1
             called["outcome"] = outcome
+
         monkeypatch.setattr(m, "_final_prompt", fake_final)
         rc = m.main([])
         assert rc == 0
@@ -6164,7 +7377,8 @@ class TestMain:
 
 
 def test_orchestrator_module_is_runnable_as_script(
-    orch: Any, monkeypatch: pytest.MonkeyPatch,
+    orch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`if __name__ == "__main__"` block — execute via runpy with main mocked.
 
@@ -6181,7 +7395,9 @@ def test_orchestrator_module_is_runnable_as_script(
     monkeypatch.setattr(
         "scripts.pearl_migration.detect.discover",
         lambda quickstart_root, pearl_root: detect.Discovery(
-            quickstart=fake_store, pearl=fake_store, mode=detect.Mode.NOOP,
+            quickstart=fake_store,
+            pearl=fake_store,
+            mode=detect.Mode.NOOP,
         ),
     )
     with pytest.raises(SystemExit):

@@ -10,7 +10,7 @@ from __future__ import annotations
 import socket
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from aea.crypto.base import LedgerApi
@@ -27,7 +27,9 @@ PEARL_DAEMON_PORT = 8765
 QUICKSTART_CONTAINER_FRAGMENTS = ("abci0", "node0", "_abci_0", "_tm_0")
 
 
-def pearl_daemon_running(host: str = "127.0.0.1", port: int = PEARL_DAEMON_PORT) -> bool:
+def pearl_daemon_running(
+    host: str = "127.0.0.1", port: int = PEARL_DAEMON_PORT
+) -> bool:
     """TCP probe: True if anything is listening on Pearl's daemon port.
 
     Only treats "connection refused" / "timeout" as "not running". Any
@@ -52,7 +54,7 @@ def docker_quickstart_containers() -> List[str]:
     proceed believing there are no containers when there actually are.
     """
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B607  # `docker` looked up via PATH is the desired UX
             ["docker", "ps", "-a", "--format", "{{.Names}}"],
             check=False,
             capture_output=True,
@@ -60,7 +62,7 @@ def docker_quickstart_containers() -> List[str]:
             timeout=10,
         )
     except FileNotFoundError:
-        return []   # docker not installed at all — caller can proceed.
+        return []  # docker not installed at all — caller can proceed.
     # subprocess.TimeoutExpired and any other error propagates.
     if result.returncode != 0:
         # Non-zero with docker installed = daemon refusing to talk
@@ -79,7 +81,8 @@ def docker_quickstart_containers() -> List[str]:
     # let the migration race a still-running deployment.
     names = result.stdout.split()
     return sorted(
-        name for name in names
+        name
+        for name in names
         if any(frag in name for frag in QUICKSTART_CONTAINER_FRAGMENTS)
     )
 
@@ -128,8 +131,9 @@ def service_nft_owner(
     other unexpected exception propagate so the caller can distinguish
     "token doesn't exist" from "we can't tell right now".
     """
-    from autonomy.chain.base import registry_contracts
     from web3.exceptions import ContractLogicError
+
+    from autonomy.chain.base import registry_contracts
 
     instance = registry_contracts.service_registry.get_instance(
         ledger_api=ledger_api,

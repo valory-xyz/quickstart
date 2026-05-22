@@ -27,15 +27,28 @@ import time
 import traceback
 from argparse import ArgumentParser
 from collections import Counter
-
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import docker
-from psutil import pid_exists
 import requests
 import scripts.predict_trader.trades as trades
+from operate.cli import OperateApp
+from operate.constants import (
+    DEPLOYMENT_DIR,
+    MECH_ACTIVITY_CHECKER_JSON_URL,
+    MECH_CONTRACT_JSON_URL,
+    OPERATE_HOME,
+    SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL,
+    STAKING_TOKEN_INSTANCE_ABI_PATH,
+)
+from operate.ledger.profiles import get_staking_contract
+from operate.operate_types import Chain
+from operate.quickstart.run_service import ask_password_if_needed, load_local_config
+from operate.quickstart.utils import print_title
+from operate.services.service import Service
+from psutil import pid_exists
 from scripts.predict_trader.trades import (
     MarketAttribute,
     MarketState,
@@ -46,24 +59,9 @@ from scripts.predict_trader.trades import (
     wei_to_wxdai,
     wei_to_xdai,
 )
+from scripts.utils import get_service_from_config
 from web3 import HTTPProvider, Web3
 from web3.exceptions import ABIFunctionNotFound, ContractLogicError
-
-from operate.constants import (
-    DEPLOYMENT_DIR,
-    OPERATE_HOME,
-    STAKING_TOKEN_INSTANCE_ABI_PATH,
-    SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL,
-    MECH_ACTIVITY_CHECKER_JSON_URL,
-    MECH_CONTRACT_JSON_URL,
-)
-from operate.cli import OperateApp
-from operate.ledger.profiles import get_staking_contract
-from operate.operate_types import Chain
-from operate.quickstart.run_service import ask_password_if_needed, load_local_config
-from operate.quickstart.utils import print_title
-from operate.services.service import Service
-from scripts.utils import get_service_from_config
 
 SCRIPT_PATH = Path(__file__).resolve().parent
 SAFE_BALANCE_THRESHOLD = 500000000000000000
@@ -111,8 +109,8 @@ def _color_bool(
 
 def _color_percent(p: float, multiplier: float = 100, symbol: str = "%") -> str:
     if p >= 0:
-        return f"{p*multiplier:.2f} {symbol}"
-    return _color_string(f"{p*multiplier:.2f} {symbol}", ColorCode.RED)
+        return f"{p * multiplier:.2f} {symbol}"
+    return _color_string(f"{p * multiplier:.2f} {symbol}", ColorCode.RED)
 
 
 def _trades_since_message(trades_json: dict[str, Any], utc_ts: float = 0) -> str:
@@ -127,16 +125,21 @@ def _trades_since_message(trades_json: dict[str, Any], utc_ts: float = 0) -> str
     return f"{trades_count} trades on {markets_count} markets"
 
 
-def _calculate_retrades_since(trades_json: dict[str, Any], utc_ts: float = 0) -> tuple[Counter[Any], int, int, int]:
-    filtered_trades = Counter((
-        trade.get("fpmm", {}).get("id", None)
-        for trade in trades_json.get("data", {}).get("fpmmTrades", [])
-        if float(trade.get("creationTimestamp", 0)) >= utc_ts
-    ))
+def _calculate_retrades_since(
+    trades_json: dict[str, Any], utc_ts: float = 0
+) -> tuple[Counter[Any], int, int, int]:
+    filtered_trades = Counter(
+        (
+            trade.get("fpmm", {}).get("id", None)
+            for trade in trades_json.get("data", {}).get("fpmmTrades", [])
+            if float(trade.get("creationTimestamp", 0)) >= utc_ts
+        )
+    )
 
     if None in filtered_trades:
         raise ValueError(
-            f"Unexpected format in trades_json: {filtered_trades[None]} trades have no associated market ID.")
+            f"Unexpected format in trades_json: {filtered_trades[None]} trades have no associated market ID."
+        )
 
     unique_markets = set(filtered_trades)
     n_unique_markets = len(unique_markets)
@@ -145,8 +148,12 @@ def _calculate_retrades_since(trades_json: dict[str, Any], utc_ts: float = 0) ->
 
     return filtered_trades, n_unique_markets, n_trades, n_retrades
 
-def _retrades_since_message(n_unique_markets: int, n_trades: int, n_retrades: int) -> str:
+
+def _retrades_since_message(
+    n_unique_markets: int, n_trades: int, n_retrades: int
+) -> str:
     return f"{n_retrades} re-trades on total {n_trades} trades in {n_unique_markets} markets"
+
 
 def _average_trades_since_message(n_trades: int, n_markets: int) -> str:
     if not n_markets:
@@ -155,6 +162,7 @@ def _average_trades_since_message(n_trades: int, n_markets: int) -> str:
         average_trades = round(n_trades / n_markets, 2)
 
     return f"{average_trades} trades per market"
+
 
 def _max_trades_per_market_since_message(filtered_trades: Counter[Any]) -> str:
     if not filtered_trades:
@@ -208,9 +216,13 @@ def _get_agent_status(service: Service) -> str:
     trader_abci_container = None
     trader_tm_container = None
     for container in client.containers.list():
-        if container.name.startswith("traderpearl") and container.name.endswith("abci_0"):
+        if container.name.startswith("traderpearl") and container.name.endswith(
+            "abci_0"
+        ):
             trader_abci_container = container
-        elif container.name.startswith("traderpearl") and container.name.endswith("tm_0"):
+        elif container.name.startswith("traderpearl") and container.name.endswith(
+            "tm_0"
+        ):
             trader_tm_container = container
         if trader_abci_container and trader_tm_container:
             break
@@ -243,7 +255,9 @@ if __name__ == "__main__":
     with open(operate_wallet_path) as file:
         operator_wallet_data = json.load(file)
 
-    template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+    template_path = Path(
+        SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json"
+    )
     service = get_service_from_config(template_path, operate)
     config = load_local_config(operate=operate, service_name=service.name)
     chain_config = service.chain_configs["gnosis"]
@@ -275,14 +289,16 @@ if __name__ == "__main__":
         try:
             get_balance(safe_address, rpc, block_identifier=current_block_number)
         except TypeError:
-            print("RPC does not support block number queries, falling back to latest block.")
+            print(
+                "RPC does not support block number queries, falling back to latest block."
+            )
             current_block_number = "latest"
 
         print("")
         print_title(f"\nService report on block number {current_block_number}\n")
 
         # Performance
-        _print_section_header(f"Performance")
+        _print_section_header("Performance")
         _print_subsection_header("Staking")
 
         staking_token_address = get_staking_contract(
@@ -293,7 +309,9 @@ if __name__ == "__main__":
             is_staked = False
             staking_state = StakingState.UNSTAKED
         else:
-            staking_token_data = requests.get(STAKING_TOKEN_INSTANCE_ABI_PATH).json()
+            staking_token_data = requests.get(
+                STAKING_TOKEN_INSTANCE_ABI_PATH, timeout=30
+            ).json()
 
             staking_token_abi = staking_token_data.get("abi", [])
             staking_token_contract = w3.eth.contract(
@@ -301,9 +319,9 @@ if __name__ == "__main__":
             )
 
             staking_state = StakingState(
-                staking_token_contract.functions.getStakingState(
-                    service_id
-                ).call(block_identifier=current_block_number)
+                staking_token_contract.functions.getStakingState(service_id).call(
+                    block_identifier=current_block_number
+                )
             )
 
             is_staked = (
@@ -317,21 +335,33 @@ if __name__ == "__main__":
         if staking_state == StakingState.STAKED:
             _print_status("Staking state", staking_state.name)
         elif staking_state == StakingState.EVICTED:
-            _print_status("Staking state", _color_string(staking_state.name, ColorCode.RED))
+            _print_status(
+                "Staking state", _color_string(staking_state.name, ColorCode.RED)
+            )
 
         if is_staked:
 
-            activity_checker_address = staking_token_contract.functions.activityChecker().call(block_identifier=current_block_number)
-            activity_checker_data = requests.get(MECH_ACTIVITY_CHECKER_JSON_URL).json()
+            activity_checker_address = (
+                staking_token_contract.functions.activityChecker().call(
+                    block_identifier=current_block_number
+                )
+            )
+            activity_checker_data = requests.get(
+                MECH_ACTIVITY_CHECKER_JSON_URL, timeout=30
+            ).json()
 
             activity_checker_abi = activity_checker_data.get("abi", [])
             activity_checker_contract = w3.eth.contract(
                 address=activity_checker_address, abi=activity_checker_abi  # type: ignore
             )
 
-            service_registry_token_utility_data = requests.get(SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL).json()
+            service_registry_token_utility_data = requests.get(
+                SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL, timeout=30
+            ).json()
             service_registry_token_utility_contract_address = (
-                staking_token_contract.functions.serviceRegistryTokenUtility().call(block_identifier=current_block_number)
+                staking_token_contract.functions.serviceRegistryTokenUtility().call(
+                    block_identifier=current_block_number
+                )
             )
             service_registry_token_utility_abi = (
                 service_registry_token_utility_data.get("abi", [])
@@ -342,57 +372,73 @@ if __name__ == "__main__":
             )
 
             try:
-                activity_checker_data = requests.get(MECH_CONTRACT_JSON_URL).json()
+                activity_checker_data = requests.get(
+                    MECH_CONTRACT_JSON_URL, timeout=30
+                ).json()
                 activity_checker_abi = activity_checker_data.get("abi", [])
                 mm_activity_checker_contract = w3.eth.contract(
                     address=activity_checker_address, abi=activity_checker_abi  # type: ignore
                 )
-                mech_contract_address = mm_activity_checker_contract.functions.mechMarketplace().call(block_identifier=current_block_number)
+                mech_contract_address = (
+                    mm_activity_checker_contract.functions.mechMarketplace().call(
+                        block_identifier=current_block_number
+                    )
+                )
             except (ContractLogicError, ValueError):
-                mech_contract_address = activity_checker_contract.functions.agentMech().call(block_identifier=current_block_number)
+                mech_contract_address = (
+                    activity_checker_contract.functions.agentMech().call(
+                        block_identifier=current_block_number
+                    )
+                )
 
             mech_contract_abi = [
                 {
                     "inputs": [
                         {
-                        "internalType": "address",
-                        "name": "account",
-                        "type": "address"
+                            "internalType": "address",
+                            "name": "account",
+                            "type": "address",
                         }
                     ],
                     "name": function_name,
                     "outputs": [
-                        {
-                        "internalType": "uint256",
-                        "name": "",
-                        "type": "uint256"
-                        }
+                        {"internalType": "uint256", "name": "", "type": "uint256"}
                     ],
                     "stateMutability": "view",
-                    "type": "function"
+                    "type": "function",
                 }
                 for function_name in ("mapRequestsCounts", "mapRequestCounts")
             ]
             mech_contract = w3.eth.contract(
-                address=mech_contract_address, abi=mech_contract_abi   # type: ignore
+                address=mech_contract_address, abi=mech_contract_abi  # type: ignore
             )
             try:
-                mech_request_count = mech_contract.functions.mapRequestsCounts(safe_address).call(block_identifier=current_block_number)
+                mech_request_count = mech_contract.functions.mapRequestsCounts(
+                    safe_address
+                ).call(block_identifier=current_block_number)
             except (ContractLogicError, ABIFunctionNotFound, ValueError):
                 # Use mapRequestCounts for newer mechs
-                mech_request_count = mech_contract.functions.mapRequestCounts(safe_address).call(block_identifier=current_block_number)
+                mech_request_count = mech_contract.functions.mapRequestCounts(
+                    safe_address
+                ).call(block_identifier=current_block_number)
 
             security_deposit = (
                 service_registry_token_utility_contract.functions.getOperatorBalance(
                     operator_address, service_id
                 ).call(block_identifier=current_block_number)
             )
-            agent_id = int(staking_token_contract.functions.getAgentIds().call(block_identifier=current_block_number)[0])
+            agent_id = int(
+                staking_token_contract.functions.getAgentIds().call(
+                    block_identifier=current_block_number
+                )[0]
+            )
             agent_bond = service_registry_token_utility_contract.functions.getAgentBond(
                 service_id, agent_id
             ).call(block_identifier=current_block_number)
             min_staking_deposit = (
-                staking_token_contract.functions.minStakingDeposit().call(block_identifier=current_block_number)
+                staking_token_contract.functions.minStakingDeposit().call(
+                    block_identifier=current_block_number
+                )
             )
 
             # In the setting 1 agent instance as of now: minOwnerBond = minStakingDeposit
@@ -412,32 +458,35 @@ if __name__ == "__main__":
             rewards = service_info[3]
             _print_status("Accrued rewards", f"{wei_to_olas(rewards)}")
 
-            liveness_ratio = (
-                activity_checker_contract.functions.livenessRatio().call(block_identifier=current_block_number)
+            liveness_ratio = activity_checker_contract.functions.livenessRatio().call(
+                block_identifier=current_block_number
             )
             current_timestamp = w3.eth.get_block(current_block_number).timestamp
-            last_ts_checkpoint = staking_token_contract.functions.tsCheckpoint().call(block_identifier=current_block_number)
-            liveness_period = (
-                staking_token_contract.functions.livenessPeriod().call(block_identifier=current_block_number)
+            last_ts_checkpoint = staking_token_contract.functions.tsCheckpoint().call(
+                block_identifier=current_block_number
+            )
+            liveness_period = staking_token_contract.functions.livenessPeriod().call(
+                block_identifier=current_block_number
             )
             mech_requests_24h_threshold = math.ceil(
                 max(liveness_period, (current_timestamp - last_ts_checkpoint))
                 * liveness_ratio
-                / 10 ** 18
+                / 10**18
             )
 
-            next_checkpoint_ts = (
-                staking_token_contract.functions.getNextRewardCheckpointTimestamp().call(block_identifier=current_block_number)
+            next_checkpoint_ts = staking_token_contract.functions.getNextRewardCheckpointTimestamp().call(
+                block_identifier=current_block_number
             )
             last_checkpoint_ts = next_checkpoint_ts - liveness_period
 
             mech_request_count_on_last_checkpoint = (
-                staking_token_contract.functions.getServiceInfo(service_id).call(block_identifier=current_block_number)
+                staking_token_contract.functions.getServiceInfo(service_id).call(
+                    block_identifier=current_block_number
+                )
             )[2][1]
-            mech_requests_since_last_cp = mech_request_count - mech_request_count_on_last_checkpoint
-            # mech_requests_current_epoch = _get_mech_requests_count(
-            #     mech_requests, last_checkpoint_ts
-            # )
+            mech_requests_since_last_cp = (
+                mech_request_count - mech_request_count_on_last_checkpoint
+            )
             mech_requests_current_epoch = mech_requests_since_last_cp
             _print_status(
                 "Num. Mech txs current epoch",
@@ -460,13 +509,25 @@ if __name__ == "__main__":
         _trades_since_message(trades_json, since_ts),
     )
 
-    #Multi trade strategy
+    # Multi trade strategy
     retrades_since_ts = time.time() - SECONDS_PER_DAY * MULTI_TRADE_LOOKBACK_DAYS
-    filtered_trades, n_unique_markets, n_trades, n_retrades = _calculate_retrades_since(trades_json, retrades_since_ts)
-    _print_subsection_header(f"Multi-trade markets in previous {MULTI_TRADE_LOOKBACK_DAYS} days")
-    _print_status(f"Multi-trade markets", _retrades_since_message(n_unique_markets, n_trades, n_retrades))
-    _print_status(f"Average trades per market", _average_trades_since_message(n_trades, n_unique_markets))
-    _print_status(f"Max trades per market", _max_trades_per_market_since_message(filtered_trades))
+    filtered_trades, n_unique_markets, n_trades, n_retrades = _calculate_retrades_since(
+        trades_json, retrades_since_ts
+    )
+    _print_subsection_header(
+        f"Multi-trade markets in previous {MULTI_TRADE_LOOKBACK_DAYS} days"
+    )
+    _print_status(
+        "Multi-trade markets",
+        _retrades_since_message(n_unique_markets, n_trades, n_retrades),
+    )
+    _print_status(
+        "Average trades per market",
+        _average_trades_since_message(n_trades, n_unique_markets),
+    )
+    _print_status(
+        "Max trades per market", _max_trades_per_market_since_message(filtered_trades)
+    )
 
     # Service
     _print_section_header("Service")
@@ -485,7 +546,12 @@ if __name__ == "__main__":
 
     # Safe
     safe_xdai = get_balance(safe_address, rpc, block_identifier=current_block_number)
-    safe_wxdai = get_token_balance(safe_address, trades.WXDAI_CONTRACT_ADDRESS, rpc, block_identifier=current_block_number)
+    safe_wxdai = get_token_balance(
+        safe_address,
+        trades.WXDAI_CONTRACT_ADDRESS,
+        rpc,
+        block_identifier=current_block_number,
+    )
     _print_subsection_header(
         f"Safe {_warning_message(safe_xdai + safe_wxdai, SAFE_BALANCE_THRESHOLD)}"
     )
@@ -494,7 +560,9 @@ if __name__ == "__main__":
     _print_status("WxDAI Balance", wei_to_wxdai(safe_wxdai))
 
     # Master Safe - Agent Owner/Operator
-    operator_xdai = get_balance(operator_address, rpc, block_identifier=current_block_number)
+    operator_xdai = get_balance(
+        operator_address, rpc, block_identifier=current_block_number
+    )
     _print_subsection_header("Master Safe - Agent Owner/Operator")
     _print_status("Address", operator_address)
     _print_status(
@@ -503,7 +571,9 @@ if __name__ == "__main__":
     )
 
     # Master EOA - Master Safe Owner
-    master_eoa_xdai = get_balance(master_eoa, rpc, block_identifier=current_block_number)
+    master_eoa_xdai = get_balance(
+        master_eoa, rpc, block_identifier=current_block_number
+    )
     _print_subsection_header("Master EOA - Master Safe Owner")
     _print_status("Address", master_eoa)
     _print_status(

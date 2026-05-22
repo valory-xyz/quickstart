@@ -22,7 +22,6 @@
 
 import datetime
 import re
-import requests
 import sys
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
 from collections import defaultdict
@@ -31,12 +30,12 @@ from pathlib import Path
 from string import Template
 from typing import Any, Dict, Optional
 
+import requests
 from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import ask_password_if_needed, load_local_config
 from scripts.predict_trader.mech_events import get_mech_requests
 from scripts.utils import get_service_from_config, get_subgraph_api_key
-
 
 IRRELEVANT_TOOLS = [
     "openai-text-davinci-002",
@@ -55,7 +54,7 @@ DUST_THRESHOLD = 10000000000000
 INVALID_ANSWER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 FPMM_CREATORS = (
     "0x89c5cc945dd550BcFfb72Fe42BfF002429F46Fec",
-    "0xFfc8029154ECD55ABED15BD428bA596E7D23f557"
+    "0xFfc8029154ECD55ABED15BD428bA596E7D23f557",
 )
 DEFAULT_FROM_DATE = "1970-01-01T00:00:00"
 DEFAULT_TO_DATE = "2038-01-19T03:14:07"
@@ -71,8 +70,7 @@ headers = {
 }
 
 
-omen_xdai_trades_query = Template(
-    """
+omen_xdai_trades_query = Template("""
     {
         fpmmTrades(
             where: {
@@ -122,12 +120,10 @@ omen_xdai_trades_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 
-conditional_tokens_gc_user_query = Template(
-    """
+conditional_tokens_gc_user_query = Template("""
     {
         user(id: "${id}") {
             userPositions(
@@ -148,8 +144,7 @@ conditional_tokens_gc_user_query = Template(
             }
         }
     }
-    """
-)
+    """)
 
 
 class MarketState(Enum):
@@ -214,12 +209,15 @@ def get_balance(address: str, rpc_url: str, block_identifier: str = "latest") ->
         "params": [address, block_identifier],
         "id": 1,
     }
-    response = requests.post(rpc_url, headers=headers, json=data)
+    response = requests.post(rpc_url, headers=headers, json=data, timeout=30)
     return int(response.json().get("result"), 16)
 
 
 def get_token_balance(
-    gnosis_address: str, token_contract_address: str, rpc_url: str, block_identifier: str = "latest"
+    gnosis_address: str,
+    token_contract_address: str,
+    rpc_url: str,
+    block_identifier: str = "latest",
 ) -> int:
     """Get the token balance of an address in wei."""
     function_selector = "70a08231"  # function selector for balanceOf(address)
@@ -234,7 +232,7 @@ def get_token_balance(
         "params": [{"to": token_contract_address, "data": data}, block_identifier],
         "id": 1,
     }
-    response = requests.post(rpc_url, json=payload)
+    response = requests.post(rpc_url, json=payload, timeout=30)
     result = response.json().get("result", "0x0")
     balance_wei = int(result, 16)  # convert hex to int
     return balance_wei
@@ -293,12 +291,18 @@ def _parse_args() -> Any:
     args = parser.parse_args()
 
     if args.creator is None:
-        template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+        template_path = Path(
+            SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json"
+        )
         if not template_path.exists():
             print("No Safe address found!")
             sys.exit(1)
 
-        args.creator = get_service_from_config(template_path).chain_configs["gnosis"].chain_data.multisig
+        args.creator = (
+            get_service_from_config(template_path)
+            .chain_configs["gnosis"]
+            .chain_data.multisig
+        )
 
     args.from_date = args.from_date.replace(tzinfo=datetime.timezone.utc)
     args.to_date = args.to_date.replace(tzinfo=datetime.timezone.utc)
@@ -350,7 +354,7 @@ def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals
                 creationTimestamp_gt=creationTimestamp_gt,
             )
             content_json = _to_content(query)
-            res = requests.post(url, headers=headers, json=content_json)
+            res = requests.post(url, headers=headers, json=content_json, timeout=30)
             result_json = res.json()
             trades = result_json.get("data", {}).get("fpmmTrades", [])
 
@@ -390,7 +394,7 @@ def _query_conditional_tokens_gc_subgraph(creator: str) -> Dict[str, Any]:
             userPositions_id_gt=userPositions_id_gt,
         )
         content_json = {"query": query}
-        res = requests.post(url, headers=headers, json=content_json)
+        res = requests.post(url, headers=headers, json=content_json, timeout=30)
         result_json = res.json()
         user_data = result_json.get("data", {}).get("user", {})
 
@@ -661,7 +665,7 @@ def _format_table(table: Dict[Any, Dict[Any, Any]]) -> str:
         f"{MarketAttribute.ROI:<{column_width}}"
         + "".join(
             [
-                f"{table[MarketAttribute.ROI][c]*100.0:>{column_width-5}.2f} %   "
+                f"{table[MarketAttribute.ROI][c] * 100.0:>{column_width - 5}.2f} %   "
                 for c in STATS_TABLE_COLS
             ]
         )
@@ -780,18 +784,14 @@ def parse_user(  # pylint: disable=too-many-locals,too-many-statements
                     earnings = 0
                     output += f"  Final answer: {fpmm['outcomes'][current_answer]!r} - The trade was for the loser answer.\n"
 
+                statistics_table[MarketAttribute.EARNINGS][market_status] += earnings
 
-                statistics_table[MarketAttribute.EARNINGS][
-                        market_status
-                    ] += earnings
-                
-                statistics_table[MarketAttribute.NUM_VALID_TRADES][
-                        market_status
-                    ] = statistics_table[MarketAttribute.NUM_TRADES][
-                        market_status
-                    ] - statistics_table[MarketAttribute.NUM_INVALID_MARKET][
+                statistics_table[MarketAttribute.NUM_VALID_TRADES][market_status] = (
+                    statistics_table[MarketAttribute.NUM_TRADES][market_status]
+                    - statistics_table[MarketAttribute.NUM_INVALID_MARKET][
                         market_status
                     ]
+                )
 
                 if 0 < earnings < DUST_THRESHOLD:
                     output += "Earnings are dust.\n"
@@ -856,7 +856,9 @@ def get_mech_statistics(mech_requests: Dict[str, Any]) -> Dict[str, Dict[str, in
 if __name__ == "__main__":
     user_args = _parse_args()
 
-    template_path = Path(SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json")
+    template_path = Path(
+        SCRIPT_PATH.parents[1], "configs", "config_predict_trader.json"
+    )
     operate = OperateApp()
     ask_password_if_needed(operate)
     service = get_service_from_config(template_path)

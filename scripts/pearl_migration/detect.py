@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, TYPE_CHECKING, Tuple
 
 from operate.constants import KEYS_DIR, SERVICES_DIR, WALLETS_DIR
 from operate.operate_types import LedgerType
@@ -32,8 +32,8 @@ class Mode(Enum):
     """Migration mode."""
 
     FRESH_COPY = "fresh_copy"  # Pearl `.operate` does not exist (or has no wallet)
-    MERGE = "merge"            # Pearl has its own master wallet; we must merge
-    NOOP = "noop"              # Quickstart `.operate` already is `~/.operate`
+    MERGE = "merge"  # Pearl has its own master wallet; we must merge
+    NOOP = "noop"  # Quickstart `.operate` already is `~/.operate`
 
 
 @dataclass(frozen=True)
@@ -50,12 +50,16 @@ class OperateStore:
     allowing memoization.
     """
 
-    root: Path                                  # absolute, resolved
+    root: Path  # absolute, resolved
     _state: Dict[str, "OperateApp"] = field(
-        default_factory=dict, repr=False, compare=False, hash=False,
+        default_factory=dict,
+        repr=False,
+        compare=False,
+        hash=False,
     )
 
     def __post_init__(self) -> None:
+        """Normalise `root` to an absolute, resolved path; reject unreadable paths."""
         # Enforce the "absolute + resolved" invariant the docstring promises.
         # Always resolve so absolute paths with `..` segments / symlinks
         # also normalize. Use object.__setattr__ because `frozen=True`
@@ -76,19 +80,23 @@ class OperateStore:
             # target). Lazy import: prompts.py depends on operate.* which
             # we want kept off the detect.py import path.
             from .prompts import info as _info
+
             _info(f"Resolved store root: {self.root} -> {resolved}")
             object.__setattr__(self, "root", resolved)
 
     @property
     def wallets_dir(self) -> Path:
+        """Absolute path to the `wallets/` sub-directory inside this store root."""
         return self.root / WALLETS_DIR
 
     @property
     def keys_dir(self) -> Path:
+        """Absolute path to the `keys/` sub-directory inside this store root."""
         return self.root / KEYS_DIR
 
     @property
     def services_dir(self) -> Path:
+        """Absolute path to the `services/` sub-directory inside this store root."""
         return self.root / SERVICES_DIR
 
     def has_master_wallet(self) -> bool:
@@ -180,6 +188,7 @@ class Discovery:
     mode: Mode
 
     def __post_init__(self) -> None:
+        """Validate that `mode` is consistent with whether the two store roots match."""
         same_root = self.quickstart.root == self.pearl.root
         if same_root and self.mode != Mode.NOOP:
             raise ValueError(
@@ -194,6 +203,7 @@ class Discovery:
 
     @property
     def is_noop(self) -> bool:
+        """True iff the discovery resolved to Mode.NOOP (no migration needed)."""
         return self.mode == Mode.NOOP
 
 

@@ -5,11 +5,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from scripts import utils
 
 
-def test_get_subgraph_api_key_reads_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_subgraph_api_key_reads_existing_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Existing subgraph key file should be read without prompting."""
 
     operate_home = tmp_path / ".operate"
@@ -22,7 +23,9 @@ def test_get_subgraph_api_key_reads_existing_file(monkeypatch: pytest.MonkeyPatc
     assert utils.get_subgraph_api_key() == "existing-key"
 
 
-def test_get_subgraph_api_key_prompts_and_writes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_get_subgraph_api_key_prompts_and_writes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Missing key file should prompt user, persist key, and return it."""
 
     operate_home = tmp_path / ".operate"
@@ -32,7 +35,9 @@ def test_get_subgraph_api_key_prompts_and_writes(monkeypatch: pytest.MonkeyPatch
     result = utils.get_subgraph_api_key()
 
     assert result == "prompted-key"
-    assert (operate_home / "subgraph_api_key.txt").read_text(encoding="utf-8") == "prompted-key"
+    assert (operate_home / "subgraph_api_key.txt").read_text(
+        encoding="utf-8"
+    ) == "prompted-key"
 
 
 def test_get_service_from_config_missing_file_exits(tmp_path: Path) -> None:
@@ -67,9 +72,19 @@ def test_get_service_from_config_creates_operate_when_none(
     configured = {"args": None}
 
     monkeypatch.setattr(utils, "OperateApp", _make_operate)
-    monkeypatch.setattr(utils, "ask_password_if_needed", lambda _op: asked.__setitem__("count", asked["count"] + 1))
-    monkeypatch.setattr(utils, "configure_local_config", lambda t, o: configured.__setitem__("args", (t, o)))
-    monkeypatch.setattr(utils, "get_service", lambda m, t: {"manager": m, "template": t})
+    monkeypatch.setattr(
+        utils,
+        "ask_password_if_needed",
+        lambda _op: asked.__setitem__("count", asked["count"] + 1),
+    )
+    monkeypatch.setattr(
+        utils,
+        "configure_local_config",
+        lambda t, o: configured.__setitem__("args", (t, o)),
+    )
+    monkeypatch.setattr(
+        utils, "get_service", lambda m, t: {"manager": m, "template": t}
+    )
 
     result = utils.get_service_from_config(config_path)
 
@@ -91,9 +106,17 @@ def test_get_service_from_config_uses_provided_operate(
     manager = object()
     operate = SimpleNamespace(service_manager=lambda: manager)
 
-    monkeypatch.setattr(utils, "ask_password_if_needed", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not ask")))
+    monkeypatch.setattr(
+        utils,
+        "ask_password_if_needed",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should not ask")
+        ),
+    )
     monkeypatch.setattr(utils, "configure_local_config", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(utils, "get_service", lambda m, t: {"manager": m, "template": t})
+    monkeypatch.setattr(
+        utils, "get_service", lambda m, t: {"manager": m, "template": t}
+    )
 
     result = utils.get_service_from_config(config_path, operate=operate)
 
@@ -131,7 +154,9 @@ def test_handle_missing_rpcs_all_present() -> None:
     }
 
 
-def test_handle_missing_rpcs_prompts_until_non_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_handle_missing_rpcs_prompts_until_non_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Missing RPCs should be requested and empty input retried."""
 
     config = {"optimism_rpc": "http://optimism"}
