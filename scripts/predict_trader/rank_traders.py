@@ -26,13 +26,13 @@ from collections import defaultdict
 from string import Template
 from typing import Any, Final
 
-import requests
 from operate.cli import OperateApp
 from operate.operate_types import Chain
 from operate.quickstart.run_service import load_local_config
 from scripts.predict_trader.trades import (
     MarketAttribute,
     MarketState,
+    _post_subgraph_query,
     parse_user,
     wei_to_xdai,
 )
@@ -52,12 +52,6 @@ DEFAULT_TO_DATE = "2038-01-19T03:14:07"
 # this constant; a drift between this value and the JSON's `name` is
 # NOT covered by CI and will only surface at production runtime.
 PREDICT_TRADER_SERVICE_NAME: Final[str] = "Trader Agent"
-
-
-headers = {
-    "Accept": "application/json, multipart/mixed",
-    "Content-Type": "application/json",
-}
 
 
 omen_xdai_trades_query = Template("""
@@ -197,8 +191,7 @@ def _query_omen_xdai_subgraph(
             id_gt=id_gt,
         )
         content_json = _to_content(query)
-        res = requests.post(url, headers=headers, json=content_json, timeout=30)
-        result_json = res.json()
+        result_json = _post_subgraph_query(url, content_json, label="omen")
         user_trades = result_json.get("data", {}).get("fpmmTrades", [])
 
         if not user_trades:

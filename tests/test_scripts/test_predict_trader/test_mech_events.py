@@ -51,14 +51,10 @@ def test_populate_ipfs_contents_falls_back_to_non_metadata_url(
 
     calls: list[str] = []
 
-    # `timeout` is positional with no default so the production code MUST
-    # pass it; dropping `timeout=30` from a `requests.get` call raises
-    # TypeError and the test fails (catching the W3101 regression).
-    # `timeout` is positional with no default so a regression that drops
-    # `timeout=` from `requests.get(...)` raises TypeError and the test
-    # fails (catching the W3101 regression). `**_kwargs` keeps the mock
-    # forward-compatible if production legitimately adds another kwarg
-    # like `headers=` later.
+    # `timeout` is positional with no default so dropping `timeout=` from
+    # the production `requests.get(...)` call raises TypeError and fails
+    # this test (the W3101 regression guard). `**_kwargs` keeps the mock
+    # forward-compatible if production legitimately adds another kwarg.
     def _fake_get(  # noqa: ARG001
         url: str, timeout: int, **_kwargs: Any
     ) -> _Response:
@@ -294,14 +290,10 @@ def test_populate_ipfs_contents_uses_ipfs_hash_bytes(
 
     called: list[str] = []
 
-    # `timeout` is positional with no default so the production code MUST
-    # pass it; dropping `timeout=30` from a `requests.get` call raises
-    # TypeError and the test fails (catching the W3101 regression).
-    # `timeout` is positional with no default so a regression that drops
-    # `timeout=` from `requests.get(...)` raises TypeError and the test
-    # fails (catching the W3101 regression). `**_kwargs` keeps the mock
-    # forward-compatible if production legitimately adds another kwarg
-    # like `headers=` later.
+    # `timeout` is positional with no default so dropping `timeout=` from
+    # the production `requests.get(...)` call raises TypeError and fails
+    # this test (the W3101 regression guard). `**_kwargs` keeps the mock
+    # forward-compatible if production legitimately adds another kwarg.
     def _fake_get(  # noqa: ARG001
         url: str, timeout: int, **_kwargs: Any
     ) -> _Response:

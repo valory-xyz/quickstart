@@ -329,14 +329,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Install dependencies
-        run: pip install 'tomte[cli, tests]==0.7.0' 'tox-uv==1.16.0'
+      - uses: astral-sh/setup-uv@v6
+      # `uv sync` picks up `tomte` + `tox-uv` from the dev group in
+      # pyproject.toml, so the pins stay in one place (matches the
+      # `unit-tests` job at line 304). `uv run tomte tox` then resolves
+      # the lint envs the same way contributors do locally.
+      - name: Install project dependencies
+        run: uv sync --all-groups --frozen
       - name: Code checks
-        run: tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
+        run: uv run tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
       - name: Security checks
-        run: tomte tox -p -e safety -e bandit
+        run: uv run tomte tox -p -e safety -e bandit
       - name: License compatibility check
-        run: tomte tox -e liccheck
+        run: uv run tomte tox -e liccheck
 
   all-checks-passed:
     # Single aggregate gate referenced by branch protection. When adding or
