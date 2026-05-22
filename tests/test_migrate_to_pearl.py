@@ -87,7 +87,6 @@ MIGRATION_TIMEOUT = 1200  # 20 min — Mode B can include several Safe txs
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
     """Copy the repo into `dest`, excluding heavy/local-only paths.
 
@@ -99,18 +98,10 @@ def _copy_repo_to(dest: Path, logger: logging.Logger) -> None:
     started from the source tree. Sharing the runner's venv avoids
     both pitfalls."""
     shutil.copytree(
-        ".",
-        dest,
-        dirs_exist_ok=True,
+        ".", dest, dirs_exist_ok=True,
         ignore=shutil.ignore_patterns(
-            ".operate",
-            ".pytest_cache",
-            "__pycache__",
-            "*.pyc",
-            "logs",
-            "*.log",
-            ".env",
-            ".venv",
+            ".operate", ".pytest_cache", "__pycache__",
+            "*.pyc", "logs", "*.log", ".env", ".venv",
         ),
     )
     src_venv = Path(".venv").resolve()
@@ -164,10 +155,7 @@ def _spawn_run_service(
         logger.info(f"  -> run_service.sh {config_path} in {cwd}")
         child = pexpect.spawn(
             f"bash ./run_service.sh {config_path}",
-            encoding="utf-8",
-            timeout=600,
-            env=spawn_env,
-            cwd=str(cwd),
+            encoding="utf-8", timeout=600, env=spawn_env, cwd=str(cwd),
             logfile=sys.stdout,
         )
         try:
@@ -202,10 +190,7 @@ def _spawn_stop_service(
         logger.info(f"  -> stop_service.sh {config_path} in {cwd}")
         child = pexpect.spawn(
             f"bash ./stop_service.sh {config_path}",
-            encoding="utf-8",
-            timeout=120,
-            env=spawn_env,
-            cwd=str(cwd),
+            encoding="utf-8", timeout=120, env=spawn_env, cwd=str(cwd),
             logfile=sys.stdout,
         )
         try:
@@ -244,13 +229,12 @@ def _spawn_migrate_to_pearl(
       * Rename source for rollback? → "y"
       * Run Pearl on a different machine? → "n"
     """
-    logger.info(f"  -> migrate_to_pearl.sh in {cwd} (pearl_home={pearl_home})")
+    logger.info(
+        f"  -> migrate_to_pearl.sh in {cwd} (pearl_home={pearl_home})"
+    )
     child = pexpect.spawn(
         f"bash ./migrate_to_pearl.sh --pearl-home {pearl_home}",
-        encoding="utf-8",
-        timeout=MIGRATION_TIMEOUT,
-        env=env,
-        cwd=str(cwd),
+        encoding="utf-8", timeout=MIGRATION_TIMEOUT, env=env, cwd=str(cwd),
         logfile=sys.stdout,
     )
     # Track which password we're answering next.
@@ -272,7 +256,6 @@ def _spawn_migrate_to_pearl(
 
     def _all_choice(out: str) -> str:
         import re
-
         m = re.search(r"Select \[1-(\d+)\]:", out)
         return m.group(1) if m else "1"
 
@@ -304,7 +287,6 @@ def _list_pearl_services(pearl_home: Path) -> List[Path]:
 # Test class
 # ---------------------------------------------------------------------------
 
-
 class TestMigrateToPearlEndToEnd:
     """4 services across 2 quickstart cwds → 1 Pearl `.operate` → all start.
 
@@ -323,11 +305,11 @@ class TestMigrateToPearlEndToEnd:
     qs_dirs: Tuple[Path, Path]
     pearl_home: Path
     test_env: Dict[str, str]
-    password: str  # qs1 master password (and Pearl's, since Pearl
-    # inherits qs1's wallet via the Mode A copy)
-    qs2_password: str  # qs2's master password — deliberately different,
-    # so test_03 exercises Mode B with two distinct
-    # passwords (quickstart vs Pearl).
+    password: str          # qs1 master password (and Pearl's, since Pearl
+                           # inherits qs1's wallet via the Mode A copy)
+    qs2_password: str      # qs2's master password — deliberately different,
+                           # so test_03 exercises Mode B with two distinct
+                           # passwords (quickstart vs Pearl).
     _failed: bool = False
 
     @classmethod
@@ -423,9 +405,7 @@ class TestMigrateToPearlEndToEnd:
                 )
                 for cfg in QS_CONFIGS:
                     _spawn_run_service(qs, cfg, self.test_env, self.logger, password=pw)
-                    _spawn_stop_service(
-                        qs, cfg, self.test_env, self.logger, password=pw
-                    )
+                    _spawn_stop_service(qs, cfg, self.test_env, self.logger, password=pw)
 
             # Sanity check: each cwd should now have 2 sc-* dirs in its .operate.
             for qs in self.qs_dirs:
@@ -442,9 +422,8 @@ class TestMigrateToPearlEndToEnd:
     # ------------------------------------------------------------------
     def test_02_migrate_first_quickstart_mode_a(self) -> None:
         def _body() -> None:
-            assert (
-                not self.pearl_home.exists()
-            ), "Pearl home should not exist before the first migration"
+            assert not self.pearl_home.exists(), \
+                "Pearl home should not exist before the first migration"
 
             _spawn_migrate_to_pearl(
                 cwd=self.qs_dirs[0],
@@ -468,9 +447,8 @@ class TestMigrateToPearlEndToEnd:
 
     def test_03_migrate_second_quickstart_mode_b(self) -> None:
         def _body() -> None:
-            assert (
-                self.pearl_home.exists()
-            ), "Pearl home must exist before the Mode B migration"
+            assert self.pearl_home.exists(), \
+                "Pearl home must exist before the Mode B migration"
 
             # qs2 has its own master password; Pearl's wallet is qs1's
             # (carried over by the Mode A copy in test_02), so its password
@@ -494,9 +472,9 @@ class TestMigrateToPearlEndToEnd:
             for svc_dir in services:
                 cfg = json.loads((svc_dir / "config.json").read_text())
                 for addr in cfg.get("agent_addresses", []):
-                    assert (
-                        self.pearl_home / "keys" / addr
-                    ).exists(), f"Missing key {addr} for service {svc_dir.name}"
+                    assert (self.pearl_home / "keys" / addr).exists(), (
+                        f"Missing key {addr} for service {svc_dir.name}"
+                    )
 
         self._step(_body)
 
@@ -509,9 +487,9 @@ class TestMigrateToPearlEndToEnd:
             operate.password = self.password
             # Sanity: the wallet manager unlocks with the same TEST_PASSWORD,
             # demonstrating the migrated wallet is usable.
-            assert operate.wallet_manager.is_password_valid(
-                self.password
-            ), "Migrated master wallet rejected the test password"
+            assert operate.wallet_manager.is_password_valid(self.password), (
+                "Migrated master wallet rejected the test password"
+            )
             # Loading the wallet shouldn't raise.
             operate.wallet_manager.load(LedgerType.ETHEREUM)
 
@@ -539,11 +517,10 @@ class TestMigrateToPearlEndToEnd:
             #      Anything else means the service is stuck mid-state.
             from operate.ledger.profiles import CONTRACTS
             from operate.operate_types import Chain
-            from scripts.pearl_migration.status import safe_owners as _safe_owners
             from scripts.pearl_migration.status import (
+                safe_owners as _safe_owners,
                 service_nft_owner as _service_nft_owner,
             )
-
             pearl_safes = operate.wallet_manager.load(LedgerType.ETHEREUM).safes
             for svc_dir in services:
                 cfg = json.loads((svc_dir / "config.json").read_text())
@@ -557,15 +534,10 @@ class TestMigrateToPearlEndToEnd:
                     )
                     nft_owner = _service_nft_owner(
                         ledger_api=sftxb.ledger_api,
-                        service_registry_address=CONTRACTS[chain_enum][
-                            "service_registry"
-                        ],
+                        service_registry_address=CONTRACTS[chain_enum]["service_registry"],
                         service_id=chain_config.chain_data.token,
                     )
-                    assert (
-                        nft_owner is not None
-                        and nft_owner.lower() == pearl_safe.lower()
-                    ), (
+                    assert nft_owner is not None and nft_owner.lower() == pearl_safe.lower(), (
                         f"[{chain_str}] service NFT {chain_config.chain_data.token} "
                         f"owner is {nft_owner}, expected Pearl Safe {pearl_safe}"
                     )
@@ -615,9 +587,7 @@ class TestMigrateToPearlEndToEnd:
                 # 2) Local docker deploy.
                 self.logger.info(f"  local docker deploy ({chain})")
                 manager.deploy_service_locally(
-                    service_config_id=sid,
-                    chain=chain,
-                    use_docker=True,
+                    service_config_id=sid, chain=chain, use_docker=True,
                 )
                 time.sleep(STARTUP_WAIT)
 
@@ -629,9 +599,9 @@ class TestMigrateToPearlEndToEnd:
                     f"Migrated service name {cfg['name']!r} doesn't map back to "
                     f"any of QS_CONFIGS; cannot resolve container name."
                 )
-                assert check_docker_status(
-                    self.logger, origin_cfg
-                ), f"Service {sid} failed to start under Pearl `.operate`"
+                assert check_docker_status(self.logger, origin_cfg), (
+                    f"Service {sid} failed to start under Pearl `.operate`"
+                )
                 started.append(sid)
 
                 # Stop again before the next iteration so concurrent

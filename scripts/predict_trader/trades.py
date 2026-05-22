@@ -326,6 +326,22 @@ def _to_content(q: str) -> Dict[str, Any]:
     return finalized_query
 
 
+def _redact_subgraph_url(url: str) -> str:
+    """Strip the billable API key segment out of a Graph gateway URL.
+
+    The Graph's gateway URL embeds the key as
+    `https://<host>/api/<KEY>/subgraphs/id/<id>`. The key has to stay
+    out of `RuntimeError` messages, traceback prints, and CI logs, so
+    the helpers below redact it before any string interpolation.
+    """
+    marker = "/api/"
+    if marker not in url:
+        return url
+    prefix, _, rest = url.partition(marker)
+    _key, slash, tail = rest.partition("/")
+    return prefix + marker + "<redacted>" + (slash + tail if slash else "")
+
+
 def _post_subgraph_query(
     url: str, payload: Dict[str, Any], *, label: str
 ) -> Dict[str, Any]:
@@ -337,14 +353,24 @@ def _post_subgraph_query(
     single `RuntimeError("<label> subgraph query failed for <url>: ...")`
     instead of three different opaque tracebacks. `requests.JSONDecodeError`
     is a subclass of `requests.RequestException`, so the same except
-    clause covers JSON-decode failures.
+    clause covers JSON-decode failures. The URL is run through
+    `_redact_subgraph_url` so the gateway API key never reaches the
+    error message — `requests.exceptions.HTTPError.__str__` would
+    otherwise embed the full request URL too.
     """
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
         res.raise_for_status()
         return res.json()
     except requests.RequestException as exc:
-        raise RuntimeError(f"{label} subgraph query failed for {url}: {exc}") from exc
+        safe_url = _redact_subgraph_url(url)
+        # `exc`'s str() may include the full URL (the HTTPError case does);
+        # rewrite the message body too so the key doesn't leak via the
+        # cause chain.
+        safe_exc_msg = str(exc).replace(url, safe_url)
+        raise RuntimeError(
+            f"{label} subgraph query failed for {safe_url}: {safe_exc_msg}"
+        ) from exc
 
 
 def _query_omen_xdai_subgraph(  # pylint: disable=too-many-locals

@@ -1,13 +1,14 @@
 """Unit tests for predict_trader.migrate_legacy_quickstart."""
 
-import builtins
 import json
 import runpy
 import sys
+import builtins
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from scripts.predict_trader import migrate_legacy_quickstart as migrate
 
 
